@@ -1,0 +1,29 @@
+{
+  "name": "manager",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": "26.x",
+    "pnpm": ">=12"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @manager/web dev",
+    "build": "pnpm --filter @manager/web build",
+    "start": "pnpm --filter @manager/web start",
+    "lint": "pnpm --filter @manager/web lint",
+    "typecheck": "pnpm --filter @manager/web --filter @manager/shared typecheck"
+  },
+  "packageManager": "pnpm@12.16.1",
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "^26.13.0",
+      "onFail": "download"
+    },
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.16.1",
+      "onFail": "download"
+    }
+  }
+}
