@@ -11,6 +11,7 @@ export default tseslint.config(
       "coverage/**",
       "pnpm-lock.yaml",
       "api/mcp.js",
+      "api/mcp-impl.js",
       "api/oauth-authorization-server.js",
       "api/oauth-protected-resource.js",
     ],
