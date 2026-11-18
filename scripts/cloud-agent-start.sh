@@ -1,175 +1,141 @@
 #!/usr/bin/env bash
-# Cloud Agent `start` — write apps/web/.env.local, bring up anonymous Convex + Next.js.
+# Cloud Agent `start` — anonymous Convex plus the Vite app on port 3000.
 # Idempotent: skips services that are already listening.
-# There is no demo seed in this repo.
 set -euo pipefail
 
-# Cursor runs `start` from the workspace root (sometimes via a copied script).
-if [[ -f package.json && -d apps/web/convex ]]; then
+if [[ -f package.json && -d packages/backend/convex ]]; then
   ROOT="$(pwd)"
-elif [[ -f /workspace/package.json && -d /workspace/apps/web/convex ]]; then
+elif [[ -f /workspace/package.json && -d /workspace/packages/backend/convex ]]; then
   ROOT="/workspace"
 else
   ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fi
 cd "$ROOT"
-WEB="$ROOT/apps/web"
 
 python3 - <<'PY'
 import os
 from pathlib import Path
 
 root = Path.cwd()
-env_path = root / "apps" / "web" / ".env.local"
+backend_env = root / "packages" / "backend" / ".env.local"
+web_env = root / "apps" / "web" / ".env.local"
 
-# Preserve Convex URLs already written by `convex init` / `convex dev`.
 preserved: dict[str, str] = {}
-if env_path.exists():
-    for line in env_path.read_text().splitlines():
+if backend_env.exists():
+    for line in backend_env.read_text().splitlines():
         if not line or line.startswith("#") or "=" not in line:
             continue
-        k, _, v = line.partition("=")
-        v = v.strip().strip('"')
-        if k in (
-            "NEXT_PUBLIC_CONVEX_URL",
-            "CONVEX_DEPLOYMENT",
-            "NEXT_PUBLIC_CONVEX_SITE_URL",
-        ) and v:
-            preserved[k] = v
+        key, _, value = line.partition("=")
+        value = value.strip().strip('"')
+        if key in ("CONVEX_URL", "NEXT_PUBLIC_CONVEX_URL", "CONVEX_DEPLOYMENT") and value:
+            preserved[key] = value
 
-def env(name: str, default: str = "") -> str:
-    v = os.environ.get(name) or default
-    if not v or "\n" in v or "\r" in v:
+def env(name: str) -> str:
+    value = os.environ.get(name) or ""
+    if not value or "\n" in value or "\r" in value:
         return ""
-    return v
+    return value
 
-def quote(name: str, value: str) -> str:
-    if name.endswith("_KEY") or name.endswith("_SECRET") or name.endswith("_IDS"):
-        return f'{name}="{value}"'
-    return f"{name}={value}"
-
-clerk_keys = {
-    "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY": env("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY"),
-    "CLERK_SECRET_KEY": env("CLERK_SECRET_KEY"),
-    "CLERK_FRONTEND_API_URL": env("CLERK_FRONTEND_API_URL"),
-}
-mcp = {
-    "MCP_RESOURCE_URL": env("MCP_RESOURCE_URL"),
-    "MCP_ROLE_SECRET": env("MCP_ROLE_SECRET"),
-}
-
-lines = [
-    "# Convex — written by anonymous `convex init` / `convex dev` (do not inject cloud URLs)",
-    f"NEXT_PUBLIC_CONVEX_URL={preserved.get('NEXT_PUBLIC_CONVEX_URL', '')}",
+convex_url = preserved.get("CONVEX_URL") or preserved.get("NEXT_PUBLIC_CONVEX_URL") or ""
+backend_lines = [
+    "# Written by scripts/cloud-agent-start.sh",
     f"CONVEX_DEPLOYMENT={preserved.get('CONVEX_DEPLOYMENT', '')}",
-    "",
-    "# Clerk",
+    f"CONVEX_URL={convex_url}",
+    f"NEXT_PUBLIC_CONVEX_URL={convex_url}",
+    f"CLERK_FRONTEND_API_URL={env('CLERK_FRONTEND_API_URL')}",
 ]
-for k, v in clerk_keys.items():
-    lines.append(quote(k, v) if v else f"{k}=")
+backend_env.parent.mkdir(parents=True, exist_ok=True)
+backend_env.write_text("\n".join(backend_lines) + "\n")
 
-lines += ["", "# MCP"]
-for k, v in mcp.items():
-    lines.append(quote(k, v) if v else f"{k}=")
-
-if preserved.get("NEXT_PUBLIC_CONVEX_SITE_URL"):
-    lines += ["", f"NEXT_PUBLIC_CONVEX_SITE_URL={preserved['NEXT_PUBLIC_CONVEX_SITE_URL']}"]
-
-env_path.write_text("\n".join(lines) + "\n")
-print("env.local", sum(1 for L in lines if L and not L.startswith("#") and "=" in L))
+publishable = env("VITE_CLERK_PUBLISHABLE_KEY") or env("CLERK_PUBLISHABLE_KEY") or env("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY")
+web_lines = [
+    "# Written by scripts/cloud-agent-start.sh",
+    f"VITE_CONVEX_URL={convex_url}",
+    f"VITE_CLERK_PUBLISHABLE_KEY={publishable}",
+]
+web_env.parent.mkdir(parents=True, exist_ok=True)
+web_env.write_text("\n".join(web_lines) + "\n")
+print("wrote env files")
 PY
 
-# Convex API health is /version (GET / often 404s; curl -f would treat that as down).
 convex_up() {
   curl -sf -o /dev/null "http://127.0.0.1:3210/version" 2>/dev/null
 }
 
-next_up() {
+web_up() {
   curl -sf -o /dev/null "http://127.0.0.1:3000/" 2>/dev/null
 }
 
-convex_cli() {
-  env -u CONVEX_DEPLOYMENT -u NEXT_PUBLIC_CONVEX_URL -u NEXT_PUBLIC_CONVEX_SITE_URL \
-    CONVEX_AGENT_MODE=anonymous pnpm exec convex "$@"
-}
-
-# Clear injected cloud Convex deployment so anonymous mode can win.
 export CONVEX_AGENT_MODE="${CONVEX_AGENT_MODE:-anonymous}"
-unset CONVEX_DEPLOYMENT NEXT_PUBLIC_CONVEX_URL NEXT_PUBLIC_CONVEX_SITE_URL || true
+unset CONVEX_DEPLOYMENT CONVEX_URL NEXT_PUBLIC_CONVEX_URL || true
 
-cd "$WEB"
-
+cd "$ROOT/packages/backend"
 if ! grep -q '^CONVEX_DEPLOYMENT=anonymous:' .env.local 2>/dev/null; then
   echo "[cloud-agent-start] configuring anonymous Convex…"
-  pnpm exec convex init </dev/null
+  pnpm exec convex init </dev/null || true
 fi
 
-# `convex init` starts the local backend and does not push functions.
-# `convex dev` exits if auth.config.ts references an unset variable, so set
-# deployment env before the first push.
 if ! convex_up; then
   echo "[cloud-agent-start] waiting for Convex on :3210…"
   for _ in $(seq 1 90); do
     convex_up && break
     sleep 1
   done
-  if ! convex_up; then
-    echo "[cloud-agent-start] Convex did not become ready on :3210/version" >&2
-    exit 1
-  fi
 fi
 
-# Not a Clerk issuer and not a secret. Replaced when a Clerk app exists.
 PLACEHOLDER_CLERK_ISSUER="https://clerk.example.invalid"
-current_clerk="$(convex_cli env get CLERK_FRONTEND_API_URL 2>/dev/null || true)"
+run_convex() {
+  env -u CONVEX_DEPLOYMENT -u CONVEX_URL -u NEXT_PUBLIC_CONVEX_URL \
+    CONVEX_AGENT_MODE=anonymous pnpm exec convex "$@"
+}
+
 if [[ -n "${CLERK_FRONTEND_API_URL:-}" ]]; then
-  echo "[cloud-agent-start] ensuring CLERK_FRONTEND_API_URL on Convex…"
-  convex_cli env set CLERK_FRONTEND_API_URL "$CLERK_FRONTEND_API_URL" >/dev/null || true
-elif [[ -z "${current_clerk//[$' \t\r\n']/}" ]]; then
-  echo "[cloud-agent-start] CLERK_FRONTEND_API_URL unset; using placeholder issuer on local Convex"
-  convex_cli env set CLERK_FRONTEND_API_URL "$PLACEHOLDER_CLERK_ISSUER" >/dev/null || true
+  run_convex env set CLERK_FRONTEND_API_URL "$CLERK_FRONTEND_API_URL" >/dev/null || true
+else
+  run_convex env set CLERK_FRONTEND_API_URL "$PLACEHOLDER_CLERK_ISSUER" >/dev/null || true
 fi
-
-TMUX_CONF="/exec-daemon/tmux.portal.conf"
-tmux_cmd() {
-  if [[ -f "$TMUX_CONF" ]]; then
-    tmux -f "$TMUX_CONF" "$@"
-  else
-    tmux "$@"
-  fi
-}
-
-ensure_tmux_session() {
-  local name="$1"
-  local cmd="$2"
-  if tmux_cmd has-session -t "=${name}" 2>/dev/null; then
-    return 0
-  fi
-  tmux_cmd new-session -d -s "$name" -c "$WEB" -- "${SHELL:-bash}" -l
-  tmux_cmd send-keys -t "${name}:0.0" "$cmd" C-m
-}
-
-# Backend is already listening. This watcher pushes functions. It no-ops when
-# the session is already running.
-echo "[cloud-agent-start] ensuring Convex dev is running…"
-ensure_tmux_session "convex-dev" \
-  "env -u CONVEX_DEPLOYMENT -u NEXT_PUBLIC_CONVEX_URL -u NEXT_PUBLIC_CONVEX_SITE_URL CONVEX_AGENT_MODE=anonymous pnpm exec convex dev"
 
 if [[ -n "${ADMIN_CLERK_USER_IDS:-}" ]]; then
-  echo "[cloud-agent-start] ensuring ADMIN_CLERK_USER_IDS on Convex…"
-  convex_cli env set ADMIN_CLERK_USER_IDS "$ADMIN_CLERK_USER_IDS" >/dev/null || true
+  run_convex env set ADMIN_CLERK_USER_IDS "$ADMIN_CLERK_USER_IDS" >/dev/null || true
 fi
-
 if [[ -n "${MCP_ROLE_SECRET:-}" ]]; then
-  echo "[cloud-agent-start] ensuring MCP_ROLE_SECRET on Convex…"
-  convex_cli env set MCP_ROLE_SECRET "$MCP_ROLE_SECRET" >/dev/null || true
+  run_convex env set MCP_ROLE_SECRET "$MCP_ROLE_SECRET" >/dev/null || true
 fi
 
-if next_up; then
-  echo "[cloud-agent-start] Next.js already on :3000 — idle."
+# convex init writes the local URL into packages/backend/.env.local.
+python3 - <<'PY'
+from pathlib import Path
+vals = {}
+backend = Path(".env.local")
+if backend.exists():
+    for line in backend.read_text().splitlines():
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        vals[key] = value.strip().strip('"')
+url = vals.get("CONVEX_URL") or vals.get("NEXT_PUBLIC_CONVEX_URL") or "http://127.0.0.1:3210"
+web = Path("../../apps/web/.env.local")
+lines = web.read_text().splitlines() if web.exists() else []
+found = False
+out = []
+for line in lines:
+    if line.startswith("VITE_CONVEX_URL="):
+        out.append(f"VITE_CONVEX_URL={url}")
+        found = True
+    else:
+        out.append(line)
+if not found:
+    out.append(f"VITE_CONVEX_URL={url}")
+web.parent.mkdir(parents=True, exist_ok=True)
+web.write_text("\n".join(out) + "\n")
+print("mirrored convex url to vite")
+PY
+
+cd "$ROOT"
+if web_up; then
+  echo "[cloud-agent-start] Vite already on :3000 — idle."
   exec sleep infinity
 fi
 
-echo "[cloud-agent-start] starting Next.js on :3000…"
-exec env -u CONVEX_DEPLOYMENT -u NEXT_PUBLIC_CONVEX_URL -u NEXT_PUBLIC_CONVEX_SITE_URL \
-  pnpm dev
+echo "[cloud-agent-start] starting Vite on :3000…"
+exec pnpm dev

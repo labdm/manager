@@ -1,8 +1,10 @@
 # manager
 
-Personal to-do app for Dmytro Afonin. This repository is the web app and MCP host. The task UI is not in this tree yet.
+Personal task manager for Dmytro Afonin.
 
-Layout and commands: [AGENTS.md](./AGENTS.md).
+Architecture: [docs/architecture.md](docs/architecture.md). Layout and commands: [AGENTS.md](./AGENTS.md).
 
-- `apps/web` — Next.js App Router. MCP endpoint: `/mcp`
-- `packages/shared` — shared package placeholder
+- `packages/backend` — Convex schema and functions
+- `packages/ui` — shared React task UI
+- `apps/web` — Vite + React + TanStack Router
+- `apps/mcp` — MCP server (`/mcp`)

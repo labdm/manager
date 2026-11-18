@@ -1,0 +1,28 @@
+{
+  "name": "@manager/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@clerk/backend": "^3.31.1",
+    "@clerk/mcp-tools": "^0.9.0",
+    "@manager/backend": "workspace:*",
+    "@modelcontextprotocol/server": "^2.4.0",
+    "convex": "^1.51.0",
+    "mcp-handler": "^2.4.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "eslint": "^10.15.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.73.0",
+    "vitest": "^5.1.0"
+  }
+}

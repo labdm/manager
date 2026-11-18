@@ -1,0 +1,143 @@
+.shell {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 4rem;
+  color: #1c1915;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+}
+
+.shell header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+
+.mark {
+  margin: 0;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  color: #0f6e56;
+}
+
+.shell h1 {
+  margin: 0.2rem 0 0;
+  font-family: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+  font-size: 2.6rem;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+
+.panel {
+  background: #fffdf8;
+  border: 1px solid #e4dccb;
+  border-radius: 1.25rem;
+  padding: 1.25rem;
+  box-shadow: 0 1px 0 rgba(28, 25, 21, 0.04);
+}
+
+.panel p {
+  margin: 0 0 1rem;
+}
+
+button,
+.add-form button {
+  appearance: none;
+  border: 0;
+  background: #0f6e56;
+  color: #f7f3ea;
+  border-radius: 999px;
+  padding: 0.55rem 1rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.add-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.add-form input[type="text"] {
+  flex: 1 1 12rem;
+  min-width: 0;
+  border: 1px solid #e4dccb;
+  background: #fff;
+  border-radius: 999px;
+  padding: 0.6rem 0.9rem;
+  font: inherit;
+  color: inherit;
+}
+
+.add-form input[type="date"] {
+  border: 1px solid #e4dccb;
+  background: #fff;
+  border-radius: 999px;
+  padding: 0.55rem 0.8rem;
+  font: inherit;
+  color: inherit;
+}
+
+.tasks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.task {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.75rem;
+  align-items: center;
+  padding: 0.7rem 0.2rem;
+  border-bottom: 1px solid #efe7d8;
+}
+
+.task button.check {
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 0.35rem;
+  padding: 0;
+  background: #fff;
+  color: #0f6e56;
+  border: 1.5px solid #0f6e56;
+}
+
+.task.done .title {
+  color: #8a8175;
+  text-decoration: line-through;
+}
+
+.title {
+  font-size: 1.02rem;
+}
+
+.due {
+  grid-column: 2;
+  color: #6f675c;
+  font-size: 0.85rem;
+}
+
+.status,
+.error {
+  margin: 0.5rem 0 0;
+}
+
+.error {
+  color: #8d2c1f;
+}
+
+.empty {
+  margin: 0.25rem 0 0;
+  color: #6f675c;
+}
