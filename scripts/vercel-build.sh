@@ -14,21 +14,3 @@ if [[ -n "${CONVEX_DEPLOY_KEY:-}" ]]; then
 else
   bash "$ROOT/scripts/vite-build-with-env.sh"
 fi
-
-# Vercel does not hoist workspace deps for files in /api, and it does not run
-# the TypeScript sources. Bundle each function into one ESM file, then drop
-# the .ts entry so the deployed function is the bundle.
-if [[ -n "${VERCEL:-}" ]]; then
-  bundle_api() {
-    local name="$1"
-    pnpm exec esbuild "api/${name}.ts" \
-      --bundle \
-      --platform=node \
-      --format=esm \
-      --outfile="api/${name}.js"
-    rm -f "api/${name}.ts"
-  }
-  bundle_api mcp
-  bundle_api oauth-authorization-server
-  bundle_api oauth-protected-resource
-fi
