@@ -1,4 +1,4 @@
-import { SignInButton, SignedIn, SignedOut, UserButton, useAuth } from "@clerk/clerk-react";
+import { Show, SignInButton, UserButton, useAuth } from "@clerk/react";
 import { api } from "@manager/backend/convex/_generated/api";
 import type { Id } from "@manager/backend/convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
@@ -16,19 +16,19 @@ export function TasksPage() {
           <p className="mark">Manager</p>
           <h1>Tasks</h1>
         </div>
-        <SignedIn>
+        <Show when="signed-in">
           <UserButton />
-        </SignedIn>
+        </Show>
       </header>
       {!isLoaded ? <p className="status">Loading…</p> : null}
-      <SignedOut>
+      <Show when="signed-out">
         <section className="panel">
           <p>Sign in to see your tasks.</p>
           <SignInButton mode="modal">
             <button type="button">Sign in</button>
           </SignInButton>
         </section>
-      </SignedOut>
+      </Show>
       {isSignedIn ? <TaskBoard /> : null}
     </main>
   );

@@ -28,7 +28,7 @@ From the repo root:
 ## Node and pnpm
 
 - `engines.node` is `26.x`. `devEngines.runtime` is Node `^26.13.0`. There is no `.nvmrc`.
-- `packageManager` is `pnpm@12.16.1`. `corepack enable` makes pnpm use that version. Node 25+ does not bundle corepack; `scripts/cloud-agent-install.sh` installs it first.
+- `packageManager` is `pnpm@12.21.0`. `corepack enable` makes pnpm use that version. Node 25+ does not bundle corepack; `scripts/cloud-agent-install.sh` installs it first.
 - Build-script approval lives in `pnpm-workspace.yaml` `allowBuilds`.
 
 ## Local backend
