@@ -1,0 +1,27 @@
+{
+  "name": "@manager/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./convex/_generated/api": "./convex/_generated/api.js",
+    "./convex/_generated/dataModel": "./convex/_generated/dataModel.js",
+    "./convex/lib/mcpRoleSignature": "./convex/lib/mcpRoleSignature.ts"
+  },
+  "scripts": {
+    "dev": "convex dev",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "convex": "^1.51.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.5",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.73.0",
+    "vitest": "^3.2.4"
+  }
+}

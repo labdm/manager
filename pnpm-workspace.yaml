@@ -3,5 +3,11 @@ packages:
   - packages/*
 
 allowBuilds:
+  '@clerk/shared': true
   esbuild: true
   sharp: false
+
+minimumReleaseAgeExclude:
+  - '@clerk/backend@3.31.0'
+  - '@clerk/shared@4.47.0'
+  - convex@1.51.0

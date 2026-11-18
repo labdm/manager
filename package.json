@@ -8,10 +8,16 @@
   },
   "scripts": {
     "dev": "pnpm --filter @manager/web dev",
-    "build": "pnpm --filter @manager/web build",
-    "start": "pnpm --filter @manager/web start",
-    "lint": "pnpm --filter @manager/web lint",
-    "typecheck": "pnpm --filter @manager/web --filter @manager/shared typecheck"
+    "dev:backend": "pnpm --filter @manager/backend dev",
+    "build": "pnpm --filter \"./apps/*\" --filter \"./packages/*\" build",
+    "lint": "pnpm --filter \"./apps/*\" --filter \"./packages/*\" lint && eslint api",
+    "typecheck": "pnpm --filter \"./apps/*\" --filter \"./packages/*\" typecheck",
+    "test": "pnpm --filter \"./apps/*\" --filter \"./packages/*\" test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^9.39.5",
+    "typescript-eslint": "^8.73.0"
   },
   "packageManager": "pnpm@12.16.1",
   "devEngines": {
