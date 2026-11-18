@@ -6,10 +6,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-if [[ -z "${VITE_CONVEX_URL:-}" && -n "${CONVEX_URL:-}" ]]; then
+# `convex deploy --cmd` sets CONVEX_URL for this deployment. Prefer it over a
+# project-level VITE_CONVEX_URL so each preview build talks to its own deployment.
+if [[ -n "${CONVEX_URL:-}" ]]; then
   export VITE_CONVEX_URL="$CONVEX_URL"
-fi
-if [[ -z "${VITE_CONVEX_URL:-}" && -n "${NEXT_PUBLIC_CONVEX_URL:-}" ]]; then
+elif [[ -z "${VITE_CONVEX_URL:-}" && -n "${NEXT_PUBLIC_CONVEX_URL:-}" ]]; then
   export VITE_CONVEX_URL="$NEXT_PUBLIC_CONVEX_URL"
 fi
 if [[ -z "${VITE_CLERK_PUBLISHABLE_KEY:-}" && -n "${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}" ]]; then
