@@ -1,13 +1,9 @@
 import { handleMcp } from "../apps/mcp/src/handle-mcp.js";
+import { vercelHandler } from "../apps/mcp/src/vercel-handler.js";
 
-export function GET(request: Request): Promise<Response> {
-  return handleMcp(request);
-}
+const handler = vercelHandler(handleMcp);
 
-export function POST(request: Request): Promise<Response> {
-  return handleMcp(request);
-}
-
-export function DELETE(request: Request): Promise<Response> {
-  return handleMcp(request);
-}
+export default handler;
+export const GET = handler;
+export const POST = handler;
+export const DELETE = handler;

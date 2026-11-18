@@ -1,12 +1,10 @@
-import {
-  authorizationServerMetadata,
-  metadataOptions,
-} from "../apps/mcp/src/metadata.js";
+import { authorizationServerMetadata, metadataOptions } from "../apps/mcp/src/metadata.js";
+import { vercelHandler } from "../apps/mcp/src/vercel-handler.js";
 
-export function GET(): Promise<Response> {
-  return authorizationServerMetadata();
-}
+const handler = vercelHandler((request) =>
+  request.method === "OPTIONS" ? metadataOptions() : authorizationServerMetadata(),
+);
 
-export function OPTIONS(): Response {
-  return metadataOptions();
-}
+export default handler;
+export const GET = handler;
+export const OPTIONS = handler;

@@ -1,9 +1,10 @@
 import { metadataOptions, protectedResourceMetadata } from "../apps/mcp/src/metadata.js";
+import { vercelHandler } from "../apps/mcp/src/vercel-handler.js";
 
-export function GET(request: Request): Response {
-  return protectedResourceMetadata(request);
-}
+const handler = vercelHandler((request) =>
+  request.method === "OPTIONS" ? metadataOptions() : protectedResourceMetadata(request),
+);
 
-export function OPTIONS(): Response {
-  return metadataOptions();
-}
+export default handler;
+export const GET = handler;
+export const OPTIONS = handler;
