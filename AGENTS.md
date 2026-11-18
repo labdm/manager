@@ -12,7 +12,7 @@ SwiftUI (`apps/apple`) and Tauri (`apps/desktop`) come later. This tree is the C
 - `apps/mcp` — MCP server. `mcp-handler` + `@clerk/mcp-tools` as Vercel functions. Public routes: `/mcp`, `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource/mcp`.
 - `scripts/cloud-agent-install.sh` — `pnpm install --frozen-lockfile`.
 - `scripts/cloud-agent-start.sh` — anonymous Convex plus the Vite app on port 3000.
-- `scripts/vercel-build.sh` — `convex deploy` when `CONVEX_DEPLOY_KEY` is set, then the Vite build.
+- `scripts/vercel-build.sh` — when `CONVEX_DEPLOY_KEY` is set, sync the Clerk issuer and `MCP_ROLE_SECRET` onto that Convex deployment, `convex deploy`, then the Vite build. The deploy command exports `CONVEX_URL`, which the build maps to `VITE_CONVEX_URL`. `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is mapped to `VITE_CLERK_PUBLISHABLE_KEY`.
 
 ## Commands
 
