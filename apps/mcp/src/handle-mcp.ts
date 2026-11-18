@@ -14,7 +14,7 @@ import {
   mcpResourceUrl,
   mcpRoleProof,
   verifyMcpOauth,
-} from "./mcp-auth";
+} from "./mcp-auth.js";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 

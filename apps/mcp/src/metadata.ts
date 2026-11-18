@@ -8,7 +8,7 @@ import {
   clerkPublishableKey,
   mcpMetadataConfigError,
   mcpResourceUrl,
-} from "./mcp-auth";
+} from "./mcp-auth.js";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 

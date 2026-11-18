@@ -1,4 +1,4 @@
-import { metadataOptions, protectedResourceMetadata } from "../apps/mcp/src/metadata";
+import { metadataOptions, protectedResourceMetadata } from "../apps/mcp/src/metadata.js";
 
 export function GET(request: Request): Response {
   return protectedResourceMetadata(request);
