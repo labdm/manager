@@ -53366,6 +53366,7 @@ var KNOWN_TOOL_ERRORS = [
   "CLERK_FRONTEND_API_URL must not have a trailing slash",
   "CONVEX_URL is not set",
   "Admin required",
+  "User required",
   "Task not found",
   "Title is required",
   "Invalid dueAt"
@@ -53396,7 +53397,7 @@ function convexClient() {
 }
 async function signedProof(authInfo) {
   const clerkUserId = clerkUserIdFromAuthInfo(authInfo);
-  if (!clerkUserId) return { kind: "error", text: "Admin required" };
+  if (!clerkUserId) return { kind: "error", text: "User required" };
   const proof = await mcpRoleProof(clerkUserId);
   if (proof.kind !== "ok") return { kind: "error", text: proof.message };
   return {
@@ -53420,10 +53421,9 @@ function mcpHandler(resourceUrl) {
         },
         async (_args, ctx) => {
           const clerkUserId = clerkUserIdFromAuthInfo(ctx.http?.authInfo);
-          if (!clerkUserId) return toolError("Admin required");
+          if (!clerkUserId) return toolError("User required");
           const lookup2 = await lookupMcpRole(clerkUserId);
           if (lookup2.kind === "misconfigured") return toolError(lookup2.message);
-          if (lookup2.role !== "admin") return toolError("Admin required");
           return toolJson({ role: lookup2.role, clerkUserId });
         }
       );
@@ -53431,7 +53431,7 @@ function mcpHandler(resourceUrl) {
         "list_tasks",
         {
           title: "List tasks",
-          description: "Lists tasks owned by the signed-in admin. Does not accept a user id.",
+          description: "Lists tasks owned by the signed-in user. Does not accept a user id.",
           inputSchema: external_exports.object({})
         },
         async (_args, ctx) => {
@@ -53448,7 +53448,7 @@ function mcpHandler(resourceUrl) {
         "create_task",
         {
           title: "Create task",
-          description: "Creates a task for the signed-in admin. dueAt is optional Unix milliseconds.",
+          description: "Creates a task for the signed-in user. dueAt is optional Unix milliseconds.",
           inputSchema: external_exports.object({
             title: external_exports.string(),
             dueAt: external_exports.number().optional()
@@ -53474,7 +53474,7 @@ function mcpHandler(resourceUrl) {
         "complete_task",
         {
           title: "Complete task",
-          description: "Marks one of the signed-in admin's tasks done.",
+          description: "Marks one of the signed-in user's tasks done.",
           inputSchema: external_exports.object({
             id: external_exports.string()
           })
@@ -53497,7 +53497,7 @@ function mcpHandler(resourceUrl) {
     },
     {
       serverInfo: { name: "manager", version: "0.1.0" },
-      instructions: "Manager admin MCP. Sign in once with Clerk OAuth; the client refreshes the access token. whoami reads users.role in Convex. create_task, list_tasks, and complete_task use the tasks table.",
+      instructions: "Manager user MCP. Sign in once with Clerk OAuth; the client refreshes the access token. whoami reads users.role in Convex. create_task, list_tasks, and complete_task use the tasks table.",
       maxSubscriptions: 0
     }
   );
@@ -53526,12 +53526,6 @@ async function handleMcp(request) {
   if (oauth.kind === "authenticated") {
     const lookup2 = await lookupMcpRole(oauth.clerkUserId);
     if (lookup2.kind === "misconfigured") return misconfigured(lookup2.message);
-    if (lookup2.role !== "admin") {
-      return Response.json(
-        { error: "Admin required" },
-        { status: 403, headers: NO_STORE }
-      );
-    }
   }
   return mcpHandler(resource.url)(request);
 }

@@ -65,7 +65,7 @@ Discovery routes:
 - `/.well-known/oauth-authorization-server`
 - `/.well-known/oauth-protected-resource/mcp`
 
-Vercel serves the static SPA from `apps/web/dist` and Node functions from the repo `api/` directory. Those functions are thin entrypoints into `apps/mcp`. Rewrites publish `/mcp` and the `/.well-known` routes on `manager.labdm.dev`.
+Vercel serves the static SPA from `apps/web/dist` and Node functions from the repo `api/` directory. Those functions are self-contained ESM bundles generated from `scripts/api-entries/*.ts`. When modifying `apps/mcp`, run `pnpm build:api` (or `pnpm build`) to update the bundles in `api/`. CI runs `pnpm verify:api` to ensure the bundles in `api/` match the source code. Rewrites publish `/mcp` and the `/.well-known` routes on `manager.labdm.dev`.
 
 ## Deployment
 
