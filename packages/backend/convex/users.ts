@@ -32,6 +32,63 @@ function shouldBeAdmin(identity: {
   return false;
 }
 
+/** Common helper to look up or provision a user by token identifier. */
+export async function upsertUserByTokenIdentifier(
+  ctx: MutationCtx,
+  tokenIdentifier: string,
+  details?: { name?: string; email?: string; clerkUserId?: string },
+): Promise<Doc<"users">> {
+  const existing = await ctx.db
+    .query("users")
+    .withIndex("by_token", (q) => q.eq("tokenIdentifier", tokenIdentifier))
+    .unique();
+
+  const promote = shouldBeAdmin({
+    subject: details?.clerkUserId,
+    tokenIdentifier,
+  });
+
+  const name = details?.name ?? undefined;
+  const email = details?.email ?? undefined;
+
+  if (existing) {
+    const patch: { name?: string; email?: string; role?: "admin" } = {};
+    if (name && name !== existing.name) patch.name = name;
+    if (email && email !== existing.email) patch.email = email;
+    if (promote && existing.role !== "admin") patch.role = "admin";
+
+    if (Object.keys(patch).length > 0) {
+      await ctx.db.patch(existing._id, patch);
+    }
+    return {
+      ...existing,
+      ...patch,
+      role: promote ? "admin" : existing.role,
+    };
+  }
+
+  const id = await ctx.db.insert("users", {
+    tokenIdentifier,
+    name,
+    email,
+    role: promote ? "admin" : "user",
+  });
+  const created = await ctx.db.get(id);
+  if (!created) throw new Error("Could not create user");
+  return created;
+}
+
+/** Look up a user by token identifier without mutating. */
+export async function findUserByTokenIdentifier(
+  ctx: QueryCtx | MutationCtx,
+  tokenIdentifier: string,
+): Promise<Doc<"users"> | null> {
+  return await ctx.db
+    .query("users")
+    .withIndex("by_token", (q) => q.eq("tokenIdentifier", tokenIdentifier))
+    .unique();
+}
+
 async function upsertFromIdentity(
   ctx: MutationCtx,
 ): Promise<Doc<"users"> | null> {
@@ -40,43 +97,11 @@ async function upsertFromIdentity(
     return null;
   }
 
-  const existing = await ctx.db
-    .query("users")
-    .withIndex("by_token", (q) =>
-      q.eq("tokenIdentifier", identity.tokenIdentifier),
-    )
-    .unique();
-
-  const name = identity.name ?? undefined;
-  const email = identity.email ?? undefined;
-  const promote = shouldBeAdmin(identity);
-
-  if (existing) {
-    const patch: { name?: string; email?: string; role?: "admin" } = {
-      name,
-      email,
-    };
-    // Promote matching Clerk user ids; never auto-demote.
-    if (promote && existing.role !== "admin") {
-      patch.role = "admin";
-    }
-    await ctx.db.patch(existing._id, patch);
-    return {
-      ...existing,
-      name,
-      email,
-      role: promote ? "admin" : existing.role,
-    };
-  }
-
-  const id = await ctx.db.insert("users", {
-    tokenIdentifier: identity.tokenIdentifier,
-    name,
-    email,
-    role: promote ? "admin" : "user",
+  return await upsertUserByTokenIdentifier(ctx, identity.tokenIdentifier, {
+    name: identity.name ?? undefined,
+    email: identity.email ?? undefined,
+    clerkUserId: identity.subject ?? undefined,
   });
-  const created = await ctx.db.get(id);
-  return created;
 }
 
 /** First authenticated call upserts the users row. */
@@ -94,12 +119,7 @@ export const me = query({
     if (!identity) {
       return null;
     }
-    return await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) =>
-        q.eq("tokenIdentifier", identity.tokenIdentifier),
-      )
-      .unique();
+    return await findUserByTokenIdentifier(ctx, identity.tokenIdentifier);
   },
 });
 
@@ -108,12 +128,7 @@ export async function findCurrentUser(
 ): Promise<Doc<"users"> | null> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) return null;
-  return await ctx.db
-    .query("users")
-    .withIndex("by_token", (q) =>
-      q.eq("tokenIdentifier", identity.tokenIdentifier),
-    )
-    .unique();
+  return await findUserByTokenIdentifier(ctx, identity.tokenIdentifier);
 }
 
 export async function requireUser(ctx: MutationCtx): Promise<Doc<"users">> {

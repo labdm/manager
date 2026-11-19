@@ -3,7 +3,8 @@ import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { assertMcpRoleProof } from "./lib/mcpRoleSignature";
-import { assertDueAt, normalizeTitle } from "./lib/taskFields";
+import * as taskService from "./lib/taskService";
+import { findUserByTokenIdentifier, upsertUserByTokenIdentifier } from "./users";
 
 const proofArgs = {
   clerkUserId: v.string(),
@@ -17,48 +18,43 @@ type Proof = {
   signature: string;
 };
 
-async function requireMcpUser(
-  ctx: QueryCtx | MutationCtx,
-  args: Proof,
-): Promise<Doc<"users">> {
-  await assertMcpRoleProof(args);
+function mcpIssuer(): string {
   const issuer = process.env.CLERK_FRONTEND_API_URL?.trim() ?? "";
   if (!issuer) throw new Error("CLERK_FRONTEND_API_URL is not set");
   if (issuer.endsWith("/")) {
     throw new Error("CLERK_FRONTEND_API_URL must not have a trailing slash");
   }
-
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_token", (q) =>
-      q.eq("tokenIdentifier", `${issuer}|${args.clerkUserId}`),
-    )
-    .unique();
-
-  if (!user) throw new Error("User required");
-  return user;
+  return issuer;
 }
 
-function taskView(task: Doc<"tasks">) {
-  return {
-    id: task._id,
-    title: task.title,
-    done: task.done,
-    dueAt: task.dueAt ?? null,
-    ownerId: task.ownerId,
-  };
+/** Looks up the user for queries. Returns null if user has not yet interacted with the system. */
+async function findMcpUser(
+  ctx: QueryCtx,
+  args: Proof,
+): Promise<Doc<"users"> | null> {
+  await assertMcpRoleProof(args);
+  const tokenIdentifier = `${mcpIssuer()}|${args.clerkUserId}`;
+  return await findUserByTokenIdentifier(ctx, tokenIdentifier);
+}
+
+/** Ensures the user exists for mutations, auto-provisioning if first MCP interaction. */
+async function requireMcpUser(
+  ctx: MutationCtx,
+  args: Proof,
+): Promise<Doc<"users">> {
+  await assertMcpRoleProof(args);
+  const tokenIdentifier = `${mcpIssuer()}|${args.clerkUserId}`;
+  return await upsertUserByTokenIdentifier(ctx, tokenIdentifier, {
+    clerkUserId: args.clerkUserId,
+  });
 }
 
 export const list = query({
   args: proofArgs,
   handler: async (ctx, args) => {
-    const user = await requireMcpUser(ctx, args);
-    const tasks = await ctx.db
-      .query("tasks")
-      .withIndex("by_owner", (q) => q.eq("ownerId", user._id))
-      .collect();
-    tasks.sort((a, b) => b._creationTime - a._creationTime);
-    return tasks.map(taskView);
+    const user = await findMcpUser(ctx, args);
+    if (!user) return [];
+    return await taskService.listTasks(ctx.db, user._id);
   },
 });
 
@@ -70,17 +66,10 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireMcpUser(ctx, args);
-    const title = normalizeTitle(args.title);
-    assertDueAt(args.dueAt);
-    const id = await ctx.db.insert("tasks", {
-      title,
-      done: false,
+    return await taskService.createTask(ctx.db, user._id, {
+      title: args.title,
       dueAt: args.dueAt,
-      ownerId: user._id,
     });
-    const task = await ctx.db.get(id);
-    if (!task) throw new Error("Task not found");
-    return taskView(task);
   },
 });
 
@@ -91,9 +80,28 @@ export const complete = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireMcpUser(ctx, args);
-    const task = await ctx.db.get(args.id);
-    if (!task || task.ownerId !== user._id) throw new Error("Task not found");
-    await ctx.db.patch(task._id, { done: true });
-    return taskView({ ...task, done: true });
+    return await taskService.setTaskDone(ctx.db, user._id, args.id, true);
+  },
+});
+
+export const reopen = mutation({
+  args: {
+    ...proofArgs,
+    id: v.id("tasks"),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireMcpUser(ctx, args);
+    return await taskService.setTaskDone(ctx.db, user._id, args.id, false);
+  },
+});
+
+export const remove = mutation({
+  args: {
+    ...proofArgs,
+    id: v.id("tasks"),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireMcpUser(ctx, args);
+    return await taskService.deleteTask(ctx.db, user._id, args.id);
   },
 });

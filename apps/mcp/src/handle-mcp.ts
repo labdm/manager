@@ -165,11 +165,61 @@ function mcpHandler(resourceUrl: string) {
           }
         },
       );
+
+      server.registerTool(
+        "reopen_task",
+        {
+          title: "Reopen task",
+          description: "Marks one of the signed-in user's tasks not done (reopens it).",
+          inputSchema: z.object({
+            id: z.string(),
+          }),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpTasks.reopen, {
+                ...signed.proof,
+                id: args.id as Id<"tasks">,
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not reopen task"));
+          }
+        },
+      );
+
+      server.registerTool(
+        "delete_task",
+        {
+          title: "Delete task",
+          description: "Deletes one of the signed-in user's tasks.",
+          inputSchema: z.object({
+            id: z.string(),
+          }),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpTasks.remove, {
+                ...signed.proof,
+                id: args.id as Id<"tasks">,
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not delete task"));
+          }
+        },
+      );
     },
     {
       serverInfo: { name: "manager", version: "0.1.0" },
       instructions:
-        "Manager user MCP. Sign in once with Clerk OAuth; the client refreshes the access token. whoami reads users.role in Convex. create_task, list_tasks, and complete_task use the tasks table.",
+        "Manager user MCP. Sign in once with Clerk OAuth; the client refreshes the access token. whoami reads users.role in Convex. create_task, list_tasks, complete_task, reopen_task, and delete_task use the tasks table.",
       maxSubscriptions: 0,
     },
   );
