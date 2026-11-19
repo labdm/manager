@@ -15,7 +15,11 @@ public enum ManagerGlass {
     public func body(content: Content) -> some View {
       Group {
         if #available(iOS 26.0, macOS 26.0, *) {
+          #if compiler(>=6.2) // Xcode 26+ ships the glass button styles.
           content.buttonStyle(.glassProminent).tint(Color.managerAccent)
+          #else
+          content.buttonStyle(.borderedProminent).tint(Color.managerAccent)
+          #endif
         } else {
           content.buttonStyle(.borderedProminent).tint(Color.managerAccent)
         }
@@ -29,7 +33,11 @@ public enum ManagerGlass {
     public func body(content: Content) -> some View {
       Group {
         if #available(iOS 26.0, macOS 26.0, *) {
+          #if compiler(>=6.2)
           content.buttonStyle(.glass)
+          #else
+          content.buttonStyle(.plain)
+          #endif
         } else {
           content.buttonStyle(.plain)
         }

@@ -29,6 +29,7 @@ struct GlassCoverageTests {
     #expect(theme.contains("buttonStyle(.glassProminent)"))
     #expect(theme.contains("buttonStyle(.glass)"))
     #expect(theme.contains("buttonStyle(.borderedProminent)"))
+    #expect(theme.contains("#if compiler(>=6.2)"))
   }
 
   @Test("Navigation root is not wrapped in a glass fusion container")
