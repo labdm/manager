@@ -11,6 +11,10 @@ jobs:
     # an Apple Silicon runner. `macos-14` was retired on 2026-11-02;
     # `macos-15` is the current arm64 label (Intel is `macos-15-intel`).
     runs-on: macos-15
+    env:
+      # The image's default is Xcode 16.4, which cannot resolve ClerkKit's
+      # Swift 6.2 tools version. Xcode 26.3 is preinstalled on macos-15 arm64.
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
