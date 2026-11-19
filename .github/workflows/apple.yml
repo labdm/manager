@@ -1,0 +1,32 @@
+name: Apple
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  apple:
+    # ConvexMobile's Rust library is arm64-only, so the simulator build needs
+    # an Apple Silicon runner. `macos-14` was retired on 2026-11-02;
+    # `macos-15` is the current arm64 label (Intel is `macos-15-intel`).
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.21.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate the Xcode project
+        # No Clerk publishable key in CI: Config/Secrets.plist gets empty
+        # values. Builds still compile; the app shows setup steps at launch.
+        run: pnpm apple:project
+      - run: pnpm apple:test
+      - run: pnpm apple:build:mac
+      - run: pnpm apple:build:ios

@@ -2,7 +2,7 @@
 
 Manager is Dmytro Afonin's personal task manager. Architecture: [docs/architecture.md](docs/architecture.md).
 
-SwiftUI (`apps/apple`) and Tauri (`apps/desktop`) come later. This tree is the Convex backend, the shared React UI, the static web app, and the MCP server.
+Tauri (`apps/desktop`) comes later. This tree is the Convex backend, the shared React UI, the static web app, the MCP server, and the native Apple client.
 
 ## Layout
 
@@ -10,6 +10,7 @@ SwiftUI (`apps/apple`) and Tauri (`apps/desktop`) come later. This tree is the C
 - `packages/ui` — shared React task UI. Client-only; no SSR.
 - `apps/web` — Vite + React + TanStack Router. Static SPA.
 - `apps/mcp` — MCP server. `mcp-handler` + `@clerk/mcp-tools` as Vercel functions. Public routes: `/mcp`, `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource/mcp`.
+- `apps/apple` — SwiftUI client for iPhone (including the Duo), iPad and Mac. Details: [apps/apple/README.md](apps/apple/README.md). `ManagerKit` (models + views, no Convex/Clerk imports) and `ManagerData` (Convex + Clerk adapters) are local Swift packages; `project.yml` is the XcodeGen source of truth. Generated `Manager.xcodeproj` and `Config/Secrets.plist` are gitignored. Do not commit secrets.
 - `scripts/cloud-agent-install.sh` — `pnpm install --frozen-lockfile`.
 - `scripts/cloud-agent-start.sh` — anonymous Convex plus the Vite app on port 3000.
 - `scripts/vercel-build.sh` — when `CONVEX_DEPLOY_KEY` is set, `convex deploy` then the Vite build. The deploy command exports `CONVEX_URL`, which the build maps to `VITE_CONVEX_URL`. `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is mapped to `VITE_CLERK_PUBLISHABLE_KEY`. Set `CLERK_FRONTEND_API_URL` and `MCP_ROLE_SECRET` on the Convex deployment before the first push. A preview deploy key cannot set those variables.
@@ -24,6 +25,9 @@ From the repo root:
 - `pnpm typecheck`
 - `pnpm test`
 - `pnpm build`
+- `pnpm apple:project` — generate `Config/Secrets.plist` from the env files and regenerate `Manager.xcodeproj`. Run this before opening the Apple project.
+- `pnpm apple:test` — Swift tests for the Apple client's pure logic (no Xcode needed).
+- `pnpm apple:build:mac`, `pnpm apple:build:ios` — unsigned builds; require Xcode on Apple Silicon.
 
 ## Node and pnpm
 
@@ -52,7 +56,9 @@ Anonymous local Convex is enough for lint, typecheck, and build. Production Conv
 
 ## Auth
 
-Clerk React SDK in the web app. Convex verifies the Clerk JWT from the `convex` template. Each signed-in user reads and writes only tasks whose `ownerId` is their `users` row.
+Clerk React SDK in the web app; `ClerkKit` + `ClerkConvexAuthProvider` in the Apple app. Convex verifies the Clerk JWT from the `convex` template. Each signed-in user reads and writes only tasks whose `ownerId` is their `users` row.
+
+The Apple client subscribes to `tasks:list` and uses `tasks:create`, `tasks:setDone`, `tasks:remove` in `packages/backend/convex/tasks.ts`. `tasks:setDone` is an explicit setter so retried checkbox taps cannot invert state. Convex numbers are tagged on the wire: decode `dueAt` with `@OptionalConvexFloat`, not plain `Double`. The Apple workflow in `.github/workflows/apple.yml` runs on an arm64 macOS runner because ConvexMobile's binary is arm64-only.
 
 ## MCP
 

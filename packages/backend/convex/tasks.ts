@@ -35,3 +35,25 @@ export const toggle = mutation({
   },
 });
 
+/**
+ * Sets a task's completion state explicitly.
+ *
+ * The Apple client shows a checkbox rather than a toggle, so a late retry or a
+ * double tap must not flip the opposite way. `toggle` stays for the web UI.
+ */
+export const setDone = mutation({
+  args: { id: v.id("tasks"), done: v.boolean() },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    return await taskService.setTaskDone(ctx.db, user._id, args.id, args.done);
+  },
+});
+
+export const remove = mutation({
+  args: { id: v.id("tasks") },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    return await taskService.deleteTask(ctx.db, user._id, args.id);
+  },
+});
+

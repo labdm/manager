@@ -14,7 +14,13 @@
     "build": "pnpm build:api && pnpm --filter \"./apps/*\" --filter \"./packages/*\" build",
     "lint": "pnpm --filter \"./apps/*\" --filter \"./packages/*\" lint && eslint api",
     "typecheck": "pnpm --filter \"./apps/*\" --filter \"./packages/*\" typecheck",
-    "test": "pnpm --filter \"./apps/*\" --filter \"./packages/*\" test"
+    "test": "pnpm --filter \"./apps/*\" --filter \"./packages/*\" test",
+    "apple:project": "scripts/apple-project.sh",
+    "apple:test": "swift test --package-path apps/apple/Packages/ManagerKit",
+    "apple:build:mac": "xcodebuild -project apps/apple/Manager.xcodeproj -scheme Manager -destination 'platform=macOS' -configuration Debug CODE_SIGNING_ALLOWED=NO build",
+    "apple:build:ios": "xcodebuild -project apps/apple/Manager.xcodeproj -scheme Manager -destination 'generic/platform=iOS Simulator' -configuration Debug CODE_SIGNING_ALLOWED=YES CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- PROVISIONING_PROFILE_SPECIFIER= build",
+    "apple:install:ios": "xcrun simctl uninstall booted dev.labdm.manager >/dev/null 2>&1; xcrun simctl install booted \"$(find ~/Library/Developer/Xcode/DerivedData -path '*/Build/Products/Debug-iphonesimulator/Manager.app' -type d | head -1)\" && xcrun simctl launch booted dev.labdm.manager",
+    "check:functions": "scripts/check-convex-functions.sh"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

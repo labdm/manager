@@ -49,3 +49,9 @@ next-env.d.ts
 
 # pnpm
 .pnpm-store
+
+# apple (XcodeGen output + generated secrets + SwiftPM build data)
+apps/apple/*.xcodeproj/
+apps/apple/Config/Secrets.plist
+apps/apple/Packages/*/.build/
+apps/apple/Packages/*/Package.resolved
