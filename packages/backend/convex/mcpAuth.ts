@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { assertMcpRoleProof } from "./lib/mcpRoleSignature";
+import { findUserByTokenIdentifier } from "./users";
 
 /**
  * Public so the Next.js MCP route can call it without a Convex deploy key.
@@ -22,12 +23,10 @@ export const roleForClerkUser = query({
       throw new Error("CLERK_FRONTEND_API_URL must not have a trailing slash");
     }
 
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) =>
-        q.eq("tokenIdentifier", `${issuer}|${args.clerkUserId}`),
-      )
-      .unique();
+    const user = await findUserByTokenIdentifier(
+      ctx,
+      `${issuer}|${args.clerkUserId}`,
+    );
 
     if (!user) return { role: null };
     return { role: user.role };

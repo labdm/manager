@@ -9,7 +9,9 @@
   "scripts": {
     "dev": "pnpm --filter @manager/web dev",
     "dev:backend": "pnpm --filter @manager/backend dev",
-    "build": "pnpm --filter \"./apps/*\" --filter \"./packages/*\" build",
+    "build:api": "esbuild scripts/api-entries/mcp.ts --bundle --platform=node --format=esm --outfile=api/mcp-impl.js && esbuild scripts/api-entries/oauth-authorization-server.ts --bundle --platform=node --format=esm --outfile=api/oauth-authorization-server.js && esbuild scripts/api-entries/oauth-protected-resource.ts --bundle --platform=node --format=esm --outfile=api/oauth-protected-resource.js",
+    "verify:api": "git diff --exit-code api/ || (echo 'API bundles in api/ are out of date. Run pnpm build:api and commit the changes.' && exit 1)",
+    "build": "pnpm build:api && pnpm --filter \"./apps/*\" --filter \"./packages/*\" build",
     "lint": "pnpm --filter \"./apps/*\" --filter \"./packages/*\" lint && eslint api",
     "typecheck": "pnpm --filter \"./apps/*\" --filter \"./packages/*\" typecheck",
     "test": "pnpm --filter \"./apps/*\" --filter \"./packages/*\" test"
