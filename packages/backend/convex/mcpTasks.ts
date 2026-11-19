@@ -17,7 +17,7 @@ type Proof = {
   signature: string;
 };
 
-async function requireMcpAdmin(
+async function requireMcpUser(
   ctx: QueryCtx | MutationCtx,
   args: Proof,
 ): Promise<Doc<"users">> {
@@ -35,7 +35,7 @@ async function requireMcpAdmin(
     )
     .unique();
 
-  if (!user || user.role !== "admin") throw new Error("Admin required");
+  if (!user) throw new Error("User required");
   return user;
 }
 
@@ -52,7 +52,7 @@ function taskView(task: Doc<"tasks">) {
 export const list = query({
   args: proofArgs,
   handler: async (ctx, args) => {
-    const user = await requireMcpAdmin(ctx, args);
+    const user = await requireMcpUser(ctx, args);
     const tasks = await ctx.db
       .query("tasks")
       .withIndex("by_owner", (q) => q.eq("ownerId", user._id))
@@ -69,7 +69,7 @@ export const create = mutation({
     dueAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const user = await requireMcpAdmin(ctx, args);
+    const user = await requireMcpUser(ctx, args);
     const title = normalizeTitle(args.title);
     assertDueAt(args.dueAt);
     const id = await ctx.db.insert("tasks", {
@@ -90,7 +90,7 @@ export const complete = mutation({
     id: v.id("tasks"),
   },
   handler: async (ctx, args) => {
-    const user = await requireMcpAdmin(ctx, args);
+    const user = await requireMcpUser(ctx, args);
     const task = await ctx.db.get(args.id);
     if (!task || task.ownerId !== user._id) throw new Error("Task not found");
     await ctx.db.patch(task._id, { done: true });

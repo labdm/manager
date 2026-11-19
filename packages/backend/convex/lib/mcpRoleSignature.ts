@@ -1,4 +1,4 @@
-/** HMAC proof for the MCP admin-role lookup. No Node built-ins. */
+/** HMAC proof for the MCP role lookup. No Node built-ins. */
 
 export const MCP_ROLE_TTL_MS = 30_000;
 export const MCP_ROLE_MAX_TTL_MS = 60_000;

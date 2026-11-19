@@ -56,9 +56,9 @@ Clerk React SDK in the web app. Convex verifies the Clerk JWT from the `convex` 
 
 ## MCP
 
-`/mcp` is a Streamable HTTP endpoint (`mcp-handler`). Clerk verifies the OAuth bearer with `aud` equal to `MCP_RESOURCE_URL` (`https://manager.labdm.dev/mcp` in production). The route sends the Clerk user id to Convex with a short-lived HMAC (`MCP_ROLE_SECRET`), not the bearer. `whoami` returns `{ role, clerkUserId }` for an admin `users` row. A missing or invalid token is rejected. A signed-in non-admin gets 403.
+`/mcp` is a Streamable HTTP endpoint (`mcp-handler`). Clerk verifies the OAuth bearer with `aud` equal to `MCP_RESOURCE_URL` (`https://manager.labdm.dev/mcp` in production). The route sends the Clerk user id to Convex with a short-lived HMAC (`MCP_ROLE_SECRET`), not the bearer. `whoami` returns `{ role, clerkUserId }` for an authenticated `users` row. A missing or invalid token is rejected. A not signed-in gets 403.
 
-`create_task`, `list_tasks`, and `complete_task` read and write `tasks` (`title`, `done`, optional `dueAt`, `ownerId`). Same admin gate.
+`create_task`, `list_tasks`, and `complete_task` read and write `tasks` (`title`, `done`, optional `dueAt`, `ownerId`). Same authenticated user gate.
 
 Discovery routes:
 

@@ -69,7 +69,7 @@ flowchart TB
 
 ## Auth
 
-Clerk everywhere: the React SDK on web and desktop, a Clerk-issued JWT verified by Convex, and Clerk OAuth for MCP clients (token audience `https://manager.labdm.dev/mcp`). MCP access is limited to the admin user.
+Clerk everywhere: the React SDK on web and desktop, a Clerk-issued JWT verified by Convex, and Clerk OAuth for MCP clients (token audience `https://manager.labdm.dev/mcp`). MCP access is available to any authenticated user.
 
 ## Integrations
 
