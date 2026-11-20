@@ -87,19 +87,37 @@ web/backend env files; they are not secrets.
      `clerk-convex-kotlin` bridge handles session tokens and refresh; the app
      never reads or forwards a bearer token.
 
-## Build and test
+## Run it locally
 
-The local toolchain used here was the Android Studio JBR and SDK in
-`$HOME/Library/Android/sdk`. The wrapper pins Gradle 9.8.2; AGP is 9.4.1 and
-Kotlin is 2.4.21.
+`apps/android/local.properties` is gitignored and already filled on this
+machine with the same public config as the web app, plus `sdk.dir`. Android
+Studio reads it automatically. If you clone elsewhere, copy
+`local.properties.example` and fill in the Convex URL and Clerk publishable key.
+
+### Android Studio
+
+1. Open **this directory** (`apps/android`) as a project — it is a standalone
+   Gradle build, not the repo root.
+2. Let Gradle sync finish. Android Studio uses its bundled JBR and the SDK from
+   `local.properties`.
+3. Select the `app` run configuration and an Android 8+ emulator or device, then
+   click **Run**. The app opens on the Clerk sign-in screen; password, email
+   code and Google sign-in all work.
+
+### Command line
+
+From the repo root, the wrapper scripts find Android Studio's JDK and the SDK
+for you:
 
 ```sh
-cd apps/android
-
-JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
-ANDROID_HOME="$HOME/Library/Android/sdk" \
-./gradlew test
+pnpm android:test     # 16 JVM unit tests, no emulator needed
+pnpm android:build    # debug APK + release AAB
+pnpm android:install  # installDebug on a connected device/emulator
+pnpm android:package  # copy versioned assets into artifacts/android
 ```
+
+You can also call Gradle directly from `apps/android` with `./gradlew …`. The
+wrapper pins Gradle 9.8.2; AGP is 9.4.1 and Kotlin is 2.4.21.
 
 Unit tests need **no config** and no emulator. They cover:
 
@@ -111,12 +129,6 @@ Unit tests need **no config** and no emulator. They cover:
 Packaging tasks (`assemble`, `bundleRelease`, `installDebug`, …) depend on
 `checkManagerConfig`, which fails early with setup instructions when config is
 missing:
-
-```sh
-JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
-ANDROID_HOME="$HOME/Library/Android/sdk" \
-./gradlew assembleDebug
-```
 
 `minSdk` is 26 because `clerk-convex-kotlin` declares that minimum. `targetSdk`
 is 36; `compileSdk` uses the `platforms;android-37.0` SDK package (API 37 ships

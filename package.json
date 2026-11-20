@@ -24,6 +24,10 @@
     "apple:build:ios": "xcodebuild -project apps/apple/Manager.xcodeproj -scheme Manager -destination 'generic/platform=iOS Simulator' -configuration \"${MANAGER_CONFIGURATION:-Debug}\" -derivedDataPath \"${MANAGER_DERIVED_DATA:-apps/apple/.build/derivedData}\" MARKETING_VERSION=\"${MANAGER_VERSION_NUMBER:-0.1.0}\" CODE_SIGNING_ALLOWED=YES CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- PROVISIONING_PROFILE_SPECIFIER= build",
     "apple:package": "scripts/package-apple-artifacts.sh",
     "apple:install:ios": "xcrun simctl uninstall booted dev.labdm.manager >/dev/null 2>&1; xcrun simctl install booted \"${MANAGER_DERIVED_DATA:-apps/apple/.build/derivedData}/Build/Products/${MANAGER_CONFIGURATION:-Debug}-iphonesimulator/Manager.app\" && xcrun simctl launch booted dev.labdm.manager",
+    "android:test": "scripts/android-gradle.sh test",
+    "android:build": "scripts/android-gradle.sh assembleDebug bundleRelease",
+    "android:install": "scripts/android-gradle.sh installDebug",
+    "android:package": "scripts/package-android-artifacts.sh",
     "check:functions": "scripts/check-convex-functions.sh"
   },
   "devDependencies": {
