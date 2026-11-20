@@ -18,11 +18,13 @@ jobs:
       # The image's default is Xcode 16.4, which cannot resolve ClerkKit's
       # Swift 6.2 tools version. Xcode 26.3 is preinstalled on macos-15 arm64.
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
-      MANAGER_DERIVED_DATA: ${{ runner.temp }}/manager-derived-data
-      MANAGER_ARTIFACTS_DIR: ${{ runner.temp }}/manager-artifacts
       MANAGER_VERSION: ci-${{ github.sha }}
     steps:
       - uses: actions/checkout@v7
+      - name: Set build paths
+        run: |
+          echo "MANAGER_DERIVED_DATA=$RUNNER_TEMP/manager-derived-data" >> "$GITHUB_ENV"
+          echo "MANAGER_ARTIFACTS_DIR=$RUNNER_TEMP/manager-artifacts" >> "$GITHUB_ENV"
       - uses: pnpm/action-setup@v6
         with:
           version: 12.21.0

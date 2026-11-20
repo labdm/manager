@@ -20,8 +20,6 @@ jobs:
       # Xcode 26.3 is required by ClerkKit's Swift 6.2 tools version.
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
       MANAGER_CONFIGURATION: Release
-      MANAGER_DERIVED_DATA: ${{ runner.temp }}/manager-derived-data
-      MANAGER_ARTIFACTS_DIR: ${{ runner.temp }}/manager-artifacts
       # These are publishable config values, not secrets. Set them as repository
       # variables so the downloaded builds point at the production services.
       VITE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
@@ -31,6 +29,10 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7
+      - name: Set build paths
+        run: |
+          echo "MANAGER_DERIVED_DATA=$RUNNER_TEMP/manager-derived-data" >> "$GITHUB_ENV"
+          echo "MANAGER_ARTIFACTS_DIR=$RUNNER_TEMP/manager-artifacts" >> "$GITHUB_ENV"
       - uses: pnpm/action-setup@v6
         with:
           version: 12.21.0
