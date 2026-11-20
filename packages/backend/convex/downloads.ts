@@ -24,6 +24,7 @@ const platformValidator = v.union(
   v.literal("web"),
   v.literal("windows"),
   v.literal("macos"),
+  v.literal("android"),
   v.literal("ios"),
 );
 

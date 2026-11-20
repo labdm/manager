@@ -8,7 +8,7 @@ export interface AssetGroup {
   assets: DownloadAsset[];
 }
 
-const formatOrder = ["msi", "exe", "dmg", "zip", "tar.gz"];
+const formatOrder = ["apk", "aab", "msi", "exe", "dmg", "zip", "tar.gz"];
 
 export function assetFormat(name: string): string {
   const lower = name.toLowerCase();
@@ -17,6 +17,8 @@ export function assetFormat(name: string): string {
   if (lower.endsWith(".msi")) return "msi";
   if (lower.endsWith(".exe")) return "exe";
   if (lower.endsWith(".dmg")) return "dmg";
+  if (lower.endsWith(".apk")) return "apk";
+  if (lower.endsWith(".aab")) return "aab";
   return "download";
 }
 

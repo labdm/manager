@@ -11,6 +11,8 @@ describe("classifyAssetName", () => {
     expect(classifyAssetName("Manager-macOS-Native-v0.1.0.zip")).toBe("macos");
     expect(classifyAssetName("Manager-macOS-Desktop-v0.1.0.dmg")).toBe("macos");
     expect(classifyAssetName("Manager-Windows-v0.1.0.zip")).toBe("windows");
+    expect(classifyAssetName("Manager-Android-v0.1.0.apk")).toBe("android");
+    expect(classifyAssetName("manager-android-v0.1.0.aab")).toBe("android");
     expect(classifyAssetName("Manager-iOS-Simulator-v0.1.0.zip")).toBe("ios");
   });
 
@@ -60,6 +62,7 @@ describe("visibleAssets", () => {
     { platform: "web", name: "web.zip", url: "", size: 1, updatedAt: "" },
     { platform: "windows", name: "windows.zip", url: "", size: 1, updatedAt: "" },
     { platform: "macos", name: "mac.zip", url: "", size: 1, updatedAt: "" },
+    { platform: "android", name: "android.apk", url: "", size: 1, updatedAt: "" },
     { platform: "ios", name: "ios.zip", url: "", size: 1, updatedAt: "" },
   ] as const;
 
@@ -68,10 +71,11 @@ describe("visibleAssets", () => {
       "web",
       "windows",
       "macos",
+      "android",
     ]);
   });
 
   it("shows every platform to admins", () => {
-    expect(visibleAssets([...assets], true)).toHaveLength(4);
+    expect(visibleAssets([...assets], true)).toHaveLength(5);
   });
 });

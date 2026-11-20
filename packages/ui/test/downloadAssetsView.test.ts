@@ -17,6 +17,8 @@ describe("assetFormat", () => {
     expect(assetFormat("Manager-macOS-Desktop-v1.dmg")).toBe("dmg");
     expect(assetFormat("Manager-Windows-v1.msi")).toBe("msi");
     expect(assetFormat("Manager-Windows-v1.exe")).toBe("exe");
+    expect(assetFormat("Manager-Android-v1.apk")).toBe("apk");
+    expect(assetFormat("Manager-Android-v1.aab")).toBe("aab");
   });
 });
 

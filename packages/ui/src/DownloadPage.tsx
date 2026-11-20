@@ -18,6 +18,7 @@ const platformLabels: Record<DownloadAsset["platform"], string> = {
   web: "Web",
   windows: "Windows",
   macos: "macOS",
+  android: "Android",
   ios: "iOS",
 };
 
@@ -291,10 +292,35 @@ export function DownloadPage({ deployEnv }: DownloadPageProps = {}) {
         )}
       </section>
 
-      <section className="download-section restricted" aria-labelledby="ios-heading">
+      <section className="download-section" aria-labelledby="android-heading">
         <div className="section-heading">
           <div>
             <p className="section-index">02</p>
+            <h2 id="android-heading">Android</h2>
+          </div>
+          <p>APK for direct install, AAB for app stores.</p>
+        </div>
+        {isPreview ? (
+          <p className="status">
+            Preview builds do not list release assets. Use the links above.
+          </p>
+        ) : releaseError ? (
+          <p className="error">{releaseError}</p>
+        ) : releases === undefined ? (
+          <p className="status">Loading releases…</p>
+        ) : (
+          <ReleaseList
+            releases={allReleases}
+            platforms={["android"]}
+            empty="No Android releases yet. Publish a v* tag to create one."
+          />
+        )}
+      </section>
+
+      <section className="download-section restricted" aria-labelledby="ios-heading">
+        <div className="section-heading">
+          <div>
+            <p className="section-index">03</p>
             <h2 id="ios-heading">
               iOS <span className="access-badge">Admins only</span>
             </h2>
@@ -344,7 +370,8 @@ export function DownloadPage({ deployEnv }: DownloadPageProps = {}) {
         <p>
           macOS builds are ad-hoc signed, not notarized; Windows builds are
           unsigned. Both may show an operating-system warning on first launch.
-          iOS archives run in the Simulator only.
+          Android APKs must be installed from "Unknown sources". iOS archives
+          run in the Simulator only.
         </p>
       </footer>
     </main>
