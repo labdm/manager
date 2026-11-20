@@ -120,6 +120,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
+      # Reuse Tauri compilation between releases.
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+          key: desktop-${{ runner.os }}
+          cache-on-failure: true
       - uses: pnpm/action-setup@v6
         with:
           version: 12.21.0
@@ -161,6 +167,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
+      # Reuse Tauri compilation between releases.
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+          key: desktop-${{ runner.os }}
+          cache-on-failure: true
       - uses: pnpm/action-setup@v6
         with:
           version: 12.21.0

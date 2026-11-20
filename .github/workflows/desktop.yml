@@ -30,6 +30,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
+      # The Tauri dependency graph dominates Windows build time. Cache target/
+      # across runs instead of recompiling ~300 crates on every PR.
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+          key: desktop-${{ matrix.platform }}
+          cache-on-failure: true
       - uses: pnpm/action-setup@v6
         with:
           version: 12.21.0
