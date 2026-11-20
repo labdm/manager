@@ -20,6 +20,15 @@ export function assetFormat(name: string): string {
   return "download";
 }
 
+/** Distinguishes the two macOS builds when both are published in a release. */
+export function assetVariant(name: string): string | null {
+  const lower = name.toLowerCase();
+  if (lower.includes("macos-native")) return "Native app";
+  if (lower.includes("macos-desktop")) return "Desktop app";
+  if (lower.includes("ios-simulator")) return "Simulator";
+  return null;
+}
+
 /** Groups release assets by platform, with zip before tar.gz in each group. */
 export function groupAssetsByPlatform(
   assets: DownloadAsset[],

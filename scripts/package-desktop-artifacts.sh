@@ -13,7 +13,7 @@ esac
 version="${MANAGER_VERSION:-v${MANAGER_VERSION_NUMBER:-0.1.0}}"
 case "$platform" in
   windows) label="Windows" ;;
-  macos) label="macOS" ;;
+  macos) label="macOS-Desktop" ;;
 esac
 root="$(cd "$(dirname "$0")/.." && pwd)"
 profile="${TAURI_PROFILE:-release}"
@@ -48,10 +48,10 @@ case "$platform" in
       echo "::error::macOS DMG and .app bundles are both required" >&2
       exit 1
     fi
-    cp "$dmg" "$stage/Manager-macOS-$version.dmg"
+    cp "$dmg" "$stage/Manager-$label-$version.dmg"
     cp -R "$app" "$stage/Manager.app"
     cp "$root/apps/desktop/INSTALL-macOS.txt" "$stage/INSTALL-macOS.txt"
-    cp "$stage/Manager-macOS-$version.dmg" "$out/"
+    cp "$stage/Manager-$label-$version.dmg" "$out/"
     ;;
 esac
 

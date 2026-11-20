@@ -8,7 +8,8 @@ import {
 describe("classifyAssetName", () => {
   it("recognises the release asset names", () => {
     expect(classifyAssetName("manager-web-v0.1.0.zip")).toBe("web");
-    expect(classifyAssetName("Manager-macOS-v0.1.0.zip")).toBe("macos");
+    expect(classifyAssetName("Manager-macOS-Native-v0.1.0.zip")).toBe("macos");
+    expect(classifyAssetName("Manager-macOS-Desktop-v0.1.0.dmg")).toBe("macos");
     expect(classifyAssetName("Manager-Windows-v0.1.0.zip")).toBe("windows");
     expect(classifyAssetName("Manager-iOS-Simulator-v0.1.0.zip")).toBe("ios");
   });
@@ -25,7 +26,7 @@ describe("parseGitHubReleases", () => {
       {
         tag_name: "v0.1.0",
         name: "Manager v0.1.0",
-        html_url: "https://github.com/dmytro-afonin/manager/releases/tag/v0.1.0",
+        html_url: "https://github.com/labdm/manager/releases/tag/v0.1.0",
         published_at: "2026-11-20T00:00:00Z",
         assets: [
           {

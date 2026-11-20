@@ -9,7 +9,7 @@ import {
   type DownloadRelease,
 } from "./lib/downloadAssets";
 
-const REPOSITORY = "dmytro-afonin/manager";
+const REPOSITORY = "labdm/manager";
 
 // An explicit reference type keeps this action out of the generated `api`
 // inference cycle: `fullApi` includes this module.

@@ -41,9 +41,10 @@ cp -R "$mac_app" "$stage/"
 cp "$root/apps/apple/INSTALL-macOS.txt" "$stage/INSTALL-macOS.txt"
 
 # zip cannot hold the install guide when ditto archives only one source, so the
-# macOS zip is built from a staged directory that contains both files.
-(cd "$stage" && zip -qry "$out/Manager-macOS-$version.zip" Manager.app INSTALL-macOS.txt)
-tar -czf "$out/Manager-macOS-$version.tar.gz" -C "$stage" Manager.app INSTALL-macOS.txt
+# macOS zip is built from a staged directory that contains both files. "Native"
+# keeps these apart from the Tauri desktop macOS archives.
+(cd "$stage" && zip -qry "$out/Manager-macOS-Native-$version.zip" Manager.app INSTALL-macOS.txt)
+tar -czf "$out/Manager-macOS-Native-$version.tar.gz" -C "$stage" Manager.app INSTALL-macOS.txt
 rm -rf "$stage"
 
 ditto -c -k --sequesterRsrc --keepParent "$ios_app" "$out/Manager-iOS-Simulator-$version.zip"

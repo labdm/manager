@@ -8,6 +8,7 @@ import type {
 } from "@manager/backend/convex/lib/downloadAssets";
 import {
   assetFormat,
+  assetVariant,
   groupAssetsByPlatform,
 } from "./downloadAssetsView";
 import { shouldLoadReleases } from "./downloadEnvironment";
@@ -26,7 +27,7 @@ const desktopPlatforms: DownloadAsset["platform"][] = [
   "macos",
 ];
 const PRODUCTION_DOWNLOAD_URL = "https://manager.labdm.dev/download";
-const CI_RUNS_URL = "https://github.com/dmytro-afonin/manager/actions";
+const CI_RUNS_URL = "https://github.com/labdm/manager/actions";
 
 interface DownloadPageProps {
   deployEnv?: string;
@@ -72,6 +73,9 @@ function AssetLink({ asset }: { asset: DownloadAsset }) {
       rel="noreferrer"
       aria-label={`Download ${asset.name}`}
     >
+      {assetVariant(asset.name) ? (
+        <span className="asset-variant">{assetVariant(asset.name)}</span>
+      ) : null}
       <span className="asset-format">{assetFormat(asset.name)}</span>
       <span className="asset-size">{formatSize(asset.size)}</span>
       <span className="asset-arrow" aria-hidden="true">

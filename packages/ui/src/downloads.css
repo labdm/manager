@@ -240,6 +240,13 @@
   font-weight: 600;
 }
 
+.asset-variant {
+  color: var(--accent);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .asset-size,
 .asset-meta {
   color: var(--muted);
