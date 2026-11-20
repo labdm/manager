@@ -1,3 +1,4 @@
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ClerkProvider, useAuth } from "@clerk/react";
@@ -8,6 +9,7 @@ import { StrictMode, Suspense, use, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { initClerk } from "tauri-plugin-clerk";
 import { desktopConfigError } from "./config";
+import { isOAuthCallback, OAUTH_REDIRECT_URL } from "./oauth";
 import { StartupErrorBoundary } from "./StartupErrorBoundary";
 import "./index.css";
 
@@ -17,7 +19,6 @@ type OAuthTransport = {
   open: (url: URL) => Promise<{ callbackUrl: string }>;
 };
 
-const OAUTH_REDIRECT_URL = "dev.labdm.manager://callback";
 const OAUTH_TIMEOUT_MS = 180_000;
 
 const convexUrl = import.meta.env.VITE_CONVEX_URL;
@@ -36,8 +37,14 @@ function Splash({ children }: { children: ReactNode }) {
   );
 }
 
-function isOAuthCallback(url: string | undefined, previous: string[] | null) {
-  return !!url && url.startsWith(OAUTH_REDIRECT_URL) && !previous?.includes(url);
+async function bringToFront() {
+  try {
+    const window = getCurrentWindow();
+    if (await window.isMinimized()) await window.unminimize();
+    await window.setFocus();
+  } catch (error) {
+    console.warn("Could not focus the Manager window", error);
+  }
 }
 
 const oauthTransport: OAuthTransport = {
@@ -64,7 +71,10 @@ const oauthTransport: OAuthTransport = {
 
     const accept = (urls: string[] | null) => {
       const callbackUrl = urls?.find((url) => isOAuthCallback(url, previous));
-      if (callbackUrl) finish(undefined, callbackUrl);
+      if (callbackUrl) {
+        void bringToFront();
+        finish(undefined, callbackUrl);
+      }
     };
 
     state.timeout = window.setTimeout(
@@ -93,7 +103,7 @@ if (configError || !convexUrl || !clerkPublishableKey) {
   );
 } else {
   const clerkPromise = initClerk({
-    allowedRedirectProtocols: ["dev.labdm.manager:"],
+    allowedRedirectProtocols: ["dev.labdm.manager:", "https:"],
     __internal_oauthTransport: oauthTransport,
   });
   const convex = new ConvexReactClient(convexUrl);

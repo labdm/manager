@@ -49,17 +49,21 @@ One-time Clerk configuration for OAuth:
 
 - Enable the Native API for the Clerk instance.
 - Keep the JWT template named `convex`.
-- Add `dev.labdm.manager://callback` as an allowed redirect URL. If the Clerk
-  Dashboard also asks for native origins, allow `dev.labdm.manager://callback`
-  there too.
+- Add `https://manager.labdm.dev/oauth-callback.html` as an allowed redirect URL.
+  The page is served from `apps/web/public/oauth-callback.html` by the static web
+  deployment.
+- Keep `dev.labdm.manager://callback` allowed as well. The completion page uses
+  that registered deep link to hand Clerk's parameters back to the app.
 - Enable Google as a social connection.
 
-The flow opens the provider in the system browser and returns through the
-`dev.labdm.manager` custom scheme. Tauri's deep-link plugin delivers the callback to the
-running app; Clerk then reloads the client and activates the session. The
-callback listener times out after three minutes. On macOS, custom-scheme deep
-links only reach a packaged app installed outside the build directory; test OAuth
-with a built app, not `pnpm desktop:dev`.
+The flow opens the provider in the system browser and returns to the hosted
+completion page. That page renders "Signed in" instead of leaving the browser
+hanging on a custom-scheme URL, forwards Clerk's parameters to the
+`dev.labdm.manager` deep link, and the desktop window comes to the front. Tauri's
+deep-link plugin delivers the callback to the running app; Clerk then reloads the
+client and activates the session. The callback listener times out after three
+minutes. On macOS, custom-scheme deep links only reach a packaged app installed
+outside the build directory; test OAuth with a built app, not `pnpm desktop:dev`.
 
 Magic links are not supported by the Tauri plugin and are not enabled on the
 Manager Clerk instance. If magic links are enabled later, desktop needs a custom
@@ -69,7 +73,9 @@ flow before it can claim auth parity.
 
 `scripts/package-desktop-artifacts.sh` copies Tauri bundles into `artifacts/desktop`
 as `Manager-Windows-<version>.exe|msi|zip|tar.gz` and
-`Manager-macOS-<version>.dmg|zip|tar.gz`. The release workflow builds Windows on
+`Manager-macOS-Desktop-<version>.dmg|zip|tar.gz`. The native SwiftUI macOS app
+uses `Manager-macOS-Native-<version>.zip|tar.gz`, so the two macOS builds do not
+overwrite each other. The release workflow builds Windows on
 `windows-latest` and macOS on `macos-latest`, then uploads those files to the
 GitHub release. `/download` lists both platforms publicly.
 

@@ -15,6 +15,9 @@
       "source": "/.well-known/oauth-protected-resource/mcp",
       "destination": "/api/oauth-protected-resource"
     },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    {
+      "source": "/((?!api/|oauth-callback\\.html).*)",
+      "destination": "/index.html"
+    }
   ]
 }
