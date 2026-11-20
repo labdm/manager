@@ -135,7 +135,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Build macOS desktop app
-        run: pnpm --dir apps/desktop tauri build --bundles dmg,app
+        run: scripts/build-macos-desktop.sh
       - name: Package macOS desktop assets
         run: scripts/package-desktop-artifacts.sh macos
       - name: Upload macOS assets to release

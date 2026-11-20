@@ -54,7 +54,11 @@ jobs:
           fi
       - name: Typecheck desktop app
         run: pnpm --filter @manager/desktop typecheck
-      - name: Build desktop app
+      - name: Build macOS desktop app
+        if: matrix.platform == 'macos'
+        run: scripts/build-macos-desktop.sh
+      - name: Build Windows desktop app
+        if: matrix.platform == 'windows'
         shell: bash
         run: pnpm --dir apps/desktop tauri build --bundles ${{ matrix.bundles }}
       - name: Package desktop artifacts
