@@ -8,8 +8,11 @@
  * @module
  */
 
+import type * as downloads from "../downloads.js";
+import type * as lib_downloadAssets from "../lib/downloadAssets.js";
 import type * as lib_mcpRoleSignature from "../lib/mcpRoleSignature.js";
 import type * as lib_taskFields from "../lib/taskFields.js";
+import type * as lib_taskService from "../lib/taskService.js";
 import type * as mcpAuth from "../mcpAuth.js";
 import type * as mcpTasks from "../mcpTasks.js";
 import type * as tasks from "../tasks.js";
@@ -22,8 +25,11 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  downloads: typeof downloads;
+  "lib/downloadAssets": typeof lib_downloadAssets;
   "lib/mcpRoleSignature": typeof lib_mcpRoleSignature;
   "lib/taskFields": typeof lib_taskFields;
+  "lib/taskService": typeof lib_taskService;
   mcpAuth: typeof mcpAuth;
   mcpTasks: typeof mcpTasks;
   tasks: typeof tasks;

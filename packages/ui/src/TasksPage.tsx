@@ -16,9 +16,14 @@ export function TasksPage() {
           <p className="mark">Manager</p>
           <h1>Tasks</h1>
         </div>
-        <Show when="signed-in">
-          <UserButton />
-        </Show>
+        <div className="top-actions">
+          <a className="top-link" href="/download">
+            Downloads
+          </a>
+          <Show when="signed-in">
+            <UserButton />
+          </Show>
+        </div>
       </header>
       {!isLoaded ? <p className="status">Loading…</p> : null}
       <Show when="signed-out">

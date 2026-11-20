@@ -2,7 +2,7 @@
 
 Manager is Dmytro Afonin's personal task manager. Architecture: [docs/architecture.md](docs/architecture.md).
 
-SwiftUI (`apps/apple`) and Tauri (`apps/desktop`) come later. This tree is the Convex backend, the shared React UI, the static web app, and the MCP server.
+Tauri (`apps/desktop`) comes later. This tree is the Convex backend, the shared React UI, the static web app, the MCP server, and the native Apple client.
 
 ## Layout
 
@@ -10,6 +10,7 @@ SwiftUI (`apps/apple`) and Tauri (`apps/desktop`) come later. This tree is the C
 - `packages/ui` — shared React task UI. Client-only; no SSR.
 - `apps/web` — Vite + React + TanStack Router. Static SPA.
 - `apps/mcp` — MCP server. `mcp-handler` + `@clerk/mcp-tools` as Vercel functions. Public routes: `/mcp`, `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource/mcp`.
+- `apps/apple` — SwiftUI client for iPhone (including the Duo), iPad and Mac. Details: [apps/apple/README.md](apps/apple/README.md). `ManagerKit` (models + views, no Convex/Clerk imports) and `ManagerData` (Convex + Clerk adapters) are local Swift packages; `project.yml` is the XcodeGen source of truth. Generated `Manager.xcodeproj` and `Config/Secrets.plist` are gitignored. Do not commit secrets.
 - `scripts/cloud-agent-install.sh` — `pnpm install --frozen-lockfile`.
 - `scripts/cloud-agent-start.sh` — anonymous Convex plus the Vite app on port 3000.
 - `scripts/vercel-build.sh` — when `CONVEX_DEPLOY_KEY` is set, `convex deploy` then the Vite build. The deploy command exports `CONVEX_URL`, which the build maps to `VITE_CONVEX_URL`. `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is mapped to `VITE_CLERK_PUBLISHABLE_KEY`. Set `CLERK_FRONTEND_API_URL` and `MCP_ROLE_SECRET` on the Convex deployment before the first push. A preview deploy key cannot set those variables.
@@ -24,12 +25,18 @@ From the repo root:
 - `pnpm typecheck`
 - `pnpm test`
 - `pnpm build`
+- `pnpm apple:project` — generate `Config/Secrets.plist` from the env files and regenerate `Manager.xcodeproj`. Run this before opening the Apple project.
+- `pnpm apple:test` — Swift tests for the Apple client's pure logic (no Xcode needed).
+- `pnpm apple:build:mac`, `pnpm apple:build:ios` — unsigned builds; require Xcode on Apple Silicon.
+- `pnpm apple:package` — zip the built macOS and iOS Simulator apps into `artifacts/apple/`.
+- `pnpm check:functions` — assert the Convex deployment has every function the clients call.
 
 ## Node and pnpm
 
 - `engines.node` is `26.x`. `devEngines.runtime` is Node `^26.13.0`. There is no `.nvmrc`.
 - `packageManager` is `pnpm@12.21.0`. `corepack enable` makes pnpm use that version. Node 25+ does not bundle corepack; `scripts/cloud-agent-install.sh` installs it first.
 - Build-script approval lives in `pnpm-workspace.yaml` `allowBuilds`.
+- ESLint uses the TypeScript 6 API (`typescript` is an alias for `@typescript/typescript6`); `tsc` runs TypeScript 7 via the `@typescript/native` alias. Keep both aliases in every workspace.
 
 ## Local backend
 
@@ -52,7 +59,9 @@ Anonymous local Convex is enough for lint, typecheck, and build. Production Conv
 
 ## Auth
 
-Clerk React SDK in the web app. Convex verifies the Clerk JWT from the `convex` template. Each signed-in user reads and writes only tasks whose `ownerId` is their `users` row.
+Clerk React SDK in the web app; `ClerkKit` + `ClerkConvexAuthProvider` in the Apple app. Convex verifies the Clerk JWT from the `convex` template. Each signed-in user reads and writes only tasks whose `ownerId` is their `users` row.
+
+The Apple client subscribes to `tasks:list` and uses `tasks:create`, `tasks:setDone`, `tasks:remove` in `packages/backend/convex/tasks.ts`. `tasks:setDone` is an explicit setter so retried checkbox taps cannot invert state. Convex numbers are tagged on the wire: decode `dueAt` with `@OptionalConvexFloat`, not plain `Double`. The Apple workflow in `.github/workflows/apple.yml` runs on an arm64 macOS runner because ConvexMobile's binary is arm64-only.
 
 ## MCP
 
@@ -66,6 +75,14 @@ Discovery routes:
 - `/.well-known/oauth-protected-resource/mcp`
 
 Vercel serves the static SPA from `apps/web/dist` and Node functions from the repo `api/` directory. Those functions are self-contained ESM bundles generated from `scripts/api-entries/*.ts`. When modifying `apps/mcp`, run `pnpm build:api` (or `pnpm build`) to update the bundles in `api/`. CI runs `pnpm verify:api` to ensure the bundles in `api/` match the source code. Rewrites publish `/mcp` and the `/.well-known` routes on `manager.labdm.dev`.
+
+## Downloads and releases
+
+`/download` is the public download page. It lists web and macOS release assets for everyone. `packages/backend/convex/downloads.ts` fetches GitHub releases server-side and strips iOS assets before responding to a non-admin, using the `users.role` value from Convex. Never filter iOS assets only in the browser. Vercel preview builds skip the release inventory and link to the production download page and CI runs instead, because preview deployments have no published releases and short-lived Actions artifacts are not release assets.
+
+`.github/workflows/release.yml` publishes a tagged release when a `v*` tag is pushed, or when the workflow is dispatched with a version. It builds the web app, an unsigned macOS app and an ad-hoc-signed iOS Simulator app, uploads all three as workflow artifacts, and creates/updates the GitHub release with the same assets. The public config values `VITE_CONVEX_URL` and `VITE_CLERK_PUBLISHABLE_KEY` must exist as repository variables so release builds point at production. No secret key belongs in the browser or repo. The repository is private, so each Convex deployment also needs `GITHUB_TOKEN` with read access to releases; the CLI token works for now, but a fine-grained `Contents: read` PAT is preferable.
+
+CI and Apple workflows upload per-commit artifacts for inspection. Actions are pinned to Node 24-compatible majors: `actions/checkout@v7`, `actions/setup-node@v7`, `pnpm/action-setup@v6`, `actions/upload-artifact@v7`.
 
 ## Deployment
 

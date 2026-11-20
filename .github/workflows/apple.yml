@@ -1,0 +1,51 @@
+name: Apple
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  apple:
+    # ConvexMobile's Rust library is arm64-only, so the simulator build needs
+    # an Apple Silicon runner. `macos-14` was retired on 2026-11-02;
+    # `macos-15` is the current arm64 label (Intel is `macos-15-intel`).
+    runs-on: macos-15
+    env:
+      # The image's default is Xcode 16.4, which cannot resolve ClerkKit's
+      # Swift 6.2 tools version. Xcode 26.3 is preinstalled on macos-15 arm64.
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      MANAGER_DERIVED_DATA: ${{ runner.temp }}/manager-derived-data
+      MANAGER_ARTIFACTS_DIR: ${{ runner.temp }}/manager-artifacts
+      MANAGER_VERSION: ci-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12.21.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate the Xcode project
+        # No Clerk publishable key in CI: Config/Secrets.plist gets empty
+        # values. Builds still compile; the app shows setup steps at launch.
+        run: pnpm apple:project
+      - run: pnpm apple:test
+      - run: pnpm apple:build:mac
+      - run: pnpm apple:build:ios
+      - name: Package Apple builds
+        run: scripts/package-apple-artifacts.sh
+      - name: Upload Apple artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: apple-${{ github.sha }}
+          path: ${{ runner.temp }}/manager-artifacts/*
+          if-no-files-found: error
+          retention-days: 14

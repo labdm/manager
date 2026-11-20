@@ -1,4 +1,4 @@
-import { TasksPage } from "@manager/ui";
+import { DownloadPage, TasksPage } from "@manager/ui";
 import {
   Outlet,
   createRootRoute,
@@ -16,7 +16,15 @@ const indexRoute = createRoute({
   component: TasksPage,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute]);
+const downloadRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/download",
+  component: () => (
+    <DownloadPage deployEnv={import.meta.env.VITE_DEPLOY_ENV} />
+  ),
+});
+
+const routeTree = rootRoute.addChildren([indexRoute, downloadRoute]);
 
 export const router = createRouter({ routeTree });
 

@@ -1,0 +1,105 @@
+name: Release
+
+on:
+  push:
+    tags: [v*]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag, for example v0.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    env:
+      # Xcode 26.3 is required by ClerkKit's Swift 6.2 tools version.
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      MANAGER_CONFIGURATION: Release
+      MANAGER_DERIVED_DATA: ${{ runner.temp }}/manager-derived-data
+      MANAGER_ARTIFACTS_DIR: ${{ runner.temp }}/manager-artifacts
+      # These are publishable config values, not secrets. Set them as repository
+      # variables so the downloaded builds point at the production services.
+      VITE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
+      VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
+      MANAGER_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
+      MANAGER_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12.21.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Resolve release version
+        id: version
+        run: |
+          version="${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}"
+          case "$version" in v*) ;; *) version="v$version" ;; esac
+          if [[ ! "$version" =~ ^v[[:alnum:]._-]+$ ]]; then
+            echo "::error::Invalid release tag: $version"
+            exit 1
+          fi
+          echo "MANAGER_VERSION=$version" >> "$GITHUB_ENV"
+          echo "MANAGER_VERSION_NUMBER=${version#v}" >> "$GITHUB_ENV"
+          echo "tag=$version" >> "$GITHUB_OUTPUT"
+          echo "Publishing Manager $version"
+
+      - name: Check public configuration
+        run: |
+          if [ -z "${VITE_CONVEX_URL:-}" ] || [ -z "${VITE_CLERK_PUBLISHABLE_KEY:-}" ]; then
+            echo "::error::Set VITE_CONVEX_URL and VITE_CLERK_PUBLISHABLE_KEY as repository variables before releasing."
+            exit 1
+          fi
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate the Xcode project
+        run: pnpm apple:project
+      - run: pnpm apple:test
+      - run: pnpm build
+
+      - name: Build macOS app
+        run: pnpm apple:build:mac
+      - name: Build iOS simulator app
+        run: pnpm apple:build:ios
+      - name: Package release assets
+        run: |
+          mkdir -p artifacts
+          scripts/package-apple-artifacts.sh
+          ditto -c -k --sequesterRsrc --keepParent apps/web/dist "artifacts/manager-web-${MANAGER_VERSION}.zip"
+          cp "$MANAGER_ARTIFACTS_DIR"/*.zip artifacts/
+          ls -lh artifacts
+
+      - name: Publish GitHub release
+        run: |
+          shopt -s nullglob
+          files=(artifacts/*)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "::error::No release assets were built"
+            exit 1
+          fi
+          if gh release view "$MANAGER_VERSION" >/dev/null 2>&1; then
+            gh release upload "$MANAGER_VERSION" "${files[@]}" --clobber
+          else
+            gh release create "$MANAGER_VERSION" "${files[@]}" \
+              --title "Manager $MANAGER_VERSION" \
+              --generate-notes
+          fi
+
+      - name: Upload release assets as workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: manager-${{ steps.version.outputs.tag }}
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 90
