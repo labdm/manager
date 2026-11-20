@@ -1,0 +1,9 @@
+# Public configuration only. Copy to local.properties (gitignored) and fill in
+# the same values the web app uses from packages/backend/.env.local and
+# apps/web/.env.local. No secret key belongs here: never add sk_* values.
+#
+# These are also accepted as environment variables:
+#   MANAGER_CONVEX_URL (or CONVEX_URL)
+#   MANAGER_CLERK_PUBLISHABLE_KEY (or CLERK_PUBLISHABLE_KEY)
+manager.convex.url=https://your-deployment.convex.cloud
+manager.clerk.publishableKey=pk_test_xxx

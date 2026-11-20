@@ -2,7 +2,7 @@
 
 Manager is Dmytro Afonin's personal task manager. Architecture: [docs/architecture.md](docs/architecture.md).
 
-This tree is the Convex backend, the shared React UI, the static web app, the Tauri desktop client, the MCP server, and the native Apple client.
+This tree is the Convex backend, the shared React UI, the static web app, the Tauri desktop client, the MCP server, and the native Apple and Android clients.
 
 ## Layout
 
@@ -12,6 +12,7 @@ This tree is the Convex backend, the shared React UI, the static web app, the Ta
 - `apps/desktop` — Tauri v2 Windows/macOS client. Bundles the Vite SPA locally; reuses `packages/ui`; hides the Downloads link. Details: [apps/desktop/README.md](apps/desktop/README.md).
 - `apps/mcp` — MCP server. `mcp-handler` + `@clerk/mcp-tools` as Vercel functions. Public routes: `/mcp`, `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource/mcp`.
 - `apps/apple` — SwiftUI client for iPhone (including the Duo), iPad and Mac. Details: [apps/apple/README.md](apps/apple/README.md). `ManagerKit` (models + views, no Convex/Clerk imports) and `ManagerData` (Convex + Clerk adapters) are local Swift packages; `project.yml` is the XcodeGen source of truth. Generated `Manager.xcodeproj` and `Config/Secrets.plist` are gitignored. Do not commit secrets.
+- `apps/android` — standalone Gradle Kotlin/Compose client. Details: [apps/android/README.md](apps/android/README.md). `:managerkit` (pure models + Compose UI, no Convex/Clerk imports), `:managerdata` (Convex + Clerk adapters), `:app`. `local.properties` is gitignored; public config only.
 - `scripts/cloud-agent-install.sh` — `pnpm install --frozen-lockfile`.
 - `scripts/cloud-agent-start.sh` — anonymous Convex plus the Vite app on port 3000.
 - `scripts/vercel-build.sh` — when `CONVEX_DEPLOY_KEY` is set, `convex deploy` then the Vite build. The deploy command exports `CONVEX_URL`, which the build maps to `VITE_CONVEX_URL`. `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is mapped to `VITE_CLERK_PUBLISHABLE_KEY`. Set `CLERK_FRONTEND_API_URL` and `MCP_ROLE_SECRET` on the Convex deployment before the first push. A preview deploy key cannot set those variables.
@@ -33,6 +34,8 @@ From the repo root:
 - `pnpm apple:test` — Swift tests for the Apple client's pure logic (no Xcode needed).
 - `pnpm apple:build:mac`, `pnpm apple:build:ios` — Apple Silicon builds; `apple:package` applies a valid ad-hoc signature before publishing.
 - `pnpm apple:package` — zip the built macOS and iOS Simulator apps into `artifacts/apple/`.
+- Android (from `apps/android`, standalone Gradle): `./gradlew test`, `./gradlew assembleDebug bundleRelease`. Set `JAVA_HOME` to Android Studio's JBR on macOS; config comes from gitignored `local.properties` or `MANAGER_CONVEX_URL` / `MANAGER_CLERK_PUBLISHABLE_KEY`.
+- `scripts/package-android-artifacts.sh` — copy the debug APK and release AAB into `artifacts/android` as `Manager-Android-<version>.*`.
 - `pnpm check:functions` — assert the Convex deployment has every function the clients call.
 
 ## Node and pnpm
@@ -63,9 +66,9 @@ Anonymous local Convex is enough for lint, typecheck, and build. Production Conv
 
 ## Auth
 
-Clerk React SDK in the web app; `ClerkKit` + `ClerkConvexAuthProvider` in the Apple app. Convex verifies the Clerk JWT from the `convex` template. Each signed-in user reads and writes only tasks whose `ownerId` is their `users` row.
+Clerk React SDK in the web app; `ClerkKit` + `ClerkConvexAuthProvider` in the Apple app; Clerk Android UI + `clerk-convex-kotlin` in the Android app. Convex verifies the Clerk JWT from the `convex` template. Each signed-in user reads and writes only tasks whose `ownerId` is their `users` row.
 
-The Apple client subscribes to `tasks:list` and uses `tasks:create`, `tasks:setDone`, `tasks:remove` in `packages/backend/convex/tasks.ts`. `tasks:setDone` is an explicit setter so retried checkbox taps cannot invert state. Convex numbers are tagged on the wire: decode `dueAt` with `@OptionalConvexFloat`, not plain `Double`. The Apple workflow in `.github/workflows/apple.yml` runs on an arm64 macOS runner because ConvexMobile's binary is arm64-only.
+The Apple client subscribes to `tasks:list` and uses `tasks:create`, `tasks:setDone`, `tasks:remove` in `packages/backend/convex/tasks.ts`. `tasks:setDone` is an explicit setter so retried checkbox taps cannot invert state. Convex numbers are tagged on the wire: decode `dueAt` with `@OptionalConvexFloat`, not plain `Double`. The Apple workflow in `.github/workflows/apple.yml` runs on an arm64 macOS runner because ConvexMobile's binary is arm64-only. The Android client decodes the same tagged `dueAt` with Convex Android's `Float64`, not a plain `Double`.
 
 ## MCP
 
@@ -82,11 +85,11 @@ Vercel serves the static SPA from `apps/web/dist` and Node functions from the re
 
 ## Downloads and releases
 
-`/download` is the public download page. It lists web and macOS release assets for everyone. `packages/backend/convex/downloads.ts` fetches GitHub releases server-side and strips iOS assets before responding to a non-admin, using the `users.role` value from Convex. Never filter iOS assets only in the browser. Vercel preview builds skip the release inventory and link to the production download page and CI runs instead, because preview deployments have no published releases and short-lived Actions artifacts are not release assets.
+`/download` is the public download page. It lists web, Windows, macOS and Android release assets for everyone. `packages/backend/convex/downloads.ts` fetches GitHub releases server-side and strips iOS assets before responding to a non-admin, using the `users.role` value from Convex. Never filter iOS assets only in the browser. Vercel preview builds skip the release inventory and link to the production download page and CI runs instead, because preview deployments have no published releases and short-lived Actions artifacts are not release assets.
 
-`.github/workflows/release.yml` publishes a tagged release when a `v*` tag is pushed, or when the workflow is dispatched with a version. It builds the web app, an ad-hoc-signed macOS app and an ad-hoc-signed iOS Simulator app, publishes each as `.zip` and `.tar.gz`, uploads all six files as workflow artifacts, and creates/updates the GitHub release with the same assets. The public config values `VITE_CONVEX_URL` and `VITE_CLERK_PUBLISHABLE_KEY` must exist as repository variables so release builds point at production. No secret key belongs in the browser or repo. The repository is public; a `GITHUB_TOKEN` with read access to releases may still be set on Convex for higher rate limits, but no secret belongs in the browser.
+`.github/workflows/release.yml` publishes a tagged release when a `v*` tag is pushed, or when the workflow is dispatched with a version. It builds the web app, an ad-hoc-signed macOS app, an ad-hoc-signed iOS Simulator app, Tauri Windows/macOS installers, and a Kotlin APK/AAB. Each job uploads its assets as a workflow artifact; the `publish` job downloads them and creates or updates the GitHub release once. The public config values `VITE_CONVEX_URL` and `VITE_CLERK_PUBLISHABLE_KEY` must exist as repository variables so release builds point at production. No secret key belongs in the browser or repo. The repository is public; a `GITHUB_TOKEN` with read access to releases may still be set on Convex for higher rate limits, but no secret belongs in the browser.
 
-CI and Apple workflows upload per-commit artifacts for inspection. The release workflow builds web, each Apple target, and each desktop target as parallel jobs; a final `publish` job downloads those artifacts and creates or updates the GitHub release once, so a failed build cannot leave a partial public release. Actions are pinned to Node 24-compatible majors: `actions/checkout@v7`, `actions/setup-node@v7`, `pnpm/action-setup@v6`, `actions/upload-artifact@v7`, `actions/download-artifact@v7`.
+CI and Apple workflows upload per-commit artifacts for inspection. The release workflow builds web, each Apple target, each desktop target and Android as parallel jobs; a final `publish` job downloads those artifacts and creates or updates the GitHub release once, so a failed build cannot leave a partial public release. Actions are pinned to Node 24-compatible majors: `actions/checkout@v7`, `actions/setup-node@v7`, `actions/setup-java@v5`, `pnpm/action-setup@v6`, `actions/upload-artifact@v7`, `actions/download-artifact@v7`.
 
 ## Deployment
 

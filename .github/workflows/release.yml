@@ -220,8 +220,47 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  android:
+    needs: version
+    runs-on: ubuntu-latest
+    env:
+      MANAGER_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
+      MANAGER_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
+      MANAGER_VERSION: ${{ needs.version.outputs.tag }}
+      MANAGER_VERSION_NUMBER: ${{ needs.version.outputs.versionNumber }}
+      MANAGER_VERSION_CODE: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - name: Install the Android SDK components the Gradle build pins
+        run: sdkmanager "platforms;android-37.0" "build-tools;36.0.0"
+      - name: Check public configuration
+        run: |
+          if [ -z "${MANAGER_CONVEX_URL:-}" ] || [ -z "${MANAGER_CLERK_PUBLISHABLE_KEY:-}" ]; then
+            echo "::error::Set VITE_CONVEX_URL and VITE_CLERK_PUBLISHABLE_KEY as repository variables before releasing."
+            exit 1
+          fi
+      - name: Test Android client
+        working-directory: apps/android
+        run: ./gradlew test
+      - name: Build Android client
+        working-directory: apps/android
+        run: ./gradlew assembleDebug bundleRelease
+      - name: Package Android assets
+        run: scripts/package-android-artifacts.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: manager-android-${{ needs.version.outputs.tag }}
+          path: artifacts/android/*
+          if-no-files-found: error
+          retention-days: 90
+
   publish:
-    needs: [version, web, apple-macos, apple-ios, desktop-macos, desktop-windows]
+    needs: [version, web, apple-macos, apple-ios, desktop-macos, desktop-windows, android]
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

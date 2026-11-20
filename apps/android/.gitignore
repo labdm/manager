@@ -1,0 +1,19 @@
+# Local public config (Convex URL + Clerk publishable key). Never commit secrets.
+/local.properties
+
+# Gradle / Android build output
+/.gradle/
+**/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+
+# IDE files
+/.idea/
+*.iml
+*.ipr
+*.iws
+
+# Keystores and local signing material
+*.jks
+*.keystore
