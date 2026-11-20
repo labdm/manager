@@ -13,28 +13,38 @@ on:
 permissions:
   contents: write
 
+# Every target builds into its own artifact in parallel. `publish` is the only
+# job that touches the GitHub release, so a failed build cannot leave a partial
+# public release behind.
 jobs:
-  release:
+  version:
+    runs-on: ubuntu-latest
     outputs:
-      tag: ${{ steps.version.outputs.tag }}
-    runs-on: macos-15
+      tag: ${{ steps.resolve.outputs.tag }}
+      versionNumber: ${{ steps.resolve.outputs.versionNumber }}
+    steps:
+      - name: Resolve release version
+        id: resolve
+        run: |
+          version="${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}"
+          case "$version" in v*) ;; *) version="v$version" ;; esac
+          if [[ ! "$version" =~ ^v[[:alnum:]._-]+$ ]]; then
+            echo "::error::Invalid release tag: $version"
+            exit 1
+          fi
+          echo "tag=$version" >> "$GITHUB_OUTPUT"
+          echo "versionNumber=${version#v}" >> "$GITHUB_OUTPUT"
+          echo "Publishing Manager $version"
+
+  web:
+    needs: version
+    runs-on: ubuntu-latest
     env:
-      # Xcode 26.3 is required by ClerkKit's Swift 6.2 tools version.
-      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
-      MANAGER_CONFIGURATION: Release
-      # These are publishable config values, not secrets. Set them as repository
-      # variables so the downloaded builds point at the production services.
       VITE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
       VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
-      MANAGER_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
-      MANAGER_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MANAGER_VERSION: ${{ needs.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
-      - name: Set build paths
-        run: |
-          echo "MANAGER_DERIVED_DATA=$RUNNER_TEMP/manager-derived-data" >> "$GITHUB_ENV"
-          echo "MANAGER_ARTIFACTS_DIR=$RUNNER_TEMP/manager-artifacts" >> "$GITHUB_ENV"
       - uses: pnpm/action-setup@v6
         with:
           version: 12.21.0
@@ -43,80 +53,108 @@ jobs:
           node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-
-      - name: Resolve release version
-        id: version
-        run: |
-          version="${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}"
-          case "$version" in v*) ;; *) version="v$version" ;; esac
-          if [[ ! "$version" =~ ^v[[:alnum:]._-]+$ ]]; then
-            echo "::error::Invalid release tag: $version"
-            exit 1
-          fi
-          echo "MANAGER_VERSION=$version" >> "$GITHUB_ENV"
-          echo "MANAGER_VERSION_NUMBER=${version#v}" >> "$GITHUB_ENV"
-          echo "tag=$version" >> "$GITHUB_OUTPUT"
-          echo "Publishing Manager $version"
-
       - name: Check public configuration
         run: |
           if [ -z "${VITE_CONVEX_URL:-}" ] || [ -z "${VITE_CLERK_PUBLISHABLE_KEY:-}" ]; then
             echo "::error::Set VITE_CONVEX_URL and VITE_CLERK_PUBLISHABLE_KEY as repository variables before releasing."
             exit 1
           fi
+      - run: pnpm build
+      - name: Package web assets
+        run: |
+          mkdir -p artifacts
+          (cd apps/web/dist && zip -qry "$GITHUB_WORKSPACE/artifacts/manager-web-$MANAGER_VERSION.zip" .)
+          tar -czf "artifacts/manager-web-$MANAGER_VERSION.tar.gz" -C apps/web dist
+          ls -lh artifacts
+      - uses: actions/upload-artifact@v7
+        with:
+          name: manager-web-${{ needs.version.outputs.tag }}
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 90
 
+  apple-macos:
+    needs: version
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      MANAGER_CONFIGURATION: Release
+      MANAGER_VERSION: ${{ needs.version.outputs.tag }}
+      MANAGER_VERSION_NUMBER: ${{ needs.version.outputs.versionNumber }}
+      MANAGER_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
+      MANAGER_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set build path
+        run: echo "MANAGER_DERIVED_DATA=$RUNNER_TEMP/manager-derived-data" >> "$GITHUB_ENV"
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12.21.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate the Xcode project
         run: pnpm apple:project
       - run: pnpm apple:test
-      - run: pnpm build
-
       - name: Build macOS app
         run: pnpm apple:build:mac
+      - name: Package macOS native assets
+        run: scripts/package-apple-artifacts.sh macos
+      - uses: actions/upload-artifact@v7
+        with:
+          name: manager-macos-native-${{ needs.version.outputs.tag }}
+          path: artifacts/apple/*
+          if-no-files-found: error
+          retention-days: 90
+
+  apple-ios:
+    needs: version
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      MANAGER_CONFIGURATION: Release
+      MANAGER_VERSION: ${{ needs.version.outputs.tag }}
+      MANAGER_VERSION_NUMBER: ${{ needs.version.outputs.versionNumber }}
+      MANAGER_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
+      MANAGER_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set build path
+        run: echo "MANAGER_DERIVED_DATA=$RUNNER_TEMP/manager-derived-data" >> "$GITHUB_ENV"
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12.21.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate the Xcode project
+        run: pnpm apple:project
       - name: Build iOS simulator app
         run: pnpm apple:build:ios
-      - name: Package release assets
-        run: |
-          mkdir -p artifacts
-          scripts/package-apple-artifacts.sh
-          ditto -c -k --sequesterRsrc --keepParent apps/web/dist "artifacts/manager-web-${MANAGER_VERSION}.zip"
-          tar -czf "artifacts/manager-web-${MANAGER_VERSION}.tar.gz" -C apps/web dist
-          cp "$MANAGER_ARTIFACTS_DIR"/*.zip "$MANAGER_ARTIFACTS_DIR"/*.tar.gz artifacts/
-          ls -lh artifacts
-
-      - name: Publish GitHub release
-        run: |
-          shopt -s nullglob
-          files=(artifacts/*)
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "::error::No release assets were built"
-            exit 1
-          fi
-          if gh release view "$MANAGER_VERSION" >/dev/null 2>&1; then
-            gh release upload "$MANAGER_VERSION" "${files[@]}" --clobber
-          else
-            gh release create "$MANAGER_VERSION" "${files[@]}" \
-              --title "Manager $MANAGER_VERSION" \
-              --generate-notes
-          fi
-
-      - name: Upload release assets as workflow artifact
-        uses: actions/upload-artifact@v7
+      - name: Package iOS simulator assets
+        run: scripts/package-apple-artifacts.sh ios
+      - uses: actions/upload-artifact@v7
         with:
-          name: manager-${{ steps.version.outputs.tag }}
-          path: artifacts/*
+          name: manager-ios-${{ needs.version.outputs.tag }}
+          path: artifacts/apple/*
           if-no-files-found: error
           retention-days: 90
 
   desktop-macos:
-    needs: release
+    needs: version
     runs-on: macos-15
     env:
       VITE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
       VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
-      MANAGER_VERSION: ${{ needs.release.outputs.tag }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MANAGER_VERSION: ${{ needs.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -138,32 +176,20 @@ jobs:
         run: scripts/build-macos-desktop.sh
       - name: Package macOS desktop assets
         run: scripts/package-desktop-artifacts.sh macos
-      - name: Upload macOS assets to release
-        shell: bash
-        run: |
-          shopt -s nullglob
-          files=(artifacts/desktop/*)
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "::error::No macOS desktop assets were built"
-            exit 1
-          fi
-          gh release upload "$MANAGER_VERSION" "${files[@]}" --clobber
-      - name: Upload macOS desktop assets as workflow artifact
-        uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7
         with:
-          name: manager-macos-${{ needs.release.outputs.tag }}
+          name: manager-macos-desktop-${{ needs.version.outputs.tag }}
           path: artifacts/desktop/*
           if-no-files-found: error
           retention-days: 90
 
   desktop-windows:
-    needs: release
+    needs: version
     runs-on: windows-latest
     env:
       VITE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
       VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
-      MANAGER_VERSION: ${{ needs.release.outputs.tag }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MANAGER_VERSION: ${{ needs.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -187,20 +213,40 @@ jobs:
       - name: Package Windows desktop assets
         shell: bash
         run: bash scripts/package-desktop-artifacts.sh windows
-      - name: Upload Windows assets to release
-        shell: bash
-        run: |
-          shopt -s nullglob
-          files=(artifacts/desktop/*)
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "::error::No Windows desktop assets were built"
-            exit 1
-          fi
-          gh release upload "$MANAGER_VERSION" "${files[@]}" --clobber
-      - name: Upload Windows desktop assets as workflow artifact
-        uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7
         with:
-          name: manager-windows-${{ needs.release.outputs.tag }}
+          name: manager-windows-${{ needs.version.outputs.tag }}
           path: artifacts/desktop/*
           if-no-files-found: error
           retention-days: 90
+
+  publish:
+    needs: [version, web, apple-macos, apple-ios, desktop-macos, desktop-windows]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      MANAGER_VERSION: ${{ needs.version.outputs.tag }}
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: manager-*
+          path: artifacts
+          merge-multiple: true
+      - name: Publish GitHub release
+        run: |
+          shopt -s nullglob
+          files=(artifacts/*)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "::error::No release assets were built"
+            exit 1
+          fi
+          ls -lh "${files[@]}"
+          if gh release view "$MANAGER_VERSION" >/dev/null 2>&1; then
+            gh release upload "$MANAGER_VERSION" "${files[@]}" --clobber
+          else
+            gh release create "$MANAGER_VERSION" "${files[@]}" \
+              --title "Manager $MANAGER_VERSION" \
+              --generate-notes
+          fi

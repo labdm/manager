@@ -86,7 +86,7 @@ Vercel serves the static SPA from `apps/web/dist` and Node functions from the re
 
 `.github/workflows/release.yml` publishes a tagged release when a `v*` tag is pushed, or when the workflow is dispatched with a version. It builds the web app, an ad-hoc-signed macOS app and an ad-hoc-signed iOS Simulator app, publishes each as `.zip` and `.tar.gz`, uploads all six files as workflow artifacts, and creates/updates the GitHub release with the same assets. The public config values `VITE_CONVEX_URL` and `VITE_CLERK_PUBLISHABLE_KEY` must exist as repository variables so release builds point at production. No secret key belongs in the browser or repo. The repository is public; a `GITHUB_TOKEN` with read access to releases may still be set on Convex for higher rate limits, but no secret belongs in the browser.
 
-CI and Apple workflows upload per-commit artifacts for inspection. Actions are pinned to Node 24-compatible majors: `actions/checkout@v7`, `actions/setup-node@v7`, `pnpm/action-setup@v6`, `actions/upload-artifact@v7`.
+CI and Apple workflows upload per-commit artifacts for inspection. The release workflow builds web, each Apple target, and each desktop target as parallel jobs; a final `publish` job downloads those artifacts and creates or updates the GitHub release once, so a failed build cannot leave a partial public release. Actions are pinned to Node 24-compatible majors: `actions/checkout@v7`, `actions/setup-node@v7`, `pnpm/action-setup@v6`, `actions/upload-artifact@v7`, `actions/download-artifact@v7`.
 
 ## Deployment
 
