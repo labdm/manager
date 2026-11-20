@@ -19,5 +19,10 @@ fi
 if [[ -z "${VITE_CLERK_PUBLISHABLE_KEY:-}" && -n "${CLERK_PUBLISHABLE_KEY:-}" ]]; then
   export VITE_CLERK_PUBLISHABLE_KEY="$CLERK_PUBLISHABLE_KEY"
 fi
+# Vercel build metadata lets the SPA treat preview deployments differently
+# without shipping secrets to the browser.
+if [[ -z "${VITE_DEPLOY_ENV:-}" && -n "${VERCEL_ENV:-}" ]]; then
+  export VITE_DEPLOY_ENV="$VERCEL_ENV"
+fi
 
 pnpm --filter @manager/web build

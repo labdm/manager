@@ -78,7 +78,7 @@ Vercel serves the static SPA from `apps/web/dist` and Node functions from the re
 
 ## Downloads and releases
 
-`/download` is the public download page. It lists web and macOS release assets for everyone. `packages/backend/convex/downloads.ts` fetches GitHub releases server-side and strips iOS assets before responding to a non-admin, using the `users.role` value from Convex. Never filter iOS assets only in the browser.
+`/download` is the public download page. It lists web and macOS release assets for everyone. `packages/backend/convex/downloads.ts` fetches GitHub releases server-side and strips iOS assets before responding to a non-admin, using the `users.role` value from Convex. Never filter iOS assets only in the browser. Vercel preview builds skip the release inventory and link to the production download page and CI runs instead, because preview deployments have no published releases and short-lived Actions artifacts are not release assets.
 
 `.github/workflows/release.yml` publishes a tagged release when a `v*` tag is pushed, or when the workflow is dispatched with a version. It builds the web app, an unsigned macOS app and an ad-hoc-signed iOS Simulator app, uploads all three as workflow artifacts, and creates/updates the GitHub release with the same assets. The public config values `VITE_CONVEX_URL` and `VITE_CLERK_PUBLISHABLE_KEY` must exist as repository variables so release builds point at production. No secret key belongs in the browser or repo. The repository is private, so each Convex deployment also needs `GITHUB_TOKEN` with read access to releases; the CLI token works for now, but a fine-grained `Contents: read` PAT is preferable.
 

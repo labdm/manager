@@ -6,6 +6,7 @@ import type {
   DownloadAsset,
   DownloadRelease,
 } from "@manager/backend/convex/lib/downloadAssets";
+import { shouldLoadReleases } from "./downloadEnvironment";
 import "./downloads.css";
 
 const platformLabels: Record<DownloadAsset["platform"], string> = {
@@ -15,6 +16,12 @@ const platformLabels: Record<DownloadAsset["platform"], string> = {
 };
 
 const desktopPlatforms: DownloadAsset["platform"][] = ["web", "macos"];
+const PRODUCTION_DOWNLOAD_URL = "https://manager.labdm.dev/download";
+const CI_RUNS_URL = "https://github.com/dmytro-afonin/manager/actions";
+
+interface DownloadPageProps {
+  deployEnv?: string;
+}
 
 function formatSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "—";
@@ -133,7 +140,30 @@ function ReleaseList({
   );
 }
 
-export function DownloadPage() {
+function PreviewNotice() {
+  return (
+    <aside className="preview-notice">
+      <div>
+        <p className="access-title">Preview build</p>
+        <p>
+          Published downloads live on the production site. CI artifacts are
+          short-lived and need GitHub access.
+        </p>
+      </div>
+      <div className="preview-links">
+        <a href={PRODUCTION_DOWNLOAD_URL} target="_blank" rel="noreferrer">
+          Production downloads ↗
+        </a>
+        <a href={CI_RUNS_URL} target="_blank" rel="noreferrer">
+          CI runs ↗
+        </a>
+      </div>
+    </aside>
+  );
+}
+
+export function DownloadPage({ deployEnv }: DownloadPageProps = {}) {
+  const isPreview = !shouldLoadReleases(deployEnv);
   const { isLoaded, isSignedIn } = useAuth();
   const ensureUser = useMutation(api.users.ensure);
   const listReleases = useAction(api.downloads.list);
@@ -147,6 +177,7 @@ export function DownloadPage() {
   }, [isSignedIn, ensureUser]);
 
   useEffect(() => {
+    if (isPreview) return;
     let cancelled = false;
     listReleases({ limit: 20 })
       .then((result) => {
@@ -162,13 +193,14 @@ export function DownloadPage() {
     return () => {
       cancelled = true;
     };
-  }, [listReleases]);
+  }, [listReleases, isPreview]);
 
   const isAdmin = me?.role === "admin";
   const allReleases = releases ?? [];
 
   return (
     <main className="download-shell">
+      {isPreview ? <PreviewNotice /> : null}
       <header className="download-header">
         <div>
           <p className="mark">Manager / Builds</p>
@@ -193,7 +225,11 @@ export function DownloadPage() {
           </div>
           <p>Open in a browser or install on Apple Silicon.</p>
         </div>
-        {releaseError ? (
+        {isPreview ? (
+          <p className="status">
+            Preview builds do not list release assets. Use the links above.
+          </p>
+        ) : releaseError ? (
           <p className="error">{releaseError}</p>
         ) : releases === undefined ? (
           <p className="status">Loading releases…</p>
@@ -217,7 +253,11 @@ export function DownloadPage() {
           <p>Simulator builds for validating the native client.</p>
         </div>
 
-        {!isLoaded ? (
+        {isPreview ? (
+          <p className="status">
+            Preview builds do not include iOS release assets.
+          </p>
+        ) : !isLoaded ? (
           <p className="status">Checking session…</p>
         ) : !isSignedIn ? (
           <div className="access-panel">

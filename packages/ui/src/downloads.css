@@ -269,6 +269,38 @@
   flex: none;
 }
 
+.preview-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 0.9rem;
+  background: var(--surface);
+}
+
+.preview-notice p {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.preview-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: none;
+}
+
+.preview-links a {
+  color: var(--accent);
+  font-size: 0.85rem;
+  text-underline-offset: 0.2em;
+}
+
 .download-empty,
 .download-shell .status {
   margin: 0;
@@ -328,9 +360,16 @@
     text-align: right;
   }
 
-  .access-panel {
+  .access-panel,
+  .preview-notice {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .preview-links {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.75rem;
   }
 }
 

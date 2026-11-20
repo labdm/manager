@@ -19,7 +19,9 @@ const indexRoute = createRoute({
 const downloadRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/download",
-  component: DownloadPage,
+  component: () => (
+    <DownloadPage deployEnv={import.meta.env.VITE_DEPLOY_ENV} />
+  ),
 });
 
 const routeTree = rootRoute.addChildren([indexRoute, downloadRoute]);
