@@ -32,6 +32,11 @@ No Clerk secret key belongs in this app or the repo.
 PR CI artifacts are built with public repository variables now; older CI builds
 that used placeholder values will show a blank window.
 
+`@tauri-apps/plugin-http` is pinned to 2.8.3 in both the pnpm workspace and the
+Rust manifest. `tauri-plugin-clerk` 0.1.1 depends on plugin-http 2.8's IPC
+payload; 2.9 moved that payload into a header and Clerk calls fail with an
+`Origin`/`Authorization` conflict. `pnpm --dir apps/desktop test` guards the pin.
+
 ## Auth
 
 The app uses `tauri-plugin-clerk` with Clerk's React SDK and the same Convex
