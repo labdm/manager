@@ -6,6 +6,10 @@ import type {
   DownloadAsset,
   DownloadRelease,
 } from "@manager/backend/convex/lib/downloadAssets";
+import {
+  assetFormat,
+  groupAssetsByPlatform,
+} from "./downloadAssetsView";
 import { shouldLoadReleases } from "./downloadEnvironment";
 import "./downloads.css";
 
@@ -57,16 +61,14 @@ function assetsFor(
 function AssetLink({ asset }: { asset: DownloadAsset }) {
   return (
     <a
-      className={`asset-link asset-${asset.platform}`}
+      className="asset-link"
       href={asset.url}
       target="_blank"
       rel="noreferrer"
+      aria-label={`Download ${asset.name}`}
     >
-      <span className="asset-platform">{platformLabels[asset.platform]}</span>
-      <span className="asset-name">{asset.name}</span>
-      <span className="asset-meta">
-        {formatSize(asset.size)} · {formatDate(asset.updatedAt)}
-      </span>
+      <span className="asset-format">{assetFormat(asset.name)}</span>
+      <span className="asset-size">{formatSize(asset.size)}</span>
       <span className="asset-arrow" aria-hidden="true">
         ↓
       </span>
@@ -81,8 +83,11 @@ function ReleaseCard({
   release: DownloadRelease;
   platforms: DownloadAsset["platform"][];
 }) {
-  const assets = assetsFor(release, platforms);
-  if (assets.length === 0) return null;
+  const groups = groupAssetsByPlatform(
+    assetsFor(release, platforms),
+    platforms,
+  );
+  if (groups.length === 0) return null;
 
   return (
     <article className="release-card">
@@ -105,9 +110,26 @@ function ReleaseCard({
           ) : null}
         </div>
       </div>
-      <div className="asset-list">
-        {assets.map((asset) => (
-          <AssetLink key={asset.name} asset={asset} />
+      <div className="asset-groups">
+        {groups.map((group) => (
+          <section
+            className={`asset-group asset-${group.platform}`}
+            key={group.platform}
+          >
+            <div className="asset-group-head">
+              <span className="asset-platform">
+                {platformLabels[group.platform]}
+              </span>
+              <span className="asset-meta">
+                Updated {formatDate(group.assets[0].updatedAt)}
+              </span>
+            </div>
+            <div className="asset-formats">
+              {group.assets.map((asset) => (
+                <AssetLink key={asset.name} asset={asset} />
+              ))}
+            </div>
+          </section>
         ))}
       </div>
     </article>
@@ -293,7 +315,8 @@ export function DownloadPage({ deployEnv }: DownloadPageProps = {}) {
 
       <footer className="download-footer">
         <p>
-          Builds are unsigned. macOS may need right-click → Open; iOS archives run
+          Builds are ad-hoc signed, not notarized. If macOS refuses to open the
+          app, run <code>xattr -cr /path/to/Manager.app</code>. iOS archives run
           in the Simulator only.
         </p>
       </footer>

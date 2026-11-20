@@ -79,7 +79,8 @@ jobs:
           mkdir -p artifacts
           scripts/package-apple-artifacts.sh
           ditto -c -k --sequesterRsrc --keepParent apps/web/dist "artifacts/manager-web-${MANAGER_VERSION}.zip"
-          cp "$MANAGER_ARTIFACTS_DIR"/*.zip artifacts/
+          tar -czf "artifacts/manager-web-${MANAGER_VERSION}.tar.gz" -C apps/web dist
+          cp "$MANAGER_ARTIFACTS_DIR"/*.zip "$MANAGER_ARTIFACTS_DIR"/*.tar.gz artifacts/
           ls -lh artifacts
 
       - name: Publish GitHub release

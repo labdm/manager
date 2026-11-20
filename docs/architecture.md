@@ -76,13 +76,13 @@ Clerk everywhere: the React SDK on web and desktop, `ClerkKit` + `ClerkConvexAut
 
 The native app subscribes to `tasks:list` over Convex's websocket and writes through `tasks:create`, `tasks:setDone` and `tasks:remove` in `packages/backend/convex/tasks.ts`. `tasks:setDone` is an explicit setter, so a retried checkbox tap cannot invert itself. Optimistic updates live in `ManagerCore.TaskBoardModel`, which rolls back when a mutation fails. The web and MCP mutations stay unchanged.
 
-Setup, commands and platform constraints are in [apps/apple/README.md](../apps/apple/README.md). CI runs `pnpm apple:test` and unsigned iOS-simulator/macOS builds in a separate arm64 workflow.
+Setup, commands and platform constraints are in [apps/apple/README.md](../apps/apple/README.md). CI runs `pnpm apple:test` and ad-hoc-signed iOS-simulator/macOS builds in a separate arm64 workflow.
 
 ## Downloads
 
 `/download` is a static SPA route in `apps/web` backed by `packages/ui`. It lists GitHub release assets for the web app and macOS for everyone. `downloads:list` is a Convex action that reads GitHub releases, classifies assets by filename and removes iOS assets unless the signed-in Convex user has the `admin` role. The filtering happens in Convex so the asset URLs never reach a non-admin browser. The repository is private, so the Convex deployment needs `GITHUB_TOKEN` with `Contents: read` to see releases; the token stays on Convex and never reaches the browser.
 
-`.github/workflows/release.yml` builds all three artifacts on an arm64 macOS runner and publishes them as GitHub release assets: a static web zip, an unsigned macOS app zip and an ad-hoc-signed iOS Simulator app zip. CI workflows also upload per-commit artifacts with `actions/upload-artifact`. Preview deployments do not list release assets: they link to the production download page and CI runs instead, since Actions artifacts are short-lived and require GitHub access.
+`.github/workflows/release.yml` builds all three artifacts on an arm64 macOS runner and publishes each as both `.zip` and `.tar.gz` GitHub release assets: the static web build, an ad-hoc-signed macOS app and an ad-hoc-signed iOS Simulator app. CI workflows also upload per-commit artifacts with `actions/upload-artifact`. Preview deployments do not list release assets: they link to the production download page and CI runs instead, since Actions artifacts are short-lived and require GitHub access.
 
 ## Integrations
 

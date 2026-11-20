@@ -59,7 +59,15 @@ signature, and Clerk's keychain writes then fail with OSStatus `-34018` inside
 the simulator. Ad-hoc signing needs no certificate or team and keeps the
 keychain working.
 
-`pnpm apple:build:*` writes to `apps/apple/.build/derivedData` by default. Set `MANAGER_DERIVED_DATA` to use another location and `MANAGER_CONFIGURATION=Release` for distribution builds. `pnpm apple:package` converts those builds into `Manager-macOS-<version>.zip` and `Manager-iOS-Simulator-<version>.zip`; the iOS archive is for the Simulator, not for sideloading onto a device.
+The macOS build cannot use that Xcode setting because the app entitlements
+require a provisioning profile. Instead, `pnpm apple:package` re-signs the built
+`.app` with `codesign --force --deep --sign -` before zipping. Xcode's unsigned
+output is linker-signed without sealed resources, which macOS reports as
+“app is damaged”; re-signing produces a valid ad-hoc signature. The release
+assets are still not notarized, so a downloaded copy may need
+`xattr -cr /path/to/Manager.app` before opening.
+
+`pnpm apple:build:*` writes to `apps/apple/.build/derivedData` by default. Set `MANAGER_DERIVED_DATA` to use another location and `MANAGER_CONFIGURATION=Release` for distribution builds. `pnpm apple:package` converts those builds into `Manager-macOS-<version>` and `Manager-iOS-Simulator-<version>` archives in both `.zip` and `.tar.gz`; the iOS archive is for the Simulator, not for sideloading onto a device.
 
 `pnpm build` (the Vercel build) does not touch the Apple client. CI runs the Apple workflow separately on an arm64 macOS runner and uploads both zips. `.github/workflows/release.yml` uses the same packaging for tagged releases.
 

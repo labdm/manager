@@ -168,42 +168,28 @@
   text-underline-offset: 0.2em;
 }
 
-.asset-list {
+.asset-groups {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
   gap: 0.75rem;
   align-content: start;
 }
 
-.asset-link {
-  display: grid;
-  grid-template-areas:
-    "platform arrow"
-    "name name"
-    "meta meta";
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 0;
+.asset-group {
   padding: 1rem;
   border: 1px solid var(--line);
   border-radius: 0.9rem;
   background: var(--surface);
-  color: var(--ink);
-  text-decoration: none;
-  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
 }
 
-.asset-link:hover,
-.asset-link:focus-visible {
-  transform: translateY(-2px);
-  border-color: var(--accent);
-  box-shadow: 0 8px 20px rgba(15, 110, 86, 0.09);
-  outline: none;
+.asset-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .asset-platform {
-  grid-area: platform;
-  justify-self: start;
   border-radius: 999px;
   padding: 0.2rem 0.5rem;
   background: var(--accent-soft);
@@ -220,27 +206,50 @@
   color: #8a5b18;
 }
 
-.asset-arrow {
-  grid-area: arrow;
-  justify-self: end;
-  color: var(--accent);
-  font-size: 1.15rem;
+.asset-formats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
 }
 
-.asset-name {
-  grid-area: name;
-  margin-top: 0.8rem;
-  font-size: 0.95rem;
+.asset-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 0.85rem;
+  text-decoration: none;
+  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.asset-link:hover,
+.asset-link:focus-visible {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: 0 8px 20px rgba(15, 110, 86, 0.09);
+  outline: none;
+}
+
+.asset-format {
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
   font-weight: 600;
-  overflow-wrap: anywhere;
 }
 
+.asset-size,
 .asset-meta {
-  grid-area: meta;
-  margin-top: 0.3rem;
   color: var(--muted);
   font-family: "SFMono-Regular", Menlo, Consolas, monospace;
   font-size: 0.72rem;
+}
+
+.asset-arrow {
+  color: var(--accent);
+  font-size: 1rem;
 }
 
 .access-panel {
@@ -326,6 +335,14 @@
 
 .download-footer p {
   margin: 0;
+}
+
+.download-footer code {
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.35rem;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.85em;
 }
 
 @media (max-width: 720px) {
