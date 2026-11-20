@@ -235,9 +235,18 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: android-actions/setup-android@v3
       - name: Install the Android SDK components the Gradle build pins
-        run: sdkmanager "platforms;android-37.0" "build-tools;36.0.0"
+        run: |
+          sdk_root="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          sdkmanager="$(find "$sdk_root/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort | tail -1)"
+          if [ -z "$sdkmanager" ]; then
+            echo "::error::sdkmanager not found under $sdk_root/cmdline-tools"
+            exit 1
+          fi
+          echo "Using $sdkmanager"
+          echo "ANDROID_HOME=$sdk_root" >> "$GITHUB_ENV"
+          yes | "$sdkmanager" --licenses > /dev/null
+          "$sdkmanager" "platforms;android-37.0" "build-tools;36.0.0"
       - name: Check public configuration
         run: |
           if [ -z "${MANAGER_CONVEX_URL:-}" ] || [ -z "${MANAGER_CLERK_PUBLISHABLE_KEY:-}" ]; then
