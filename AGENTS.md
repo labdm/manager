@@ -1,8 +1,36 @@
 # AGENTS.md
 
-Manager is Dmytro Afonin's personal task manager. Architecture: [docs/architecture.md](docs/architecture.md).
+Manager is Dmytro Afonin's ADHD-first, gamified life manager — not just another checkbox list. Architecture: [docs/architecture.md](docs/architecture.md).
 
 This tree is the Convex backend, the shared React UI, the static web app, the Tauri desktop client, the MCP server, and the native Apple and Android clients.
+
+## Product vision
+
+- **Agent-first.** The intended path is `agent → Manager → native APIs (push · calendar · reminders · alarms)`. An agent connects over MCP (native integrations later), reads your email and context, talks with you, and writes tasks into Manager. Manager is the system of record and fans changes out to native APIs. Manual entry in the UI is a fallback, not the main workflow.
+- **Gamification is the main feature.** Borrow heavily from gacha games: dailies, periodic events, seasons, battle passes, leveling, achievements, dedicated sections for different kinds of activities, and eventually social/group play. A skipped daily must replace itself, never stack. A deadline is its own mechanic, distinct from a `dueAt` timestamp or a reminder.
+- **Why this exists.** Existing task apps have no usable free tier, weak task-management mechanics (native Apple Reminders in particular), and almost no real integrations for agents and harnesses. Personal use comes first; shipping it as a product is a bonus.
+
+Only the foundation is built today (tasks, auth, clients, MCP, email reminders). The mechanics above are the next design/grooming target — describe them as planned, not shipped.
+
+## Domain language
+
+Use these terms consistently in code, schema, docs and UI. The Convex schema currently implements `tasks` with `title`, `done` and optional `dueAt`; the rest is target vocabulary for upcoming work.
+
+| Term | Meaning |
+|---|---|
+| task | Atomic unit of work. Stored as a row in `tasks`; agents create and complete these via MCP. |
+| daily | Recurring task that refreshes in place. Skipping a day replaces it instead of piling up a backlog. |
+| deadline | A first-class commitment with its own rules. Not interchangeable with `dueAt` (a date) or `remindAt` (a notification time). |
+| event | Time-boxed periodic content, like a gacha event. |
+| season | Themed period with its own tasks and progression. |
+| battle pass / level / achievement | Progression and reward tracks that make follow-through feel like a game. |
+| group / sharing | Shared tasks and social mechanics, planned. |
+
+## Public entry points
+
+- Web app: https://manager.labdm.dev
+- MCP endpoint: https://manager.labdm.dev/mcp — Streamable HTTP, Clerk OAuth on first connect. Register this URL as the `manager` MCP server in an agent harness. Discovery routes and tool list are in the [MCP](#mcp) section below.
+- Downloads: https://manager.labdm.dev/download
 
 ## Layout
 
