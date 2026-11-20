@@ -8,12 +8,15 @@ export interface AssetGroup {
   assets: DownloadAsset[];
 }
 
-const formatOrder = ["zip", "tar.gz"];
+const formatOrder = ["msi", "exe", "dmg", "zip", "tar.gz"];
 
 export function assetFormat(name: string): string {
   const lower = name.toLowerCase();
   if (lower.endsWith(".tar.gz")) return "tar.gz";
   if (lower.endsWith(".zip")) return "zip";
+  if (lower.endsWith(".msi")) return "msi";
+  if (lower.endsWith(".exe")) return "exe";
+  if (lower.endsWith(".dmg")) return "dmg";
   return "download";
 }
 

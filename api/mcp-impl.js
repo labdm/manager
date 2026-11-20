@@ -43365,7 +43365,7 @@ function forwardErrorData(errorData, error62) {
   return error62;
 }
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/_chunks/runtimeEnvironment-CTVGzENl.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/_chunks/runtimeEnvironment-CTVGzENl.mjs
 var automatedEnvironmentVariables = [
   "CI",
   "CONTINUOUS_INTEGRATION",
@@ -43399,7 +43399,7 @@ var isProductionEnvironment = () => {
   return false;
 };
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/deprecated.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/deprecated.mjs
 var displayedWarnings = /* @__PURE__ */ new Set();
 var deprecated = (fnName, warning, key) => {
   const hideWarning = isTestEnvironment() || isProductionEnvironment();
@@ -43410,7 +43410,7 @@ var deprecated = (fnName, warning, key) => {
 ${warning}`);
 };
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/constants.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/constants.mjs
 var LEGACY_DEV_INSTANCE_SUFFIXES = [
   ".lcl.dev",
   ".lclstage.dev",
@@ -43433,7 +43433,7 @@ var DEV_OR_STAGING_SUFFIXES = [
   "accounts.dev"
 ];
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/_chunks/keySetupGuidance-NjzfRCzi.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/_chunks/keySetupGuidance-NjzfRCzi.mjs
 var existingAppSteps = `To use an existing Clerk app, run:
 npx clerk@latest link
 npx clerk@latest env pull
@@ -43453,21 +43453,21 @@ var existingAppKeyGuidance = `${existingAppSteps}
 
 ${dashboardFallback}`;
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/isomorphicAtob.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/isomorphicAtob.mjs
 var isomorphicAtob = (data) => {
   if (typeof atob !== "undefined" && typeof atob === "function") return atob(data);
   else if (typeof globalThis.Buffer !== "undefined") return globalThis.Buffer.from(data, "base64").toString();
   return data;
 };
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/isomorphicBtoa.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/isomorphicBtoa.mjs
 var isomorphicBtoa = (data) => {
   if (typeof btoa !== "undefined" && typeof btoa === "function") return btoa(data);
   else if (typeof globalThis.Buffer !== "undefined") return globalThis.Buffer.from(data).toString("base64");
   return data;
 };
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/keys.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/keys.mjs
 var PUBLISHABLE_KEY_LIVE_PREFIX = "pk_live_";
 var PUBLISHABLE_KEY_TEST_PREFIX = "pk_test_";
 function isValidDecodedPublishableKey(decoded) {
@@ -43559,7 +43559,7 @@ var getSuffixedCookieName = (cookieName, cookieSuffix) => {
   return `${cookieName}_${cookieSuffix}`;
 };
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/retry.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/retry.mjs
 var defaultOptions = {
   initialDelay: 125,
   maxDelayBetweenRetries: 0,
@@ -43610,7 +43610,7 @@ var retry = async (callback, options = {}) => {
   }
 };
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/url.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/url.mjs
 function isLegacyDevAccountPortalOrigin(host) {
   return LEGACY_DEV_INSTANCE_SUFFIXES.some((legacyDevSuffix) => {
     return host.startsWith("accounts.") && host.endsWith(legacyDevSuffix);
@@ -43634,7 +43634,7 @@ var createDynamicParamParser = ({ regex }) => ({ urlWithParam, entity }) => {
 };
 var populateParamFromObject = createDynamicParamParser({ regex: /:(\w+)/ });
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/_chunks/clerkRuntimeError-DlesLWqO.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/_chunks/clerkRuntimeError-DlesLWqO.mjs
 function createErrorTypeGuard(ErrorClass) {
   function typeGuard(error62) {
     const target = error62 ?? this;
@@ -43699,7 +43699,7 @@ var ClerkRuntimeError = class ClerkRuntimeError2 extends ClerkError {
 };
 var isClerkRuntimeError = createErrorTypeGuard(ClerkRuntimeError);
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/_chunks/error-BiKqFvdU.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/_chunks/error-BiKqFvdU.mjs
 var ClerkAPIError = class {
   static kind = "ClerkAPIError";
   code;
@@ -44386,13 +44386,13 @@ var __privateAdd = (obj, member, value) => member.has(obj) ? __typeError("Cannot
 var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "write to private field"), setter ? setter.call(obj, value) : member.set(obj, value), value);
 var __privateMethod = (obj, member, method) => (__accessCheck(obj, member, "access private method"), method);
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/buildAccountsBaseUrl.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/buildAccountsBaseUrl.mjs
 function buildAccountsBaseUrl(frontendApi) {
   if (!frontendApi) return "";
   return `https://${frontendApi.replace(/clerk\.accountsstage\./, "accountsstage.").replace(/clerk\.accounts\.|clerk\./, "accounts.")}`;
 }
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/logger.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/logger.mjs
 var loggedMessages = /* @__PURE__ */ new Set();
 var logger = {
   /**
@@ -44411,7 +44411,7 @@ var logger = {
   }
 };
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/underscore.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/underscore.mjs
 function snakeToCamel(str) {
   return str ? str.replace(/([-_][a-z])/g, (match2) => match2.toUpperCase().replace(/-|_/, "")) : "";
 }
@@ -44454,7 +44454,7 @@ function isTruthy(value) {
   return false;
 }
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/proxy.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/proxy.mjs
 var AUTO_PROXY_HOST_SUFFIXES = [".vercel.app"];
 var AUTO_PROXY_PATH = "/__clerk";
 function shouldAutoProxy(hostname3) {
@@ -44483,7 +44483,7 @@ function getAutoProxyUrlFromEnvironment({ publishableKey, hasDomain = false, has
   return AUTO_PROXY_PATH;
 }
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/authorization.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/authorization.mjs
 var TYPES_TO_OBJECTS = {
   strict_mfa: {
     afterMinutes: 10,
@@ -44653,7 +44653,7 @@ var createCheckAuthorization = (options) => {
   };
 };
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/jwtPayloadParser.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/jwtPayloadParser.mjs
 var decimalToBinaryBits = (decimal, minimumLength) => {
   if (!/^\d+$/.test(decimal)) return;
   let remaining = decimal.replace(/^0+/, "") || "0";
@@ -44743,7 +44743,7 @@ var __experimental_JWTPayloadToAuthObjectProperties = (claims) => {
   };
 };
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/_chunks/pathToRegexp-C-7qTA7_.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/_chunks/pathToRegexp-C-7qTA7_.mjs
 function _(r) {
   for (var n = [], e = 0; e < r.length; ) {
     var a = r[e];
@@ -52728,7 +52728,7 @@ function withLegacyReturn(cb) {
   };
 }
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/_chunks/telemetry-9C6N5ppw.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/_chunks/telemetry-9C6N5ppw.mjs
 var PROCESS_FLAG = /* @__PURE__ */ Symbol.for("@clerk/shared.telemetryNoticeShown");
 var NOTICE_LINES = [
   "Attention: Clerk collects telemetry data from its SDKs when connected to development instances.",

@@ -50,6 +50,9 @@ next-env.d.ts
 # pnpm
 .pnpm-store
 
+# tauri
+apps/desktop/src-tauri/target/
+
 # apple (XcodeGen output + generated secrets + SwiftPM build data)
 apps/apple/*.xcodeproj/
 apps/apple/Config/Secrets.plist
