@@ -1,0 +1,28 @@
+Manager Desktop for macOS
+=========================
+
+Manager.app is ad-hoc signed and not notarized. On macOS 15 Sequoia and later
+the first launch shows: "Apple could not verify Manager.app is free of malware".
+That is expected for a build that Apple has not notarized; it does not mean the
+app was flagged as malware.
+
+Open it once, then allow it:
+
+1. Double-click Manager.app. When macOS blocks it, click Done. Do not click
+   "Move to Trash".
+2. Open Apple menu > System Settings > Privacy & Security.
+3. Scroll to Security and click "Open Anyway" next to the Manager message.
+   The button is available for about an hour after the first attempt. If it is
+   gone, open the app again and come straight back.
+4. Confirm with your Mac password. macOS remembers the exception, so later
+   launches open normally.
+
+Terminal alternative (removes the download quarantine flag from this app only):
+
+  xattr -cr /path/to/Manager.app
+
+Install Manager.app in /Applications before signing in with Google. macOS only
+routes dev.labdm.manager://callback OAuth links to an installed app, not one launched from a
+download folder or a build directory.
+
+The .zip and .tar.gz contain the same Apple Silicon (arm64) app and its DMG.

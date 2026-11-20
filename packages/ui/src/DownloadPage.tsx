@@ -15,11 +15,16 @@ import "./downloads.css";
 
 const platformLabels: Record<DownloadAsset["platform"], string> = {
   web: "Web",
+  windows: "Windows",
   macos: "macOS",
   ios: "iOS",
 };
 
-const desktopPlatforms: DownloadAsset["platform"][] = ["web", "macos"];
+const desktopPlatforms: DownloadAsset["platform"][] = [
+  "web",
+  "windows",
+  "macos",
+];
 const PRODUCTION_DOWNLOAD_URL = "https://manager.labdm.dev/download";
 const CI_RUNS_URL = "https://github.com/dmytro-afonin/manager/actions";
 
@@ -162,6 +167,19 @@ function ReleaseList({
   );
 }
 
+function MacSetupNote() {
+  return (
+    <aside className="preview-notice setup-note">
+      <p className="access-title">First launch on macOS</p>
+      <p>
+        The app is ad-hoc signed, not notarized. Open it once, then go to{" "}
+        <strong>System Settings → Privacy &amp; Security → Open Anyway</strong>.
+        The macOS archive also contains <code>INSTALL-macOS.txt</code>.
+      </p>
+    </aside>
+  );
+}
+
 function PreviewNotice() {
   return (
     <aside className="preview-notice">
@@ -245,7 +263,9 @@ export function DownloadPage({ deployEnv }: DownloadPageProps = {}) {
             <p className="section-index">01</p>
             <h2 id="desktop-heading">Desktop &amp; web</h2>
           </div>
-          <p>Open in a browser or install on Apple Silicon.</p>
+          <p>
+            Open in a browser or install the desktop app on macOS or Windows.
+          </p>
         </div>
         {isPreview ? (
           <p className="status">
@@ -256,11 +276,14 @@ export function DownloadPage({ deployEnv }: DownloadPageProps = {}) {
         ) : releases === undefined ? (
           <p className="status">Loading releases…</p>
         ) : (
-          <ReleaseList
-            releases={allReleases}
-            platforms={desktopPlatforms}
-            empty="No desktop releases yet. Publish a v* tag to create one."
-          />
+          <>
+            <ReleaseList
+              releases={allReleases}
+              platforms={desktopPlatforms}
+              empty="No desktop releases yet. Publish a v* tag to create one."
+            />
+            <MacSetupNote />
+          </>
         )}
       </section>
 
@@ -315,9 +338,9 @@ export function DownloadPage({ deployEnv }: DownloadPageProps = {}) {
 
       <footer className="download-footer">
         <p>
-          Builds are ad-hoc signed, not notarized. If macOS refuses to open the
-          app, run <code>xattr -cr /path/to/Manager.app</code>. iOS archives run
-          in the Simulator only.
+          macOS builds are ad-hoc signed, not notarized; Windows builds are
+          unsigned. Both may show an operating-system warning on first launch.
+          iOS archives run in the Simulator only.
         </p>
       </footer>
     </main>

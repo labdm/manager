@@ -1,0 +1,62 @@
+name: Desktop
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            platform: macos
+            bundles: dmg,app
+          - os: windows-latest
+            platform: windows
+            bundles: nsis,msi
+    runs-on: ${{ matrix.os }}
+    env:
+      # Public values from repository variables, so CI artifacts behave like
+      # the release build when opened locally.
+      VITE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
+      VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
+      MANAGER_VERSION: ci-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12.21.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Check public configuration
+        shell: bash
+        run: |
+          if [ -z "${VITE_CONVEX_URL:-}" ] || [ -z "${VITE_CLERK_PUBLISHABLE_KEY:-}" ]; then
+            echo "::error::Set VITE_CONVEX_URL and VITE_CLERK_PUBLISHABLE_KEY as repository variables."
+            exit 1
+          fi
+      - name: Typecheck desktop app
+        run: pnpm --filter @manager/desktop typecheck
+      - name: Build desktop app
+        shell: bash
+        run: pnpm --dir apps/desktop tauri build --bundles ${{ matrix.bundles }}
+      - name: Package desktop artifacts
+        shell: bash
+        run: bash scripts/package-desktop-artifacts.sh ${{ matrix.platform }}
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-${{ matrix.platform }}-${{ github.sha }}
+          path: artifacts/desktop/*
+          if-no-files-found: error
+          retention-days: 14

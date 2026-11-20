@@ -9,6 +9,7 @@ describe("classifyAssetName", () => {
   it("recognises the release asset names", () => {
     expect(classifyAssetName("manager-web-v0.1.0.zip")).toBe("web");
     expect(classifyAssetName("Manager-macOS-v0.1.0.zip")).toBe("macos");
+    expect(classifyAssetName("Manager-Windows-v0.1.0.zip")).toBe("windows");
     expect(classifyAssetName("Manager-iOS-Simulator-v0.1.0.zip")).toBe("ios");
   });
 
@@ -56,6 +57,7 @@ describe("parseGitHubReleases", () => {
 describe("visibleAssets", () => {
   const assets = [
     { platform: "web", name: "web.zip", url: "", size: 1, updatedAt: "" },
+    { platform: "windows", name: "windows.zip", url: "", size: 1, updatedAt: "" },
     { platform: "macos", name: "mac.zip", url: "", size: 1, updatedAt: "" },
     { platform: "ios", name: "ios.zip", url: "", size: 1, updatedAt: "" },
   ] as const;
@@ -63,11 +65,12 @@ describe("visibleAssets", () => {
   it("hides iOS builds from non-admins", () => {
     expect(visibleAssets([...assets], false).map((asset) => asset.platform)).toEqual([
       "web",
+      "windows",
       "macos",
     ]);
   });
 
   it("shows every platform to admins", () => {
-    expect(visibleAssets([...assets], true)).toHaveLength(3);
+    expect(visibleAssets([...assets], true)).toHaveLength(4);
   });
 });

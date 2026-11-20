@@ -25,6 +25,7 @@ if [ ! -d "$ios_app" ]; then
 fi
 
 mkdir -p "$out"
+out="$(cd "$out" && pwd)"
 
 # Xcode's unsigned macOS build is linker-signed ad hoc without a resource seal,
 # which macOS reports as "app is damaged". Re-sign the bundle so Info.plist and
@@ -33,8 +34,18 @@ xattr -cr "$mac_app" 2>/dev/null || true
 codesign --force --deep --sign - "$mac_app"
 codesign --verify --deep --strict "$mac_app"
 
-ditto -c -k --sequesterRsrc --keepParent "$mac_app" "$out/Manager-macOS-$version.zip"
-tar -czf "$out/Manager-macOS-$version.tar.gz" -C "$(dirname "$mac_app")" "$(basename "$mac_app")"
+stage="$out/.macos-stage"
+rm -rf "$stage"
+mkdir -p "$stage"
+cp -R "$mac_app" "$stage/"
+cp "$root/apps/apple/INSTALL-macOS.txt" "$stage/INSTALL-macOS.txt"
+
+# zip cannot hold the install guide when ditto archives only one source, so the
+# macOS zip is built from a staged directory that contains both files.
+(cd "$stage" && zip -qry "$out/Manager-macOS-$version.zip" Manager.app INSTALL-macOS.txt)
+tar -czf "$out/Manager-macOS-$version.tar.gz" -C "$stage" Manager.app INSTALL-macOS.txt
+rm -rf "$stage"
+
 ditto -c -k --sequesterRsrc --keepParent "$ios_app" "$out/Manager-iOS-Simulator-$version.zip"
 tar -czf "$out/Manager-iOS-Simulator-$version.tar.gz" -C "$(dirname "$ios_app")" "$(basename "$ios_app")"
 echo "Packaged Apple artifacts in $out"

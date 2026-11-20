@@ -4,6 +4,8 @@ packages:
 
 allowBuilds:
   '@clerk/shared': true
+  browser-tabs-lock: true
+  core-js: true
   esbuild: true
   sharp: false
 
@@ -13,6 +15,14 @@ allowBuilds:
 peerDependencyRules:
   allowedVersions:
     "@typescript/native": "7.0.2"
+
+overrides:
+  # tauri-plugin-clerk and @clerk/react must share one @clerk/shared type graph.
+  '@clerk/shared': 4.48.1
+  # tauri-plugin-clerk 0.1.1 patches global fetch for plugin-http's 2.8 IPC
+  # payload. 2.9 moved clientConfig into a header, which breaks Clerk's native
+  # calls with the Origin/Authorization conflict.
+  '@tauri-apps/plugin-http': 2.8.3
 
 minimumReleaseAgeExclude:
   - '@clerk/backend@3.31.0 || 3.31.1'

@@ -43,7 +43,7 @@ var corsHeaders = {
   "Access-Control-Max-Age": "86400"
 };
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/constants.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/constants.mjs
 var DEV_OR_STAGING_SUFFIXES = [
   ".lcl.dev",
   ".stg.dev",
@@ -56,7 +56,7 @@ var DEV_OR_STAGING_SUFFIXES = [
   "accounts.dev"
 ];
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/_chunks/keySetupGuidance-NjzfRCzi.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/_chunks/keySetupGuidance-NjzfRCzi.mjs
 var existingAppSteps = `To use an existing Clerk app, run:
 npx clerk@latest link
 npx clerk@latest env pull
@@ -76,14 +76,14 @@ var existingAppKeyGuidance = `${existingAppSteps}
 
 ${dashboardFallback}`;
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/isomorphicAtob.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/isomorphicAtob.mjs
 var isomorphicAtob = (data) => {
   if (typeof atob !== "undefined" && typeof atob === "function") return atob(data);
   else if (typeof globalThis.Buffer !== "undefined") return globalThis.Buffer.from(data, "base64").toString();
   return data;
 };
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/keys.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/keys.mjs
 function createDevOrStagingUrlCache() {
   const devOrStagingUrlCache = /* @__PURE__ */ new Map();
   return {
@@ -106,7 +106,7 @@ function createDevOrStagingUrlCache() {
   };
 }
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/retry.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/retry.mjs
 var defaultOptions = {
   initialDelay: 125,
   maxDelayBetweenRetries: 0,
@@ -157,7 +157,7 @@ var retry = async (callback, options = {}) => {
   }
 };
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/url.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/url.mjs
 var createDynamicParamParser = ({ regex }) => ({ urlWithParam, entity }) => {
   const match2 = regex.exec(urlWithParam);
   if (match2) {
@@ -171,7 +171,7 @@ var createDynamicParamParser = ({ regex }) => ({ urlWithParam, entity }) => {
 };
 var populateParamFromObject = createDynamicParamParser({ regex: /:(\w+)/ });
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/_chunks/clerkRuntimeError-DlesLWqO.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/_chunks/clerkRuntimeError-DlesLWqO.mjs
 function createErrorTypeGuard(ErrorClass) {
   function typeGuard(error2) {
     const target = error2 ?? this;
@@ -236,7 +236,7 @@ var ClerkRuntimeError = class ClerkRuntimeError2 extends ClerkError {
 };
 var isClerkRuntimeError = createErrorTypeGuard(ClerkRuntimeError);
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/_chunks/error-BiKqFvdU.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/_chunks/error-BiKqFvdU.mjs
 var ClerkAPIError = class {
   static kind = "ClerkAPIError";
   code;
@@ -895,7 +895,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 var __accessCheck = (obj, member, msg) => member.has(obj) || __typeError("Cannot " + msg);
 var __privateGet = (obj, member, getter) => (__accessCheck(obj, member, "read from private field"), getter ? getter.call(obj) : member.get(obj));
 
-// node_modules/.pnpm/@clerk+shared@4.48.0_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/underscore.mjs
+// node_modules/.pnpm/@clerk+shared@4.48.1_react-dom@19.3.1_react@19.3.1__react@19.3.1/node_modules/@clerk/shared/dist/underscore.mjs
 function snakeToCamel(str) {
   return str ? str.replace(/([-_][a-z])/g, (match2) => match2.toUpperCase().replace(/-|_/, "")) : "";
 }

@@ -13,6 +13,9 @@ describe("assetFormat", () => {
   it("recognizes both archive formats", () => {
     expect(assetFormat("Manager-macOS-v1.zip")).toBe("zip");
     expect(assetFormat("Manager-macOS-v1.tar.gz")).toBe("tar.gz");
+    expect(assetFormat("Manager-macOS-v1.dmg")).toBe("dmg");
+    expect(assetFormat("Manager-Windows-v1.msi")).toBe("msi");
+    expect(assetFormat("Manager-Windows-v1.exe")).toBe("exe");
   });
 });
 
@@ -23,12 +26,14 @@ describe("groupAssetsByPlatform", () => {
         asset("Manager-macOS-v1.tar.gz", "macos"),
         asset("manager-web-v1.zip", "web"),
         asset("Manager-macOS-v1.zip", "macos"),
+        asset("Manager-macOS-v1.dmg", "macos"),
       ],
       ["web", "macos"],
     );
 
     expect(groups.map((group) => group.platform)).toEqual(["web", "macos"]);
     expect(groups[1].assets.map((item) => item.name)).toEqual([
+      "Manager-macOS-v1.dmg",
       "Manager-macOS-v1.zip",
       "Manager-macOS-v1.tar.gz",
     ]);

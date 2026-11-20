@@ -1,4 +1,4 @@
-export type DownloadPlatform = "web" | "macos" | "ios";
+export type DownloadPlatform = "web" | "windows" | "macos" | "ios";
 
 export interface DownloadAsset {
   platform: DownloadPlatform;
@@ -28,6 +28,7 @@ function stringField(value: unknown): string | null {
 export function classifyAssetName(name: string): DownloadPlatform | null {
   const lower = name.toLowerCase();
   if (/(^|[^a-z])ios([^a-z]|$)|iphone|ipad/.test(lower)) return "ios";
+  if (/(^|[^a-z])windows([^a-z]|$)/.test(lower)) return "windows";
   if (/(^|[^a-z])macos([^a-z]|$)/.test(lower)) return "macos";
   if (/(^|[^a-z])web([^a-z]|$)/.test(lower)) return "web";
   return null;

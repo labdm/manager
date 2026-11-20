@@ -1,0 +1,21 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissions required by the Manager desktop client.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "clerk:default",
+    "deep-link:default",
+    "opener:default",
+    "store:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        {
+          "url": "https://*"
+        }
+      ]
+    }
+  ]
+}

@@ -297,6 +297,10 @@
   font-size: 0.9rem;
 }
 
+.setup-note {
+  margin: 1.25rem 0 0;
+}
+
 .preview-links {
   display: flex;
   flex-direction: column;

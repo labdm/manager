@@ -2,13 +2,14 @@
 
 Manager is Dmytro Afonin's personal task manager. Architecture: [docs/architecture.md](docs/architecture.md).
 
-Tauri (`apps/desktop`) comes later. This tree is the Convex backend, the shared React UI, the static web app, the MCP server, and the native Apple client.
+This tree is the Convex backend, the shared React UI, the static web app, the Tauri desktop client, the MCP server, and the native Apple client.
 
 ## Layout
 
 - `packages/backend` — Convex schema and functions (`convex/`). Domain logic lives here.
 - `packages/ui` — shared React task UI. Client-only; no SSR.
 - `apps/web` — Vite + React + TanStack Router. Static SPA.
+- `apps/desktop` — Tauri v2 Windows/macOS client. Bundles the Vite SPA locally; reuses `packages/ui`; hides the Downloads link. Details: [apps/desktop/README.md](apps/desktop/README.md).
 - `apps/mcp` — MCP server. `mcp-handler` + `@clerk/mcp-tools` as Vercel functions. Public routes: `/mcp`, `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource/mcp`.
 - `apps/apple` — SwiftUI client for iPhone (including the Duo), iPad and Mac. Details: [apps/apple/README.md](apps/apple/README.md). `ManagerKit` (models + views, no Convex/Clerk imports) and `ManagerData` (Convex + Clerk adapters) are local Swift packages; `project.yml` is the XcodeGen source of truth. Generated `Manager.xcodeproj` and `Config/Secrets.plist` are gitignored. Do not commit secrets.
 - `scripts/cloud-agent-install.sh` — `pnpm install --frozen-lockfile`.
@@ -25,6 +26,9 @@ From the repo root:
 - `pnpm typecheck`
 - `pnpm test`
 - `pnpm build`
+- `pnpm desktop:dev` — Tauri dev window against the local Vite server.
+- `pnpm desktop:build` — bundled SPA plus native Tauri app.
+- `pnpm desktop:package windows|macos` — copy Tauri bundles into `artifacts/desktop` as release names.
 - `pnpm apple:project` — generate `Config/Secrets.plist` from the env files and regenerate `Manager.xcodeproj`. Run this before opening the Apple project.
 - `pnpm apple:test` — Swift tests for the Apple client's pure logic (no Xcode needed).
 - `pnpm apple:build:mac`, `pnpm apple:build:ios` — Apple Silicon builds; `apple:package` applies a valid ad-hoc signature before publishing.

@@ -6,7 +6,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { formatDueAt } from "./formatDueAt";
 import "./tasks.css";
 
-export function TasksPage() {
+export function TasksPage({ showDownloadsLink = true }: { showDownloadsLink?: boolean }) {
   const { isLoaded, isSignedIn } = useAuth();
 
   return (
@@ -17,9 +17,11 @@ export function TasksPage() {
           <h1>Tasks</h1>
         </div>
         <div className="top-actions">
-          <a className="top-link" href="/download">
-            Downloads
-          </a>
+          {showDownloadsLink ? (
+            <a className="top-link" href="/download">
+              Downloads
+            </a>
+          ) : null}
           <Show when="signed-in">
             <UserButton />
           </Show>
