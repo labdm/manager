@@ -40,6 +40,8 @@ required = [
     "tasks.js:setDone",
     "tasks.js:remove",
     "users.js:ensure",
+    "users.js:me",
+    "downloads.js:list",
 ]
 missing = [name for name in required if name not in identifiers]
 if missing:

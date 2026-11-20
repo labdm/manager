@@ -28,12 +28,15 @@ From the repo root:
 - `pnpm apple:project` — generate `Config/Secrets.plist` from the env files and regenerate `Manager.xcodeproj`. Run this before opening the Apple project.
 - `pnpm apple:test` — Swift tests for the Apple client's pure logic (no Xcode needed).
 - `pnpm apple:build:mac`, `pnpm apple:build:ios` — unsigned builds; require Xcode on Apple Silicon.
+- `pnpm apple:package` — zip the built macOS and iOS Simulator apps into `artifacts/apple/`.
+- `pnpm check:functions` — assert the Convex deployment has every function the clients call.
 
 ## Node and pnpm
 
 - `engines.node` is `26.x`. `devEngines.runtime` is Node `^26.13.0`. There is no `.nvmrc`.
 - `packageManager` is `pnpm@12.21.0`. `corepack enable` makes pnpm use that version. Node 25+ does not bundle corepack; `scripts/cloud-agent-install.sh` installs it first.
 - Build-script approval lives in `pnpm-workspace.yaml` `allowBuilds`.
+- ESLint uses the TypeScript 6 API (`typescript` is an alias for `@typescript/typescript6`); `tsc` runs TypeScript 7 via the `@typescript/native` alias. Keep both aliases in every workspace.
 
 ## Local backend
 
@@ -72,6 +75,14 @@ Discovery routes:
 - `/.well-known/oauth-protected-resource/mcp`
 
 Vercel serves the static SPA from `apps/web/dist` and Node functions from the repo `api/` directory. Those functions are self-contained ESM bundles generated from `scripts/api-entries/*.ts`. When modifying `apps/mcp`, run `pnpm build:api` (or `pnpm build`) to update the bundles in `api/`. CI runs `pnpm verify:api` to ensure the bundles in `api/` match the source code. Rewrites publish `/mcp` and the `/.well-known` routes on `manager.labdm.dev`.
+
+## Downloads and releases
+
+`/download` is the public download page. It lists web and macOS release assets for everyone. `packages/backend/convex/downloads.ts` fetches GitHub releases server-side and strips iOS assets before responding to a non-admin, using the `users.role` value from Convex. Never filter iOS assets only in the browser.
+
+`.github/workflows/release.yml` publishes a tagged release when a `v*` tag is pushed, or when the workflow is dispatched with a version. It builds the web app, an unsigned macOS app and an ad-hoc-signed iOS Simulator app, uploads all three as workflow artifacts, and creates/updates the GitHub release with the same assets. The public config values `VITE_CONVEX_URL` and `VITE_CLERK_PUBLISHABLE_KEY` must exist as repository variables so release builds point at production. No secret key belongs in the browser or repo. The repository is private, so each Convex deployment also needs `GITHUB_TOKEN` with read access to releases; the CLI token works for now, but a fine-grained `Contents: read` PAT is preferable.
+
+CI and Apple workflows upload per-commit artifacts for inspection. Actions are pinned to Node 24-compatible majors: `actions/checkout@v7`, `actions/setup-node@v7`, `pnpm/action-setup@v6`, `actions/upload-artifact@v7`.
 
 ## Deployment
 

@@ -6,7 +6,8 @@
   "exports": {
     "./convex/_generated/api": "./convex/_generated/api.js",
     "./convex/_generated/dataModel": "./convex/_generated/dataModel.js",
-    "./convex/lib/mcpRoleSignature": "./convex/lib/mcpRoleSignature.ts"
+    "./convex/lib/mcpRoleSignature": "./convex/lib/mcpRoleSignature.ts",
+    "./convex/lib/downloadAssets": "./convex/lib/downloadAssets.ts"
   },
   "scripts": {
     "dev": "convex dev",
@@ -20,8 +21,9 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
+    "@typescript/native": "npm:typescript@^7.0.2",
     "eslint": "^10.15.0",
-    "typescript": "^6.0.3",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-eslint": "^8.73.0",
     "vitest": "^5.1.0"
   }

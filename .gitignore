@@ -55,3 +55,5 @@ apps/apple/*.xcodeproj/
 apps/apple/Config/Secrets.plist
 apps/apple/Packages/*/.build/
 apps/apple/Packages/*/Package.resolved
+apps/apple/.build/
+artifacts/

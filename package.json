@@ -17,17 +17,19 @@
     "test": "pnpm --filter \"./apps/*\" --filter \"./packages/*\" test",
     "apple:project": "scripts/apple-project.sh",
     "apple:test": "swift test --package-path apps/apple/Packages/ManagerKit",
-    "apple:build:mac": "xcodebuild -project apps/apple/Manager.xcodeproj -scheme Manager -destination 'platform=macOS' -configuration Debug CODE_SIGNING_ALLOWED=NO build",
-    "apple:build:ios": "xcodebuild -project apps/apple/Manager.xcodeproj -scheme Manager -destination 'generic/platform=iOS Simulator' -configuration Debug CODE_SIGNING_ALLOWED=YES CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- PROVISIONING_PROFILE_SPECIFIER= build",
-    "apple:install:ios": "xcrun simctl uninstall booted dev.labdm.manager >/dev/null 2>&1; xcrun simctl install booted \"$(find ~/Library/Developer/Xcode/DerivedData -path '*/Build/Products/Debug-iphonesimulator/Manager.app' -type d | head -1)\" && xcrun simctl launch booted dev.labdm.manager",
+    "apple:build:mac": "xcodebuild -project apps/apple/Manager.xcodeproj -scheme Manager -destination 'platform=macOS' -configuration \"${MANAGER_CONFIGURATION:-Debug}\" -derivedDataPath \"${MANAGER_DERIVED_DATA:-apps/apple/.build/derivedData}\" MARKETING_VERSION=\"${MANAGER_VERSION_NUMBER:-0.1.0}\" CODE_SIGNING_ALLOWED=NO build",
+    "apple:build:ios": "xcodebuild -project apps/apple/Manager.xcodeproj -scheme Manager -destination 'generic/platform=iOS Simulator' -configuration \"${MANAGER_CONFIGURATION:-Debug}\" -derivedDataPath \"${MANAGER_DERIVED_DATA:-apps/apple/.build/derivedData}\" MARKETING_VERSION=\"${MANAGER_VERSION_NUMBER:-0.1.0}\" CODE_SIGNING_ALLOWED=YES CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- PROVISIONING_PROFILE_SPECIFIER= build",
+    "apple:package": "scripts/package-apple-artifacts.sh",
+    "apple:install:ios": "xcrun simctl uninstall booted dev.labdm.manager >/dev/null 2>&1; xcrun simctl install booted \"${MANAGER_DERIVED_DATA:-apps/apple/.build/derivedData}/Build/Products/${MANAGER_CONFIGURATION:-Debug}-iphonesimulator/Manager.app\" && xcrun simctl launch booted dev.labdm.manager",
     "check:functions": "scripts/check-convex-functions.sh"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.6.6",
+    "@typescript/native": "npm:typescript@^7.0.2",
     "esbuild": "0.28.2",
     "eslint": "^10.15.0",
-    "typescript": "^6.0.3",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-eslint": "^8.73.0"
   },
   "packageManager": "pnpm@12.21.0",

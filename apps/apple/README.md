@@ -49,6 +49,7 @@ pnpm apple:test         # 39 Swift tests: core logic, config, board and glass co
 pnpm apple:build:mac
 pnpm apple:build:ios
 pnpm apple:install:ios  # install + launch on the booted simulator
+pnpm apple:package      # zip both builds into artifacts/apple/
 pnpm check:functions    # assert the Convex deployment has every function the app calls
 ```
 
@@ -58,7 +59,9 @@ signature, and Clerk's keychain writes then fail with OSStatus `-34018` inside
 the simulator. Ad-hoc signing needs no certificate or team and keeps the
 keychain working.
 
-`pnpm build` (the Vercel build) does not touch the Apple client. CI runs the Apple workflow separately on an arm64 macOS runner.
+`pnpm apple:build:*` writes to `apps/apple/.build/derivedData` by default. Set `MANAGER_DERIVED_DATA` to use another location and `MANAGER_CONFIGURATION=Release` for distribution builds. `pnpm apple:package` converts those builds into `Manager-macOS-<version>.zip` and `Manager-iOS-Simulator-<version>.zip`; the iOS archive is for the Simulator, not for sideloading onto a device.
+
+`pnpm build` (the Vercel build) does not touch the Apple client. CI runs the Apple workflow separately on an arm64 macOS runner and uploads both zips. `.github/workflows/release.yml` uses the same packaging for tagged releases.
 
 ## Known rough edges
 

@@ -7,6 +7,13 @@ allowBuilds:
   esbuild: true
   sharp: false
 
+# typescript-eslint still needs the TS 6 API; tsc itself runs TypeScript 7
+# through the @typescript/native alias. This peer range is for a future TS 7
+# programmatic API and is not used by lint.
+peerDependencyRules:
+  allowedVersions:
+    "@typescript/native": "7.0.2"
+
 minimumReleaseAgeExclude:
   - '@clerk/backend@3.31.0 || 3.31.1'
   - '@clerk/shared@4.47.0 || 4.48.0'
