@@ -18,8 +18,19 @@ From `apps/desktop`:
 
 The Vite build needs `VITE_CONVEX_URL` and `VITE_CLERK_PUBLISHABLE_KEY` in
 `apps/desktop/.env.local` (or as environment variables). The Rust side reads
-`VITE_CLERK_PUBLISHABLE_KEY` at compile time so the Clerk plugin can initialize
-before the renderer loads. No Clerk secret key belongs in this app or the repo.
+`VITE_CLERK_PUBLISHABLE_KEY` at compile time, so export it before `tauri dev` or
+`tauri build`:
+
+```sh
+set -a; . apps/web/.env.local; set +a
+pnpm desktop:build
+```
+
+Then open `apps/desktop/src-tauri/target/release/bundle/macos/Manager.app`.
+No Clerk secret key belongs in this app or the repo.
+
+PR CI artifacts are built with public repository variables now; older CI builds
+that used placeholder values will show a blank window.
 
 ## Auth
 
@@ -33,12 +44,13 @@ One-time Clerk configuration for OAuth:
 
 - Enable the Native API for the Clerk instance.
 - Keep the JWT template named `convex`.
-- Add `manager://oauth-callback/` as an allowed redirect URL and as an allowed
-  origin.
+- Add `dev.labdm.manager://callback` as an allowed redirect URL. If the Clerk
+  Dashboard also asks for native origins, allow `dev.labdm.manager://callback`
+  there too.
 - Enable Google as a social connection.
 
 The flow opens the provider in the system browser and returns through the
-`manager` custom scheme. Tauri's deep-link plugin delivers the callback to the
+`dev.labdm.manager` custom scheme. Tauri's deep-link plugin delivers the callback to the
 running app; Clerk then reloads the client and activates the session. The
 callback listener times out after three minutes. On macOS, custom-scheme deep
 links only reach a packaged app installed outside the build directory; test OAuth
@@ -60,5 +72,5 @@ The macOS app is ad-hoc signed and is not notarized. macOS Gatekeeper will show
 a warning on first launch; open it from System Settings → Privacy & Security →
 Open Anyway. The macOS archives include `INSTALL-macOS.txt`, which also explains
 that Google sign-in needs the app installed in `/Applications` so macOS routes
-`manager://` callbacks to it. Windows builds are unsigned, so SmartScreen may
+`dev.labdm.manager://callback` links to it. Windows builds are unsigned, so SmartScreen may
 show a warning for a newly downloaded installer.

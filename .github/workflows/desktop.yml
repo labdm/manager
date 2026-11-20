@@ -22,10 +22,10 @@ jobs:
             bundles: nsis,msi
     runs-on: ${{ matrix.os }}
     env:
-      # CI builds do not sign in. These public values only let the app compile
-      # and show its setup screen; they are not secrets.
-      VITE_CONVEX_URL: https://example.convex.cloud
-      VITE_CLERK_PUBLISHABLE_KEY: pk_test_ci
+      # Public values from repository variables, so CI artifacts behave like
+      # the release build when opened locally.
+      VITE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
+      VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
       MANAGER_VERSION: ci-${{ github.sha }}
     steps:
       - uses: actions/checkout@v7
@@ -38,6 +38,13 @@ jobs:
           node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Check public configuration
+        shell: bash
+        run: |
+          if [ -z "${VITE_CONVEX_URL:-}" ] || [ -z "${VITE_CLERK_PUBLISHABLE_KEY:-}" ]; then
+            echo "::error::Set VITE_CONVEX_URL and VITE_CLERK_PUBLISHABLE_KEY as repository variables."
+            exit 1
+          fi
       - name: Typecheck desktop app
         run: pnpm --filter @manager/desktop typecheck
       - name: Build desktop app

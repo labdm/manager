@@ -22,7 +22,7 @@ Terminal alternative (removes the download quarantine flag from this app only):
   xattr -cr /path/to/Manager.app
 
 Install Manager.app in /Applications before signing in with Google. macOS only
-routes manager:// OAuth callbacks to an installed app, not one launched from a
+routes dev.labdm.manager://callback OAuth links to an installed app, not one launched from a
 download folder or a build directory.
 
 The .zip and .tar.gz contain the same Apple Silicon (arm64) app and its DMG.

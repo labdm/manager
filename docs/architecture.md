@@ -73,11 +73,11 @@ flowchart TB
 
 Clerk everywhere: the React SDK on web and desktop, `ClerkKit` + `ClerkConvexAuthProvider` on Apple, a Clerk-issued JWT verified by Convex, and Clerk OAuth for MCP clients (token audience `https://manager.labdm.dev/mcp`). MCP access is available to any authenticated user.
 
-Desktop uses `tauri-plugin-clerk` and a custom Clerk OAuth transport. Social sign-in opens the system browser and returns through the `manager://oauth-callback/` deep link registered by the Tauri deep-link plugin; email password/code flows stay in the bundled Clerk UI. This keeps desktop aligned with the web app's Clerk strategies without email magic links, which are not enabled. The JWT template remains `convex`.
+Desktop uses `tauri-plugin-clerk` and a custom Clerk OAuth transport. Social sign-in opens the system browser and returns through the `dev.labdm.manager://callback` deep link registered by the Tauri deep-link plugin; email password/code flows stay in the bundled Clerk UI. This keeps desktop aligned with the web app's Clerk strategies without email magic links, which are not enabled. The JWT template remains `convex`.
 
 ## Desktop client
 
-`apps/desktop` is a Tauri v2 window around the same `packages/ui` task screen. Rust initializes the HTTP, store, Clerk, opener, deep-link and single-instance plugins; the single-instance plugin makes deep links reach the running app on Windows. The frontend registers a Clerk OAuth transport that waits for `manager://oauth-callback/`, opens the provider URL in the system browser and hands the callback back to Clerk.
+`apps/desktop` is a Tauri v2 window around the same `packages/ui` task screen. Rust initializes the HTTP, store, Clerk, opener, deep-link and single-instance plugins; the single-instance plugin makes deep links reach the running app on Windows. The frontend registers a Clerk OAuth transport that waits for `dev.labdm.manager://callback`, opens the provider URL in the system browser and hands the callback back to Clerk.
 
 Setup, one-time Clerk configuration, local commands, unsigned-installer warnings and packaging details are in [apps/desktop/README.md](../apps/desktop/README.md).
 

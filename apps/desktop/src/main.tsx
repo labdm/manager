@@ -8,6 +8,7 @@ import { StrictMode, Suspense, use, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { initClerk } from "tauri-plugin-clerk";
 import { desktopConfigError } from "./config";
+import { StartupErrorBoundary } from "./StartupErrorBoundary";
 import "./index.css";
 
 type ClerkInstance = Awaited<ReturnType<typeof initClerk>>;
@@ -16,7 +17,7 @@ type OAuthTransport = {
   open: (url: URL) => Promise<{ callbackUrl: string }>;
 };
 
-const OAUTH_REDIRECT_URL = "manager://oauth-callback/";
+const OAUTH_REDIRECT_URL = "dev.labdm.manager://callback";
 const OAUTH_TIMEOUT_MS = 180_000;
 
 const convexUrl = import.meta.env.VITE_CONVEX_URL;
@@ -92,26 +93,28 @@ if (configError || !convexUrl || !clerkPublishableKey) {
   );
 } else {
   const clerkPromise = initClerk({
-    allowedRedirectProtocols: ["manager:"],
+    allowedRedirectProtocols: ["dev.labdm.manager:"],
     __internal_oauthTransport: oauthTransport,
   });
   const convex = new ConvexReactClient(convexUrl);
 
   createRoot(root).render(
     <StrictMode>
-      <Suspense
-        fallback={
-          <Splash>
-            <p className="status">Loading…</p>
-          </Splash>
-        }
-      >
-        <DesktopApp
-          clerkPromise={clerkPromise}
-          convex={convex}
-          publishableKey={clerkPublishableKey}
-        />
-      </Suspense>
+      <StartupErrorBoundary>
+        <Suspense
+          fallback={
+            <Splash>
+              <p className="status">Loading…</p>
+            </Splash>
+          }
+        >
+          <DesktopApp
+            clerkPromise={clerkPromise}
+            convex={convex}
+            publishableKey={clerkPublishableKey}
+          />
+        </Suspense>
+      </StartupErrorBoundary>
     </StrictMode>,
   );
 }
