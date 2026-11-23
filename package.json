@@ -28,7 +28,8 @@
     "android:build": "scripts/android-gradle.sh assembleDebug bundleRelease",
     "android:install": "scripts/android-gradle.sh installDebug",
     "android:package": "scripts/package-android-artifacts.sh",
-    "check:functions": "scripts/check-convex-functions.sh"
+    "check:functions": "scripts/check-convex-functions.sh",
+    "deps:scan": "pnpm audit --audit-level=high"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
