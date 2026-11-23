@@ -7,24 +7,37 @@ This tree is the Convex backend, the shared React UI, the static web app, the Ta
 ## Product vision
 
 - **Agent-first.** The intended path is `agent → Manager → native APIs (push · calendar · reminders · alarms)`. An agent connects over MCP (native integrations later), reads your email and context, talks with you, and writes tasks into Manager. Manager is the system of record and fans changes out to native APIs. Manual entry in the UI is a fallback, not the main workflow.
-- **Gamification is the main feature.** Borrow heavily from gacha games: dailies, periodic events, seasons, battle passes, leveling, achievements, dedicated sections for different kinds of activities, and eventually social/group play. A skipped daily must replace itself, never stack. A deadline is its own mechanic, distinct from a `dueAt` timestamp or a reminder.
+- **Gamification is the main feature.** Borrow heavily from gacha games: dailies, periodic events, seasons, battle passes, leveling, achievements, dedicated sections for different kinds of activities, and eventually social/group play. A repeating series declares its own behavior: `replace` (dishes — a missed day must not stay open beside today) or `stack` (a journal — missed days stay, each on its own). A deadline is its own mechanic, distinct from the planned day and from a reminder. Introduction: [docs/introduction.md](docs/introduction.md). Build order: [docs/plan.md](docs/plan.md).
 - **Why this exists.** Existing task apps have no usable free tier, weak task-management mechanics (native Apple Reminders in particular), and almost no real integrations for agents and harnesses. Personal use comes first; shipping it as a product is a bonus.
 
 Only the foundation is built today (tasks, auth, clients, MCP, email reminders). The mechanics above are the next design/grooming target — describe them as planned, not shipped.
 
 ## Domain language
 
-Use these terms consistently in code, schema, docs and UI. The Convex schema currently implements `tasks` with `title`, `done` and optional `dueAt`; the rest is target vocabulary for upcoming work.
+Use these terms consistently in code, schema, docs and UI. The Convex schema currently implements `tasks` with `title`, `done` and optional `dueAt`; the rest is target vocabulary from [docs/plan.md](docs/plan.md), not shipped behavior.
 
 | Term | Meaning |
 |---|---|
-| task | Atomic unit of work. Stored as a row in `tasks`; agents create and complete these via MCP. |
-| daily | Recurring task that refreshes in place. Skipping a day replaces it instead of piling up a backlog. |
-| deadline | A first-class commitment with its own rules. Not interchangeable with `dueAt` (a date) or `remindAt` (a notification time). |
-| event | Time-boxed periodic content, like a gacha event. |
-| season | Themed period with its own tasks and progression. |
-| battle pass / level / achievement | Progression and reward tracks that make follow-through feel like a game. |
-| group / sharing | Shared tasks and social mechanics, planned. |
+| task | Atomic unit of work. The only thing that can be completed. Create, edit, mark done, soft-delete. |
+| recurrence | A series that mints tasks. `behavior` is `replace` or `stack`, chosen per series, never implied by "daily". |
+| replace | One open occurrence. A missed period is `superseded` and leaves the open board. Dishes. |
+| stack | One open occurrence per period. Missed periods stay open. A journal. |
+| planned day | When you intend to act. Usually a civil day with no clock time. Today's `dueAt` is this, not a deadline. |
+| deadline | The instant an overdue policy runs: `retire` (the chance ended) or `escalate` (it stays, louder). Not trash. |
+| event | A span with a start and an end. A day, a week, a month, a quarter, a year, or a named run. One table. |
+| season | An event with a theme. Usually long. Length is not checked. |
+| limited | Not a type. An end plus `retire`. UI copy may say "limited task". |
+| progression | A known-size track: N steps, or a meter such as pages. |
+| quest | A chain of tasks. Steps may be known up front or appended when the current step ends. |
+| category | A slice of life. Household, health, work, and whatever the user adds. |
+| space | People plus the entities attached to it. Attach and detach. Not a required parent. Has a Lucide icon and a color. |
+| view | A left-rail slice. Home, an installed template, a computed query (New, high priority, today), or a custom list. Not a shared space. |
+| alert | A note from an agent or another person. No checkbox and no done state. Reading it clears it from the band. |
+| question | A prompt with options. Answering can create the next task. Not a task itself. |
+| pin | A sort override on a view. Does not change priority or date. Include and exclude are membership overrides on a computed view. |
+| appearance | `icon` is a Lucide name. `color` is a palette token. Both are strings. Unknown values fall back. Used on views, events, categories, and spaces. |
+| presentation pack | A client skin addressed by an id, on top of icon and color. The core does not branch on it. |
+| achievement | Later. A query over completions, tracks, and quests. |
 
 ## Public entry points
 
@@ -62,7 +75,7 @@ From the repo root:
 - `pnpm apple:test` — Swift tests for the Apple client's pure logic (no Xcode needed).
 - `pnpm apple:build:mac`, `pnpm apple:build:ios` — Apple Silicon builds; `apple:package` applies a valid ad-hoc signature before publishing.
 - `pnpm apple:package` — zip the built macOS and iOS Simulator apps into `artifacts/apple/`.
-- Android (from `apps/android`, standalone Gradle): `./gradlew test`, `./gradlew assembleDebug bundleRelease`. Set `JAVA_HOME` to Android Studio's JBR on macOS; config comes from gitignored `local.properties` or `MANAGER_CONVEX_URL` / `MANAGER_CLERK_PUBLISHABLE_KEY`.
+- `pnpm android:test`, `pnpm android:build`, `pnpm android:install` — run the standalone Gradle build in `apps/android` with Android Studio's JDK and SDK found automatically. Gitignored `apps/android/local.properties` holds public config; Android Studio opens `apps/android` directly.
 - `scripts/package-android-artifacts.sh` — copy the debug APK and release AAB into `artifacts/android` as `Manager-Android-<version>.*`.
 - `pnpm check:functions` — assert the Convex deployment has every function the clients call.
 

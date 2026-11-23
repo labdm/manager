@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Big Pickle — Manager plan</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: var(--font-sans); color: var(--foreground); line-height: 1.45; font-size: 15px; }
+  .page { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+  h1 { font-size: 28px; line-height: 1.12; margin: 0 0 6px; letter-spacing: -0.03em; }
+  h2 { font-size: 15px; margin: 0 0 8px; }
+  h3 { font-size: 13px; margin: 12px 0 4px; color: var(--muted-foreground); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  p { margin: 0 0 8px; }
+  p:last-child { margin-bottom: 0; }
+  .kicker { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-foreground); }
+  .dot { width: 8px; height: 8px; border-radius: 99px; background: var(--chart-3); display: inline-block; }
+  .card { background: var(--card); color: var(--card-foreground); border-radius: var(--radius); padding: 16px; }
+  .lede { font-size: 16px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  ul, ol { margin: 0; padding-left: 18px; }
+  li { margin: 3px 0; }
+  code { font-family: var(--font-mono); font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; vertical-align: top; padding: 6px 8px 6px 0; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted-foreground); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .chip { display: inline-block; margin: 2px 4px 2px 0; padding: 2px 8px; border-radius: 99px; background: var(--secondary); color: var(--secondary-foreground); font-size: 12px; }
+  .ms { display: grid; grid-template-columns: 42px 1fr; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .ms:last-child { border-bottom: 0; padding-bottom: 0; }
+  .n { font-family: var(--font-mono); color: var(--chart-3); font-size: 13px; padding-top: 2px; }
+  .stance { background: var(--warning-surface); color: var(--warning-foreground); border-radius: var(--radius); padding: 16px; }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } h1 { font-size: 24px; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="kicker"><span class="dot"></span> Council draft · Big Pickle · not the agreed plan</div>
+    <h1>Seeds as rows, replace as one rolling card</h1>
+    <p class="lede">The test for every feature: an agent says it once over MCP, and every screen agrees. Built-ins are cloned per user. Experiments do not need a migration.</p>
+  </header>
+
+  <section class="card">
+    <h2>Introduction</h2>
+    <p>Manager stops being a checkbox list and becomes the record of a life that has shape. A task can carry a date, a time, a place, a schedule, a priority, a deadline, a counter, and links into events, seasons, quests, categories, and spaces.</p>
+    <p>The agent connects at <code>https://manager.labdm.dev/mcp</code>, calls <code>whoami</code>, and writes Convex. The SPA, Tauri, Apple, and Android read the same functions. Manual entry stays the fallback. Meaning lives only in the Convex service. No public REST.</p>
+    <p>“Dailies never stack” is the wrong universal. A <strong>series</strong> declares <strong>behavior</strong>. <code>replace</code> keeps one live undone instance and, at rollover, patches that same instance onto the new period. Yesterday’s dish cannot be washed, and it does not remain as a second card. Completed history still counts. <code>stack</code> mints a new occurrence per period. Missed journal days stay completable. The UI may suggest which behavior fits. It cannot forbid the other.</p>
+    <p>A planned date is when you will do it. A deadline is when it stops counting. A reminder is when you are told. Taxes escalate. A promo retires. “Limited window” is internal. A plain pack says “closes Friday”. Season length, single attachment, and known-ahead quests are defaults, not schema bans.</p>
+  </section>
+
+  <section class="stance">
+    <h2>Three positions</h2>
+    <ul>
+      <li>Soft delete is absolute. Detach, leave, and expire are tombstones too. A purge job is horizon.</li>
+      <li>Sharing is a space. Private rows keep <code>ownerId</code>. Membership grants access to what was attached. Not a per-task ACL soup, and not “everything must already live in a space”.</li>
+      <li>Slugs are strings. <code>replace</code> and <code>stack</code> ship in a registry. A new behavior is a registry entry plus a seed, not a Convex union migration.</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>Vocabulary</h2>
+    <table>
+      <thead><tr><th>Loose word</th><th>Term</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>Period with from and to</td><td><code>window</code></td><td>A span. A single date is a window whose ends match at date granularity.</td></tr>
+        <tr><td>Event</td><td><code>event</code></td><td>A named happening with a primary window. Cadence is a seed string, including limited.</td></tr>
+        <tr><td>Daily / weekly</td><td>series rule</td><td>Not an event kind. An event may point at a series.</td></tr>
+        <tr><td>Season</td><td><code>season</code></td><td>Its own table. Optional window. No minimum length.</td></tr>
+        <tr><td>Schedule</td><td><code>series</code></td><td>Rule, behavior, anchor, occurrence state.</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:10px">Task fields keep <code>dueAt</code> as the planned instant (wire float, unchanged for current clients). <code>allDay</code> defaults true. <code>deadlineAt</code> and <code>remindAt</code> sit beside it. Also <code>location</code>, <code>priority</code> string, optional <code>priorityRank</code>, <code>overduePolicy</code>, <code>seriesId</code>, <code>occurrenceKey</code>, <code>presentationId</code>, <code>deletedAt</code>.</p>
+    <p>Other tables: <code>windows</code>, <code>events</code>, <code>seasons</code>, <code>categories</code>, <code>series</code>, <code>progressions</code>, <code>quests</code> with steps embedded in the document, <code>spaces</code>, <code>space_members</code>, <code>space_entities</code>, <code>links</code> (<code>isPrimary</code> is only a flag), <code>presentation_packs</code>, <code>overdue_policies</code>. Seeds are cloned per user so Household can be renamed.</p>
+    <p><strong>Replace invariant:</strong> at most one live undone occurrence; rollover patches it forward. <strong>Stack invariant:</strong> <code>(seriesId, occurrenceKey)</code> unique among live rows. Many links may be primary. The core will not throw.</p>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Prebuilt catalog</h2>
+      <div>
+        <span class="chip">household</span><span class="chip">health</span><span class="chip">relationship</span><span class="chip">work</span><span class="chip">project</span><span class="chip">finance</span>
+      </div>
+      <h3>Cadence slugs</h3>
+      <p><code>single</code>, <code>named</code>, <code>day</code>, <code>week</code>, <code>month</code>, <code>quarter</code>, <code>year</code>, <code>daily</code>, <code>weekly</code>, <code>monthly</code>, <code>custom</code>, <code>limited</code>. Window words and recurrence words are both seeds. <code>limited</code> marks a deadline-driven event.</p>
+      <h3>Behaviors and policies</h3>
+      <p>Replace: dishes, today’s meds. Stack: journal, water, pages. Policies: retire (promo), escalate (taxes, rent, passport). Priority: low / normal / high / urgent at ranks 0 / 10 / 20 / 30. Custom strings may bring their own rank.</p>
+      <h3>Starters</h3>
+      <ul>
+        <li>Progressions: move 30 days, read a book in pages, journal streak</li>
+        <li>Quests: broken-window (emergent), morning-launch (known), tax-season (known)</li>
+        <li>Seasons: winter, tax-season, project-sprint</li>
+        <li>Limited: christmas-market weekend, mcdonalds promo (retire), taxes (escalate)</li>
+        <li>Packs: plain, gacha-night, gacha-winter, focus. Tokens and copy only. A pack cannot add a validation rule.</li>
+      </ul>
+    </section>
+    <section class="card">
+      <h2>Worlds × slices</h2>
+      <p><strong>Default.</strong> Vertical worlds: Today, each category, Quests, Seasons, Spaces, Progress. Horizontal strip inside a world: Daily, Weekly, This event, Limited, Done, All. Any pair is legal. <code>board:slice</code> takes <code>{ vertical, horizontal }</code> and returns tasks, bars, and quest panels. No whitelist.</p>
+      <p>Dense worlds (Today, Seasons) draw cards. Scan worlds (Household, Weekly) draw rows. A bar is a card in Progress and a row inside Health. Quests get their own world: locked, available, done. An emergent next step reads “next step unlocks when this is done”.</p>
+      <p><strong>Calendar-first.</strong> Windows vertical, categories horizontal. Same query, axes swapped. Deadlines are end caps.</p>
+      <p><strong>Campaign map.</strong> Seasons and quests vertical, acts horizontal. Bars across the top. Limited windows are timed gates. This is what <code>gacha-night</code> would ship as its default layout hint.</p>
+      <p>Unknown pack ids fall back to <code>plain</code>. Layout hints travel in the pack row, not in a schema fork.</p>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>User flows</h2>
+    <ol>
+      <li><strong>Dishes.</strong> Daily series, behavior replace. At midnight the undone instance is patched onto tomorrow. One card. Done history still feeds a household progression.</li>
+      <li><strong>Journal.</strong> Daily series, behavior stack. Wednesday shows Monday, Tuesday, and Wednesday. No core cap. A pack may collapse old rows.</li>
+      <li><strong>Taxes.</strong> <code>dueAt</code> is a quiet work block. <code>deadlineAt</code> is 30 Nov. Policy escalate, priority high. After the deadline, priority becomes urgent and the task moves to the top of Today.</li>
+      <li><strong>Burger.</strong> Limited window, policy retire. Monday it is soft-deleted out of slices, shown once under Expired, and can be restored. The row remains.</li>
+      <li><strong>Broken window.</strong> Quest reveal mode emergent. Step 1 is “call the landlord”. Later step titles start undefined. On complete, the agent writes “go to the mall”, or money, or a repairer. A known checklist shows every step up front.</li>
+      <li><strong>Book.</strong> Metric pages, target 320. +18 moves the bar to the new current. It is a row in Project and a card in Progress. A 30-day exercise series increments from completed instances.</li>
+      <li><strong>Flat 4.</strong> Attach the household category, the dishes series, and winter. The partner checks off dishes. Ownership stays with the creator. Detach drops visibility and does not delete.</li>
+      <li><strong>Market mail.</strong> <code>create_window</code> for 20–22 Nov, <code>create_event</code> “Christmas market”, a task, a Winter season, a 5-day snow-walk progression. The user sees Winter × This event without a refresh.</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>Technical plan</h2>
+    <p>Service modules split by entity. One schema, one auth gate. Every list uses a <code>by_owner_deleted</code> index with <code>deletedAt === undefined</code>. <code>taskView</code> keeps today’s <code>id</code>, <code>title</code>, <code>done</code>, <code>dueAt</code>, <code>ownerId</code> and adds defaults: all-day, priority normal, policy none. <code>remove</code> patches <code>deletedAt</code>. Add <code>restore</code>. Links and memberships are soft-deleted too.</p>
+    <p><code>seriesService.materialize</code> is idempotent. Replace patches the live undone row or inserts a fresh one if it was done. Stack inserts one row per elapsed period. Overdue in milestone 1 is derived on read (<code>effectivePriority</code>, <code>isExpired</code>). A scheduled handler that applies retire or escalate waits until milestone 2.</p>
+    <p>MCP tools, all thin: existing task tools plus <code>update_task</code> and <code>restore_task</code>; window, event, season, and series CRUD; <code>record_progress</code>; <code>complete_quest_step</code> and <code>reveal_quest_step</code>; categories and packs; space invite and attach; <code>attach</code> / <code>detach</code>; <code>board_slice</code>. Rebuild <code>api/</code> with <code>pnpm build:api</code>.</p>
+    <p>Native clients ignore unknown keys. No client computes overdue, recurrence, or access. Migration is additive fields first, then the delete flip, then seed backfill on next signed-in query. <code>dueAt</code> needs no conversion.</p>
+    <p><strong>Schema sequence:</strong> M1 tasks + categories + links + series, no seasons. M2 windows, events, seasons, packs, policies. M3 progressions and quests. M4 spaces. M5 pack content only, no new core tables.</p>
+  </section>
+
+  <section class="card">
+    <h2>Milestones</h2>
+    <div class="ms"><div class="n">M0</div><div><strong>Vocabulary and harness notes</strong> for Grok Bot, Codex, Claude, and Antigravity, including an email-to-entities transcript. No code. Agents are the authors. Write the contract before three clients teach three dialects.</div></div>
+    <div class="ms"><div class="n">M1</div><div><strong>Rich task.</strong> Soft delete, categories, links, replace/stack, web/desktop card and row, a minimal category × daily/weekly slice. Derived overdue, no scheduler. Out: windows, seasons, quests, sharing, deep native UI.</div></div>
+    <div class="ms"><div class="n">M2</div><div><strong>Time and the full board.</strong> Windows, events, limited windows, deadlines, retire/escalate scheduler, seasons, plain and gacha-night packs.</div></div>
+    <div class="ms"><div class="n">M3</div><div><strong>Quest world and bars.</strong> Emergent and known steps. Out: sharing.</div></div>
+    <div class="ms"><div class="n">M4</div><div><strong>Spaces.</strong> One membership gate now that the nouns have stopped moving.</div></div>
+    <div class="ms"><div class="n">M5</div><div><strong>Packs on all four clients.</strong> focus and gacha-winter. No core changes.</div></div>
+    <p style="margin-top:10px"><strong>Horizon.</strong> Achievements, social play, paid hosted inference, direct mail. Pulling any of those into M1–M5 voids the sequence. Rewrite it. Do not stretch it.</p>
+  </section>
+
+  <section class="card">
+    <h2>Arguments this draft wants</h2>
+    <ul>
+      <li>Rolling replace loses “I skipped Tuesday”. That is intentional. Done history remains. An audit of skips is the counter-proposal.</li>
+      <li>Can a space member edit anything shared, or only what they created? Lean yes for household tasks, no for season definitions.</li>
+      <li>If the council wants “event” to mean every cadence, rename the named-happening entity before MCP ships.</li>
+      <li>String slugs make typos runtime errors. Unions make every experiment a migration. This draft picks strings.</li>
+      <li>Stack backfill after a month away can flood an ADHD board. Cap it in the pack.</li>
+      <li><code>create_task</code> docs must say <code>dueAt</code> is the plan, <code>deadlineAt</code> is the last valid moment, <code>remindAt</code> is the ping.</li>
+      <li>A pack id unknown to Apple is the most likely cross-platform bug. One slug list, copied into each client.</li>
+    </ul>
+  </section>
+</div>
+</body>
+</html>

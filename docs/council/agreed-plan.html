@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agreed Manager plan</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: var(--font-sans); color: var(--foreground); line-height: 1.45; font-size: 15px; }
+  .page { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+  h1 { font-size: 28px; line-height: 1.12; margin: 0 0 6px; letter-spacing: -0.03em; }
+  h2 { font-size: 15px; margin: 0 0 8px; }
+  h3 { font-size: 13px; margin: 12px 0 4px; color: var(--muted-foreground); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  p { margin: 0 0 8px; }
+  p:last-child { margin-bottom: 0; }
+  .kicker { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-foreground); }
+  .dot { width: 8px; height: 8px; border-radius: 99px; background: var(--primary); display: inline-block; }
+  .card { background: var(--card); color: var(--card-foreground); border-radius: var(--radius); padding: 16px; }
+  .lede { font-size: 16px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  ul, ol { margin: 0; padding-left: 18px; }
+  li { margin: 3px 0; }
+  code { font-family: var(--font-mono); font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; vertical-align: top; padding: 6px 8px 6px 0; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted-foreground); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .chip { display: inline-block; margin: 2px 4px 2px 0; padding: 2px 8px; border-radius: 99px; background: var(--secondary); color: var(--secondary-foreground); font-size: 12px; }
+  .ms { display: grid; grid-template-columns: 42px 1fr; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .ms:last-child { border-bottom: 0; padding-bottom: 0; }
+  .n { font-family: var(--font-mono); color: var(--primary); font-size: 13px; padding-top: 2px; }
+  .yes { color: var(--success); font-weight: 600; }
+  .no { color: var(--destructive); font-weight: 600; }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } h1 { font-size: 24px; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="kicker"><span class="dot"></span> Council agreement · Grok 4.7 · Gemini 3.8 · Big Pickle</div>
+    <h1>One task, two machines, one span</h1>
+    <p class="lede">The open board shows what you can still do. History keeps what already happened. Trash is a third thing. The screen is a query over links, and a skin never becomes a schema.</p>
+  </header>
+
+  <section class="card">
+    <h2>What we locked</h2>
+    <table>
+      <thead><tr><th>Call</th><th>Rule</th></tr></thead>
+      <tbody>
+        <tr><td class="yes">Keep</td><td>Soft delete only. <code>delete_task</code> keeps its name and sets <code>deletedAt</code>.</td></tr>
+        <tr><td class="yes">Keep</td><td><code>dueAt</code> stays the planned day. <code>deadlineAt</code> is new and opt-in. <code>plannedTime</code> is minutes from midnight. <code>remindAt</code> is stored and not inferred.</td></tr>
+        <tr><td class="yes">Keep</td><td><code>replace</code> supersedes yesterday’s open row and mints today. <code>stack</code> leaves each day open. Behavior is required. No default.</td></tr>
+        <tr><td class="yes">Keep</td><td>Retire sets <code>outcome: missed</code>. Replace sets <code>outcome: superseded</code>. <code>done</code> stays the completion bit. Outcome is never <code>open</code> or <code>done</code>.</td></tr>
+        <tr><td class="yes">Keep</td><td>One <code>events</code> table. Kind is a string: day, week, month, quarter, year, custom, or anything else. Season and limited are roles, not tables.</td></tr>
+        <tr><td class="yes">Keep</td><td>Quest steps are rows pointing at tasks. No next step means the quest is waiting.</td></tr>
+        <tr><td class="yes">Keep</td><td>Priority is a string plus a rank. Seeds: low 0, normal 10, high 20, urgent 30. Escalate adds 10, cap 30.</td></tr>
+        <tr><td class="yes">Keep</td><td>Attachments are many. <code>primary</code> is a hint. Spaces are attached later. Visibility is one hop.</td></tr>
+        <tr><td class="yes">Keep</td><td>Packs and overdue handlers are code plus an id. Convex does not store a theme engine.</td></tr>
+        <tr><td class="no">Drop</td><td>A required space on every row. <code>dueAt</code> as a deadline. Retire-as-trash. Three span tables. Embedded quest steps. Closed priority enums. A renamed delete tool.</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:10px">The one dissent we overruled: Pickle would patch the dish forward so a skipped day leaves no row. Gemini switched to a new row. We mint the row and hide it. The open board still shows one dish. A 12-day track can count real days. If that history ever becomes the default view, the product has failed.</p>
+    <p>The name <code>events</code> beat <code>spans</code>. Agents already say event. Tabs for rhythms say Today and This week, not Event.</p>
+  </section>
+
+  <section class="card">
+    <h2>Introduction</h2>
+    <p>Manager is the board an agent writes, and a game-shaped way to look at it. The agent reads mail and chat, talks with you, and writes the system of record over MCP. Later the same rows fan out to push, calendar, reminders, and alarms. You can still type a task.</p>
+    <p>A missed day must not mean the same thing for every daily. Dishes replace: Tuesday does not also contain Monday. A journal stacks: Monday’s page is still there on Wednesday. Replace forgets nothing that a progression needs. It only clears the open board.</p>
+    <p>An event is any stretch with a start and an end, including a season. Limited is “this chance ends”, not a gacha banner. The banner can say limited task, or whatever the skin prefers. A progression is a size you know: pages, or N sessions. A quest is a chain. Call the landlord first. The next task is born when the call ends, unless you already wrote the whole path, which is allowed. A space is people. You hang entities on it and take them off. Hanging a task in two categories is legal. The UI may frown. The core will not.</p>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Catalog</h2>
+      <p>Seeds you can hide or rename. Not enums.</p>
+      <div>
+        <span class="chip">Household</span><span class="chip">Health</span><span class="chip">Body</span><span class="chip">Relationships</span><span class="chip">Work</span><span class="chip">Projects</span><span class="chip">Money</span><span class="chip">Admin</span><span class="chip">Learning</span><span class="chip">Social</span><span class="chip">Creative</span>
+      </div>
+      <h3>Events</h3>
+      <p>Day and week on by default. Month, quarter, year, and custom available. Seasons you enable: Winter, Tax season, Moving, a trip. Limited runs: a market weekend, a one-day menu (retire), a concert. Filing uses the same shape with escalate.</p>
+      <h3>Templates</h3>
+      <ul>
+        <li>Chore — replace, no deadline</li>
+        <li>Log — stack, no deadline</li>
+        <li>Practice — replace plus a step bar</li>
+        <li>Appointment — a clock time, no deadline</li>
+        <li>Commitment — deadline, escalate</li>
+        <li>Offer — event end, retire</li>
+      </ul>
+      <p>Quests: broken window (waiting after step 1), see a friend (three locked steps), move house (known, editable). Tracks: 12 sessions, a book in pages, a journal week fed by a stack.</p>
+    </section>
+    <section class="card">
+      <h2>Default board</h2>
+      <p>Categories down the side, Quests pinned under them. Today, This week, and each live season or run across the top. The cell is the tasks in both. Bars sit on top of the cell. A waiting quest stays on the Quests tab even with no date.</p>
+      <p>Swap axes with a layout document. December can put seasons down the side and categories across the top. A phone can use Today / This week / Waiting / Later, with categories as chips and the season as a banner. Same links.</p>
+      <p>Card or row is a hint, then the category’s hint, then “row if the list is long”. Winter is a <code>presentationId</code> and a client module. Apple and Android without the module still get the tokens. <code>taskService</code> does not mention Winter.</p>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Flows</h2>
+    <ol>
+      <li><strong>Dishes.</strong> Daily, replace, Household × Today. Skip Monday. Tuesday is one row. Monday is superseded, off the board, not in Trash.</li>
+      <li><strong>Journal.</strong> Daily, stack. Two skipped days mean three open rows. Finishing Monday leaves Tuesday.</li>
+      <li><strong>Taxes.</strong> Deadline 15 April, policy escalate, priority high, on Money and Tax season. The planned day is not the deadline. The morning after, it is still there at urgent.</li>
+      <li><strong>Burger.</strong> One-day event, policy retire. After close, outcome missed. Restore-from-trash does not apply. You did not delete it.</li>
+      <li><strong>Broken window.</strong> One step, call the landlord. Completing it shows waiting. The agent appends “buy glass” when you say what the landlord decided. Move-house pre-creates locked steps on the same tables.</li>
+      <li><strong>Book.</strong> Meter, 320 pages, log 20. Bar moves. Training is 12 steps fed by one replace card.</li>
+      <li><strong>Home.</strong> Invite an editor. Attach Household and the dishes series. They do not see Money. Detach hides, and does not delete.</li>
+      <li><strong>Mail.</strong> The skill forces a behavior argument, forbids copying a plan into a deadline, and allows retire only when the chance actually ends. The phone updates from Convex.</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>Technical shape</h2>
+    <p>Domain stays in Convex. MCP stays a forwarder. Web and desktop share <code>packages/ui</code>. Apple and Android call the same functions and keep their float decoders. No REST. No new backend.</p>
+    <p>M1 adds optional fields on <code>tasks</code> only: trash, notes, planned day, minutes, place, deadline, remind-at, priority, rank, overdue policy, outcome. Lists hide trash so old apps still work. Overdue is computed in the query until M2’s cron writes it. Do not index a missing <code>deletedAt</code>. M2 adds a real boolean <code>open</code> and indexes that, once superseded rows exist.</p>
+    <p>Later, in order: recurrences (occurrences are tasks), categories and events and attachments and a layout document, progressions, quests, spaces, then a Winter pack with no new table. Every list goes through <code>canRead</code> from M1, which only knows <code>ownerId</code> until spaces extend it. One attachment table. No parallel <code>primaryCategoryId</code>. <code>apply_plan</code> is one Convex mutation for a mail that should land as several rows, added when the single tools exist, and it does not replace them.</p>
+  </section>
+
+  <section class="card">
+    <h2>Milestones</h2>
+    <div class="ms"><div class="n">M1</div><div><strong>Task facts.</strong> Soft delete and the new clocks. A one-page harness note. Test that a legacy day does not become a deadline.</div></div>
+    <div class="ms"><div class="n">M2</div><div><strong>Replace and stack.</strong> One open dish after a miss. Three open journal rows. Idempotent mint. Cron writes missed and urgent.</div></div>
+    <div class="ms"><div class="n">M3</div><div><strong>The slice.</strong> Household × Today on web, desktop, Apple, and Android. Card and row. Many attachments.</div></div>
+    <div class="ms"><div class="n">M4</div><div><strong>Bars.</strong> Twelve sessions and a page count, inside the slice.</div></div>
+    <div class="ms"><div class="n">M5</div><div><strong>Quests.</strong> Waiting, and a known locked path. Quests on the rail.</div></div>
+    <div class="ms"><div class="n">M6</div><div><strong>Spaces.</strong> Share Household. A test that a season does not publish Money.</div></div>
+    <div class="ms"><div class="n">M7</div><div><strong>One custom skin.</strong> Month through year, Winter as a season role, one frame that the core does not know by name.</div></div>
+    <div class="ms"><div class="n">M8</div><div><strong>Seed installer.</strong> The notes already grew with each milestone. This only turns the catalog on for a new account.</div></div>
+    <p style="margin-top:10px">Horizon: achievements over the rows we already kept, social play beyond a space, paid inference, a mailbox, and native alarms driven by the time fields. None of that changes the task.</p>
+  </section>
+</div>
+</body>
+</html>

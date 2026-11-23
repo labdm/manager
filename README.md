@@ -20,7 +20,7 @@ agent → Manager → native APIs (push · calendar · reminders · alarms)
 
 An agent reads your email and context, talks with you, and writes tasks into Manager. Manager is the system of record: anything created or completed there shows up everywhere, and can fan out to native notifications, calendars, reminders and alarms. Manual entry in the UI stays available as a fallback.
 
-What makes it different is gamification, borrowed from gacha games: dailies that replace themselves when you skip a day instead of piling up, real deadlines, events, seasons, battle passes, levels, achievements, dedicated sections for different parts of life, and eventually groups and sharing. These mechanics are the design target; today's build is the foundation (tasks, auth, web/desktop/mobile clients, MCP, email reminders) with the game layer still to come.
+What makes it different is gamification, borrowed from gacha games. A repeating series chooses its behavior: dishes replace themselves so a missed day does not pile up, and a journal stacks so each missed day can still be written. Deadlines are separate from the day you plan to act. Events, seasons, progressions, quests, and shared spaces are the rest of the design, written up in [docs/introduction.md](docs/introduction.md) and [docs/plan.md](docs/plan.md). Today's build is the foundation (tasks, auth, web/desktop/mobile clients, MCP, email reminders). The game layer is not shipped yet.
 
 ## Use it with an agent (MCP)
 

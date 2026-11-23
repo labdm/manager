@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemini 3.8 — Manager plan</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: var(--font-sans); color: var(--foreground); line-height: 1.45; font-size: 15px; }
+  .page { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+  h1 { font-size: 28px; line-height: 1.12; margin: 0 0 6px; letter-spacing: -0.03em; }
+  h2 { font-size: 15px; margin: 0 0 8px; }
+  h3 { font-size: 13px; margin: 12px 0 4px; color: var(--muted-foreground); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  p { margin: 0 0 8px; }
+  p:last-child { margin-bottom: 0; }
+  .kicker { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-foreground); }
+  .dot { width: 8px; height: 8px; border-radius: 99px; background: var(--chart-2); display: inline-block; }
+  .card { background: var(--card); color: var(--card-foreground); border-radius: var(--radius); padding: 16px; }
+  .lede { font-size: 16px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  ul, ol { margin: 0; padding-left: 18px; }
+  li { margin: 3px 0; }
+  code { font-family: var(--font-mono); font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; vertical-align: top; padding: 6px 8px 6px 0; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted-foreground); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .chip { display: inline-block; margin: 2px 4px 2px 0; padding: 2px 8px; border-radius: 99px; background: var(--secondary); color: var(--secondary-foreground); font-size: 12px; }
+  .ms { display: grid; grid-template-columns: 42px 1fr; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .ms:last-child { border-bottom: 0; padding-bottom: 0; }
+  .n { font-family: var(--font-mono); color: var(--chart-2); font-size: 13px; padding-top: 2px; }
+  .board { font-family: var(--font-mono); font-size: 11px; line-height: 1.35; background: var(--code-background); border-radius: var(--radius); padding: 12px; white-space: pre; overflow-x: auto; }
+  .stance { background: var(--accent-surface); color: var(--accent-foreground); border-radius: var(--radius); padding: 16px; }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } h1 { font-size: 24px; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="kicker"><span class="dot"></span> Council draft · Gemini 3.8 Flash · not the agreed plan</div>
+    <h1>A matrix HUD, and a personal space under every row</h1>
+    <p class="lede">Todo apps are shame engines. Manager borrows the gacha loop: bounded slices, a reset that does not create debt, and an agent as the external prefrontal cortex.</p>
+  </header>
+
+  <section class="card">
+    <h2>Introduction</h2>
+    <p>A conventional list turns yesterday into a wall of red badges. The ADHD failure mode is abandonment, not laziness. Live-service games already know the fix: dailies, weeklies, seasons, and tracks that pay off inside a bounded slice. Missing a day must not become an unpayable debt.</p>
+    <p>The early absolute rule “dailies never stack” is wrong. Dishes refresh in place, because you cannot wash yesterday’s dishes. A journal or a medication log must keep the missed day. Each series stores <code>replace</code> or <code>stack</code>.</p>
+    <p>The loop is agent, then Manager, then native push, calendar, reminders, and alarms. People should not triage mail into a spreadsheet. They open a HUD, clear a slice, and get the ping. The manual UI is the steering wheel.</p>
+  </section>
+
+  <section class="stance">
+    <h2>Positions this draft will not soften</h2>
+    <ul>
+      <li>Every task, category, event, progression, and quest belongs to exactly one space. A personal space is created on first sign-in. Sharing means another space, not a side ACL.</li>
+      <li><code>dueAt</code> is the hard deadline. <code>plannedDate</code> is the civil day. <code>plannedTime</code> is optional minutes from midnight.</li>
+      <li>Two span kinds: <code>timeWindows</code> (Today, this week, Q4) and <code>events</code> (Winter, a tax sprint, a trip). A season is an event with a longer window and a presentation id. Length is not checked.</li>
+      <li>Retire removes the row from active views by setting <code>deletedAt</code>, or an expired archive. No red badge.</li>
+      <li>Priority is a closed number: 0 critical, 1 high, 2 normal, 3 low. Packs may paint those as SSR, SR, R, and common. The number stays in the core.</li>
+      <li>Overdue has three policies: <code>retire</code>, <code>escalate</code>, and <code>carry_forward</code>.</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>Domain</h2>
+    <p>Soft delete is universal: mutations patch <code>deletedAt</code>, live queries filter it, restore clears it. No <code>ctx.db.delete()</code>. Multi-attach is a <code>taskAttachments</code> junction (<code>category</code>, <code>event</code>, <code>timeWindow</code>) plus denormalized <code>primaryCategoryId</code> and <code>primaryEventId</code> on the task for fast slices. The core accepts more than one attachment. The UI prefers one home.</p>
+    <table>
+      <thead><tr><th>Record</th><th>Job</th><th>Notable fields</th></tr></thead>
+      <tbody>
+        <tr><td><code>spaces</code>, <code>spaceMembers</code></td><td>Tenancy and sharing</td><td><code>isPersonal</code>, roles owner / admin / member</td></tr>
+        <tr><td><code>tasks</code></td><td>The atom</td><td><code>plannedDate</code>, <code>plannedTime</code>, <code>dueAt</code> as deadline, <code>priority</code> 0–3, location object, <code>overduePolicy</code></td></tr>
+        <tr><td><code>recurrenceSeries</code></td><td>Minting rule</td><td><code>behavior</code> union replace | stack, cadence JSON, template task</td></tr>
+        <tr><td><code>timeWindows</code></td><td>Calendar buckets</td><td>cadence daily through yearly, plus custom</td></tr>
+        <tr><td><code>events</code></td><td>Campaigns</td><td>type season | limited_event | campaign | custom, <code>presentationId</code></td></tr>
+        <tr><td><code>progressions</code></td><td>Known-size meter</td><td><code>currentValue</code>, <code>targetValue</code>, <code>unit</code>, optional reset cadence</td></tr>
+        <tr><td><code>quests</code>, <code>questSteps</code></td><td>Chains of tasks</td><td><code>isEmergent</code>, step <code>isDiscovered</code>, status locked / available / completed</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:10px">Replace keeps a single pending task and moves its window forward. Stack leaves each missed day alive. Quest steps point at real tasks. The backend unlocks the next discovered step. It does not interpret a landlord’s sentence. The agent appends the continuation over MCP. A known relocation checklist is the same tables, prefilled.</p>
+    <p>Rollover is lazy on read for the active space, plus a reconciliation cron about every six hours so a push can fire even if the app stays closed.</p>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Prebuilt catalog</h2>
+      <p>Seed rows, not TypeScript unions that reject a new name.</p>
+      <div>
+        <span class="chip">Household</span><span class="chip">Health</span><span class="chip">Relationships</span><span class="chip">Work</span><span class="chip">Growth</span><span class="chip">Finances</span>
+      </div>
+      <h3>Windows</h3>
+      <p>Daily (local midnight to midnight), weekly from Monday, monthly, quarterly, yearly, custom.</p>
+      <h3>Seasons and limited runs</h3>
+      <ul>
+        <li>Winter Solstice &amp; Frostbloom, 1 Dec–28 Feb, pack <code>season-winter-frost</code></li>
+        <li>Spring Awakening, 1 Mar–30 Apr</li>
+        <li>Q1 Financial Fortress, 90 days</li>
+        <li>Tax Filing Sprint 2026, ends 15 Apr, escalate</li>
+        <li>Seasonal delicacy, 7 days, retire</li>
+      </ul>
+      <h3>Behaviors</h3>
+      <p>Replace: dishes, trash, a daily tidy. Stack: journal, medication, study log, receipts. Priorities P0–P3. Starter quests: Repair the Broken Window (step 2 hidden), Apartment Relocation Protocol (four known steps). Starter tracks: Dune, 688 pages; 100 days of movement.</p>
+    </section>
+    <section class="card">
+      <h2>Matrix slicer</h2>
+      <div class="board">Space · Energy · Season: Winter
+─────────────────────────────
+Home     Today | Week | Limited | Tracks
+House →  Wash dishes          [card]
+Health    Vitamins            [card]
+Work      Recycling           [row]
+Growth
+Finance  ── bar: Winter declutter 35%
+QUESTS
+SEASONS  ── Broken window · step 1</div>
+      <p style="margin-top:8px">Vertical rail: categories, then Quests, then Seasons. Horizontal bar: Today, This week, Limited, Tracks. The cell is the slice. Cards and rows toggle per slice. Bars are cards or a pin along the top.</p>
+      <p><strong>Command deck.</strong> A time scrubber on top, categories in a drawer, timed tasks beside untimed ones. <strong>Campaign map.</strong> Quests down the side, places across the top, tasks as nodes. Daily commissions sit in a corner.</p>
+      <p>A pack is a client bundle: tokens, icons, optional chimes and particles. Convex stores only <code>presentationId</code> (<code>gacha-cyberpunk</code>, <code>nordic-minimal</code>). Unknown ids use <code>default-clean</code>. Open debate: which pack is the default for a new account.</p>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>User flows</h2>
+    <ol>
+      <li><strong>Dishes, replace.</strong> Tuesday night you skip them. Wednesday’s rollover moves that one task onto Wednesday. One row. No overdue badge. You do not mark Tuesday done.</li>
+      <li><strong>Journal, stack.</strong> Two missed days stay. Thursday shows Tuesday, Wednesday, and today. You can backfill.</li>
+      <li><strong>Taxes, escalate.</strong> The agent sets <code>dueAt</code> to 15 Apr 23:59, priority 1. On 16 Apr the sweeper sets priority 0, pins the HUD, and the agent offers to help.</li>
+      <li><strong>Holiday pie, retire.</strong> A 7-day limited event. On 25 Dec the task’s <code>deletedAt</code> is set. Christmas morning it is gone. No red mark.</li>
+      <li><strong>Broken window.</strong> Emergent quest, only “call the landlord” is discovered. You complete it and note what they said. The agent appends “get two quotes” and “deduct the invoice from rent”. A chime plays. Step 2 lights up.</li>
+      <li><strong>Dune.</strong> Target 688 pages. A daily “read 20 pages” logs +30. The bar hits 25% and a waypoint fires.</li>
+      <li><strong>Apartment 4B.</strong> Invite a partner as member. Attach Household, the window quest, and the grocery series. Their Android check-off lands on your Mac. Personal spaces stay private.</li>
+      <li><strong>Tokyo mail.</strong> One agent pass calls <code>create_event</code>, <code>create_quest</code>, <code>add_quest_step</code>, and <code>create_task</code> for the flight. The event banner and the quest are already there when you open the app.</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>Technical plan</h2>
+    <p>Schema grows in <code>packages/backend/convex/schema.ts</code>. New task fields are optional so current <code>tasks:list</code> subscribers keep working. Indexes proposed: <code>by_owner_deleted</code>, <code>by_space_deleted</code>, <code>by_space_category</code>, <code>by_series</code>. Queries use <code>deletedAt === undefined</code> on those indexes.</p>
+    <p>Migration: add optional fields; auto-provision a Personal space on <code>requireUser</code>; backfill <code>spaceId</code>; then change <code>deleteTask</code> from <code>db.delete</code> to a tombstone.</p>
+    <p>MCP stays thin over the existing HMAC proof. Tools: the current task set plus <code>update_task</code> and <code>soft_delete_task</code>; spaces; categories; events; <code>create_recurrence_series</code>; progressions; <code>create_quest</code>, <code>add_quest_step</code>, <code>advance_quest</code>; and <code>batch_sync_plan</code> so an email can become an event, a quest, and tasks in one transaction. Clients do not compute rollover, percent, or access. Apple decodes floats with <code>@OptionalConvexFloat</code>. Android uses <code>Float64</code>.</p>
+    <p>Milestone 3’s matrix ships on web and desktop first in this draft, with native filtering called out in the same milestone rather than as a separate product.</p>
+  </section>
+
+  <section class="card">
+    <h2>Milestones</h2>
+    <div class="ms"><div class="n">M1</div><div><strong>Soft delete, task meta, spaces baseline.</strong> <code>deletedAt</code>, priority, notes, planned date and time, location. Personal space auto-provision. Priority badges on web, Apple, and Android. Out: quests, progressions, seasons, recurrence generation.</div></div>
+    <div class="ms"><div class="n">M2</div><div><strong>Replace versus stack, and overdue.</strong> Daily/weekly rollover cron. Retire archives. Escalate bumps to P0. Out: quests, packs.</div></div>
+    <div class="ms"><div class="n">M3</div><div><strong>Matrix.</strong> Categories, events, time windows, seed catalog, vertical × horizontal shell, card/row toggle, attachment junction. Native filters included.</div></div>
+    <div class="ms"><div class="n">M4</div><div><strong>Bars and quests.</strong> Dedicated Quests tab. Emergent reveal. Out: custom packs and multi-user UI.</div></div>
+    <div class="ms"><div class="n">M5</div><div><strong>Real sharing and batch ingest.</strong> Invites, roles, <code>batch_sync_plan</code>, <code>presentationId</code> styling. Out: hosted inference and mail parsing.</div></div>
+    <p style="margin-top:10px"><strong>Horizon.</strong> Achievement layers. Shared party bars. Hosted workers. An inbound address at <code>user@inbound.manager.labdm.dev</code>.</p>
+  </section>
+
+  <section class="card">
+    <h2>Debates this draft leaves open</h2>
+    <ul>
+      <li>Junction table plus denormalized primary ids: worth the sync risk, or too clever for a life-sized list?</li>
+      <li>Lazy rollover versus a cron that must run so notifications fire for a closed app.</li>
+      <li>Is creating a space too heavy for sharing one grocery list?</li>
+      <li>Default skin: gacha cyberpunk or nordic minimal?</li>
+      <li>Should a multiple-choice quest branch work with no agent connected?</li>
+    </ul>
+  </section>
+</div>
+</body>
+</html>
