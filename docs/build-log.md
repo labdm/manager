@@ -37,4 +37,6 @@ Antigravity Gemini hit its individual quota on 2026-11-24 and does not reset for
 
 MiMo died on the shared free OpenCode pool, the same limit that stopped DeepSeek, and it wrote nothing. The UI slice moves to Big Pickle, which has its own limit. The smaller free models stay on the Apple and Android reviews until that shared pool stops them too.
 
+Every agent pushes as the same GitHub user, so GitHub will not accept an approving review on these pull requests. A review comment from a different model, plus green CI for the touched platform, is the merge gate. Apple M1 merged that way from pull request 8 on 2026-11-24.
+
 The first Android attempt on free OpenCode DeepSeek wrote nothing. A Cursor retry started the Android edits and was stopped so it would not keep spending Cursor tokens. Big Pickle finishes that slice from those files. The Cursor UI attempt wrote nothing and was stopped. The UI slice moves to Antigravity Gemini.
