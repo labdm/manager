@@ -28,6 +28,13 @@ const KNOWN_TOOL_ERRORS = [
   "Task not found",
   "Title is required",
   "Invalid dueAt",
+  "Invalid plannedOn",
+  "Invalid plannedTime",
+  "Invalid deadlineAt",
+  "Invalid remindAt",
+  "Invalid priorityRank",
+  "Invalid overduePolicy",
+  "Invalid origin",
 ] as const;
 
 function misconfigured(message: string): Response {
@@ -118,10 +125,19 @@ function mcpHandler(resourceUrl: string) {
         {
           title: "Create task",
           description:
-            "Creates a task for the signed-in user. dueAt is optional Unix milliseconds.",
+            "Creates a task for the signed-in user. Note: planned day is not a deadline, do not create a task for a summary, replace vs stack exist but recurrence is not in this milestone.",
           inputSchema: z.object({
             title: z.string(),
+            notes: z.string().optional(),
+            plannedOn: z.number().optional(),
+            plannedTime: z.number().int().min(0).max(1439).optional(),
             dueAt: z.number().optional(),
+            location: z.string().optional(),
+            deadlineAt: z.number().optional(),
+            remindAt: z.number().optional(),
+            priority: z.string().optional(),
+            priorityRank: z.number().optional(),
+            overduePolicy: z.string().optional(),
           }),
         },
         async (args, ctx) => {
@@ -132,11 +148,70 @@ function mcpHandler(resourceUrl: string) {
               await convexClient().mutation(api.mcpTasks.create, {
                 ...signed.proof,
                 title: args.title,
+                notes: args.notes,
+                plannedOn: args.plannedOn,
+                plannedTime: args.plannedTime,
                 dueAt: args.dueAt,
+                location: args.location,
+                deadlineAt: args.deadlineAt,
+                remindAt: args.remindAt,
+                priority: args.priority,
+                priorityRank: args.priorityRank,
+                overduePolicy: args.overduePolicy,
               }),
             );
           } catch (error) {
             return toolError(knownError(error, "Could not create task"));
+          }
+        },
+      );
+
+      server.registerTool(
+        "update_task",
+        {
+          title: "Update task",
+          description:
+            "Updates one of the signed-in user's tasks. Note: planned day is not a deadline, do not create a task for a summary, replace vs stack exist but recurrence is not in this milestone.",
+          inputSchema: z.object({
+            id: z.string(),
+            title: z.string().optional(),
+            notes: z.string().optional(),
+            plannedOn: z.number().optional(),
+            plannedTime: z.number().int().min(0).max(1439).optional(),
+            dueAt: z.number().optional(),
+            location: z.string().optional(),
+            deadlineAt: z.number().optional(),
+            remindAt: z.number().optional(),
+            priority: z.string().optional(),
+            priorityRank: z.number().optional(),
+            overduePolicy: z.string().optional(),
+            done: z.boolean().optional(),
+          }),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpTasks.update, {
+                ...signed.proof,
+                id: args.id as Id<"tasks">,
+                title: args.title,
+                notes: args.notes,
+                plannedOn: args.plannedOn,
+                plannedTime: args.plannedTime,
+                dueAt: args.dueAt,
+                location: args.location,
+                deadlineAt: args.deadlineAt,
+                remindAt: args.remindAt,
+                priority: args.priority,
+                priorityRank: args.priorityRank,
+                overduePolicy: args.overduePolicy,
+                done: args.done,
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not update task"));
           }
         },
       );
@@ -219,7 +294,7 @@ function mcpHandler(resourceUrl: string) {
     {
       serverInfo: { name: "manager", version: "0.1.0" },
       instructions:
-        "Manager user MCP. Sign in once with Clerk OAuth; the client refreshes the access token. whoami reads users.role in Convex. create_task, list_tasks, complete_task, reopen_task, and delete_task use the tasks table.",
+        "Manager user MCP. Sign in once with Clerk OAuth; the client refreshes the access token. whoami reads users.role in Convex. create_task, update_task, list_tasks, complete_task, reopen_task, and delete_task use the tasks table. Note: planned day is not a deadline, do not create a task for a summary, replace vs stack exist but recurrence is not in this milestone.",
       maxSubscriptions: 0,
     },
   );

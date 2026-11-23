@@ -17,13 +17,45 @@ export const create = mutation({
   args: {
     title: v.string(),
     dueAt: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    plannedOn: v.optional(v.number()),
+    plannedTime: v.optional(v.number()),
+    location: v.optional(v.string()),
+    deadlineAt: v.optional(v.number()),
+    remindAt: v.optional(v.number()),
+    priority: v.optional(v.string()),
+    priorityRank: v.optional(v.number()),
+    overduePolicy: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     return await taskService.createTask(ctx.db, user._id, {
-      title: args.title,
-      dueAt: args.dueAt,
+      ...args,
+      origin: "self",
     });
+  },
+});
+
+export const update = mutation({
+  args: {
+    id: v.id("tasks"),
+    title: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    plannedOn: v.optional(v.number()),
+    plannedTime: v.optional(v.number()),
+    dueAt: v.optional(v.number()),
+    location: v.optional(v.string()),
+    deadlineAt: v.optional(v.number()),
+    remindAt: v.optional(v.number()),
+    priority: v.optional(v.string()),
+    priorityRank: v.optional(v.number()),
+    overduePolicy: v.optional(v.string()),
+    done: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const { id, ...patch } = args;
+    return await taskService.updateTask(ctx.db, user._id, id, patch);
   },
 });
 
@@ -49,6 +81,14 @@ export const setDone = mutation({
   },
 });
 
+export const markSeen = mutation({
+  args: { id: v.id("tasks") },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    return await taskService.markTaskSeen(ctx.db, user._id, args.id);
+  },
+});
+
 export const remove = mutation({
   args: { id: v.id("tasks") },
   handler: async (ctx, args) => {
@@ -56,4 +96,3 @@ export const remove = mutation({
     return await taskService.deleteTask(ctx.db, user._id, args.id);
   },
 });
-

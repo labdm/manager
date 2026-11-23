@@ -63,12 +63,67 @@ export const create = mutation({
     ...proofArgs,
     title: v.string(),
     dueAt: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    plannedOn: v.optional(v.number()),
+    plannedTime: v.optional(v.number()),
+    location: v.optional(v.string()),
+    deadlineAt: v.optional(v.number()),
+    remindAt: v.optional(v.number()),
+    priority: v.optional(v.string()),
+    priorityRank: v.optional(v.number()),
+    overduePolicy: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireMcpUser(ctx, args);
     return await taskService.createTask(ctx.db, user._id, {
       title: args.title,
       dueAt: args.dueAt,
+      notes: args.notes,
+      plannedOn: args.plannedOn,
+      plannedTime: args.plannedTime,
+      location: args.location,
+      deadlineAt: args.deadlineAt,
+      remindAt: args.remindAt,
+      priority: args.priority,
+      priorityRank: args.priorityRank,
+      overduePolicy: args.overduePolicy,
+      origin: "agent",
+    });
+  },
+});
+
+export const update = mutation({
+  args: {
+    ...proofArgs,
+    id: v.id("tasks"),
+    title: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    plannedOn: v.optional(v.number()),
+    plannedTime: v.optional(v.number()),
+    dueAt: v.optional(v.number()),
+    location: v.optional(v.string()),
+    deadlineAt: v.optional(v.number()),
+    remindAt: v.optional(v.number()),
+    priority: v.optional(v.string()),
+    priorityRank: v.optional(v.number()),
+    overduePolicy: v.optional(v.string()),
+    done: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireMcpUser(ctx, args);
+    return await taskService.updateTask(ctx.db, user._id, args.id, {
+      title: args.title,
+      notes: args.notes,
+      plannedOn: args.plannedOn,
+      plannedTime: args.plannedTime,
+      dueAt: args.dueAt,
+      location: args.location,
+      deadlineAt: args.deadlineAt,
+      remindAt: args.remindAt,
+      priority: args.priority,
+      priorityRank: args.priorityRank,
+      overduePolicy: args.overduePolicy,
+      done: args.done,
     });
   },
 });
