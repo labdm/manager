@@ -26,7 +26,19 @@ public protocol TaskBackend: AnyObject {
   /// Live connection state, for the "reconnecting" banner.
   func connectionUpdates() -> AsyncStream<ConnectionStatus>
 
-  func createTask(title: String, dueAt: Date?) async throws
+  func createTask(_ draft: TaskDraft) async throws
+  func updateTask(id: String, draft: TaskDraft) async throws
   func setTask(id: String, done: Bool) async throws
   func deleteTask(id: String) async throws
+
+  /// An explicit open. Backend implementations call `tasks:markSeen`; they do
+  /// not set `seenAt` merely because a row was painted on screen.
+  func markSeen(id: String) async throws
+}
+
+public extension TaskBackend {
+  /// Keeps the quick composer small. The row opens the full editor.
+  func createTask(title: String, dueAt: Date?) async throws {
+    try await createTask(TaskDraft(title: title, plannedOn: dueAt))
+  }
 }

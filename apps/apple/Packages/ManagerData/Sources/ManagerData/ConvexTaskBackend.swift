@@ -9,29 +9,92 @@ enum ConvexFunction {
   static let ensureUser = "users:ensure"
   static let list = "tasks:list"
   static let create = "tasks:create"
+  static let update = "tasks:update"
   static let setDone = "tasks:setDone"
   static let remove = "tasks:remove"
+  static let markSeen = "tasks:markSeen"
 }
 
 /// Wire shape of `TaskView` from `packages/backend/convex/lib/taskService.ts`.
 ///
-/// Convex encodes JavaScript numbers as a tagged `$float` object, so `dueAt`
-/// must go through `@OptionalConvexFloat`; decoding it as a plain `Double`
-/// silently fails.
+/// Convex encodes JavaScript numbers as a tagged `$float` object, so every
+/// optional numeric field goes through `@OptionalConvexFloat`; decoding one as
+/// a plain `Double` silently fails. Missing fields decode to nil.
 struct TaskRecord: Decodable {
   let id: String
   let title: String
   let done: Bool
   let ownerId: String
   @OptionalConvexFloat var dueAt: Double?
+  let notes: String?
+  @OptionalConvexFloat var plannedOn: Double?
+  @OptionalConvexFloat var plannedTime: Double?
+  let location: String?
+  @OptionalConvexFloat var deadlineAt: Double?
+  @OptionalConvexFloat var remindAt: Double?
+  let priority: String?
+  @OptionalConvexFloat var priorityRank: Double?
+  @OptionalConvexFloat var effectiveRank: Double?
+  let overdue: Bool?
+  let overduePolicy: String?
+  let outcome: String?
+  let origin: String?
+  @OptionalConvexFloat var seenAt: Double?
+  @OptionalConvexFloat var completedAt: Double?
+  @OptionalConvexFloat var deletedAt: Double?
 
   var item: TaskItem {
-    TaskItem(
+    let priority = TaskPriority(decoded: self.priority)
+    let rank = priorityRank.map(Int.init) ?? priority.seedRank
+    let policy = OverduePolicy(decoded: overduePolicy)
+    let trashedAt = deletedAt.map { DueDateMath.date(fromMilliseconds: $0) }
+    let deadline = deadlineAt.map { DueDateMath.date(fromMilliseconds: $0) }
+    let isOverdue = overdue ?? TaskFacts.isOverdue(
+      deadlineAt: deadline,
+      done: done,
+      deletedAt: trashedAt,
+      now: Date()
+    )
+    let rankWithOverdue = effectiveRank.map(Int.init) ?? TaskFacts.effectiveRank(
+      priorityRank: rank,
+      priority: priority,
+      policy: policy,
+      overdue: isOverdue
+    )
+
+    return TaskItem(
       id: id,
       title: title,
       done: done,
-      dueAt: dueAt.map { DueDateMath.day(fromMilliseconds: $0) }
+      // `dueAt` and `plannedOn` are two names for the planned day. An old row
+      // may only have the legacy field; prefer `plannedOn` when both exist.
+      dueAt: (plannedOn ?? dueAt).map { DueDateMath.day(fromMilliseconds: $0) },
+      notes: notes,
+      plannedTime: plannedTime.flatMap { TaskFacts.normalizedPlannedTime(Int($0)) },
+      location: location,
+      deadlineAt: deadline,
+      remindAt: remindAt.map { DueDateMath.date(fromMilliseconds: $0) },
+      priority: priority,
+      priorityRank: rank,
+      effectiveRank: rankWithOverdue,
+      overdue: isOverdue,
+      overduePolicy: policy,
+      outcome: outcome,
+      origin: TaskOrigin(decoded: self.origin),
+      seenAt: seenAt.map { DueDateMath.date(fromMilliseconds: $0) },
+      completedAt: completedAt.map { DueDateMath.date(fromMilliseconds: $0) },
+      deletedAt: trashedAt
     )
+  }
+}
+
+/// A mutation may return a full task view or just an acknowledgement. Neither
+/// matters to the board: the live query is authoritative.
+struct TaskMutationResult: Decodable {
+  let task: TaskRecord?
+
+  init(from decoder: Decoder) throws {
+    task = try? TaskRecord(from: decoder)
   }
 }
 
@@ -77,7 +140,9 @@ public final class ConvexTaskBackend: TaskBackend {
           }
         },
         receiveValue: { records in
-          continuation.yield(records.map(\.item))
+          // The server already hides tombstones. This filter keeps an old or
+          // lagging payload from resurrecting one on screen.
+          continuation.yield(records.filter { $0.deletedAt == nil }.map(\.item))
         }
       )
       continuation.onTermination = { _ in
@@ -105,22 +170,30 @@ public final class ConvexTaskBackend: TaskBackend {
     }
   }
 
-  public func createTask(title: String, dueAt: Date?) async throws {
-    var args: [String: ConvexEncodable?] = ["title": title]
-    if let dueAt {
-      // A JS number, not a BigInt: `v.number()` rejects Convex's integer encoding.
-      args["dueAt"] = Double(DueDateMath.millisecondsForDay(dueAt))
-    }
+  public func createTask(_ draft: TaskDraft) async throws {
+    var args = self.args(for: draft)
+    // A row the signed-in user typed is never NEW, even before the live query
+    // catches up with the mutation's result.
+    args["origin"] = TaskOrigin.selfCreated.rawValue
+    args["seenAt"] = exactMilliseconds(Date())
 
     try await perform {
-      let _: TaskRecord = try await self.client.mutation(ConvexFunction.create, with: args)
+      let _: TaskMutationResult = try await self.client.mutation(ConvexFunction.create, with: args)
+    }
+  }
+
+  public func updateTask(id: String, draft: TaskDraft) async throws {
+    var args = self.args(for: draft)
+    args["id"] = id
+    try await perform {
+      let _: TaskMutationResult = try await self.client.mutation(ConvexFunction.update, with: args)
     }
   }
 
   public func setTask(id: String, done: Bool) async throws {
     let args: [String: ConvexEncodable?] = ["id": id, "done": done]
     try await perform {
-      let _: TaskRecord = try await self.client.mutation(ConvexFunction.setDone, with: args)
+      let _: TaskMutationResult = try await self.client.mutation(ConvexFunction.setDone, with: args)
     }
   }
 
@@ -129,6 +202,47 @@ public final class ConvexTaskBackend: TaskBackend {
     try await perform {
       let _: RemovalRecord = try await self.client.mutation(ConvexFunction.remove, with: args)
     }
+  }
+
+  public func markSeen(id: String) async throws {
+    let args: [String: ConvexEncodable?] = ["id": id]
+    try await perform {
+      let _: TaskMutationResult = try await self.client.mutation(ConvexFunction.markSeen, with: args)
+    }
+  }
+
+  // MARK: - Wire encoding
+
+  /// The planned day is written to both names for one release. `deadlineAt`
+  /// and `remindAt` are exact instants and never touch `dueAt`/`plannedOn`.
+  private func args(for draft: TaskDraft) -> [String: ConvexEncodable?] {
+    let args: [String: ConvexEncodable?] = [
+      "title": draft.title,
+      "notes": draft.notes,
+      "plannedOn": dayMilliseconds(draft.plannedOn),
+      "dueAt": dayMilliseconds(draft.plannedOn),
+      "plannedTime": draft.plannedTime.map { Double($0) },
+      "location": draft.location,
+      "deadlineAt": exactMilliseconds(draft.deadlineAt),
+      "remindAt": exactMilliseconds(draft.remindAt),
+      "priority": draft.priority.rawValue,
+      "priorityRank": Double(draft.priorityRank),
+      "overduePolicy": draft.overduePolicy.rawValue,
+    ]
+    return args
+  }
+
+  private func dayMilliseconds(_ date: Date?) -> Double? {
+    guard let date else { return nil }
+    return Double(DueDateMath.millisecondsForDay(date))
+  }
+
+  private func exactMilliseconds(_ date: Date) -> Double? {
+    Double(DueDateMath.milliseconds(sinceEpoch: date))
+  }
+
+  private func exactMilliseconds(_ date: Date?) -> Double? {
+    date.map { Double(DueDateMath.milliseconds(sinceEpoch: $0)) }
   }
 
   // MARK: - Error translation

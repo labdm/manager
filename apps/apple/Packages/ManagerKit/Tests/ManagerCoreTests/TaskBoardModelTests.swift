@@ -93,6 +93,10 @@ struct TaskBoardModelTest {
     #expect(backend.createdDueDates == [utcDate(2026, 11, 21, hour: 0)])
     #expect(board.draftTitle.isEmpty)
     #expect(board.draftDueDate == nil)
+
+    #expect(backend.storedTasks.first?.origin == .selfCreated)
+    #expect(backend.storedTasks.first?.seenAt != nil)
+    #expect(backend.storedTasks.first?.isNew == false)
   }
 
   @Test("Composer refuses titles the backend would reject")
@@ -205,5 +209,96 @@ struct TaskBoardModelTest {
     backend.emit(connection: .connecting)
     await waitFor { board.connection == .connecting }
     #expect(board.connectionNotice == "Reconnecting…")
+  }
+
+  @Test("Opening a NEW row calls markSeen and clears the mark locally")
+  func openMarksSeen() async {
+    let task = TaskItem(id: "1", title: "Install Omarchy", done: false, origin: .agent)
+    let (board, backend) = makeBoard(tasks: [task])
+    board.start()
+    await waitFor { board.phase == .ready }
+    #expect(board.tasks.first?.isNew == true)
+
+    await board.open(task)
+    await waitFor { backend.markedSeenIDs == ["1"] }
+
+    #expect(backend.markedSeenIDs == ["1"])
+    #expect(board.tasks.first?.seenAt != nil)
+    #expect(board.tasks.first?.isNew == false)
+    #expect(backend.storedTasks.first?.seenAt != nil)
+  }
+
+  @Test("A failed markSeen keeps the mark")
+  func openRollsBack() async {
+    let task = TaskItem(id: "1", title: "From agent", done: false, origin: .agent)
+    let (board, backend) = makeBoard(tasks: [task])
+    board.start()
+    await waitFor { board.phase == .ready }
+
+    backend.failWrites = true
+    await board.open(task)
+
+    #expect(board.tasks.first?.seenAt == nil)
+    #expect(board.tasks.first?.isNew == true)
+    #expect(board.errorMessage == "Could not mark the task as seen")
+  }
+
+  @Test("The editor writes facts without moving the planned day into the deadline")
+  func saveEditorFacts() async {
+    let task = TaskItem(id: "1", title: "Old", done: false, origin: .agent)
+    let (board, backend) = makeBoard(tasks: [task])
+    board.start()
+    await waitFor { board.phase == .ready }
+
+    let planned = utcDate(2026, 11, 21)
+    let deadline = utcDate(2026, 11, 25, hour: 23)
+    let reminder = utcDate(2026, 11, 24, hour: 9)
+    let draft = TaskDraft(
+      title: "File taxes",
+      notes: "Bring the receipts",
+      plannedOn: planned,
+      plannedTime: 555,
+      location: "Desk",
+      deadlineAt: deadline,
+      remindAt: reminder,
+      priority: .high,
+      priorityRank: 20,
+      overduePolicy: .escalate
+    )
+
+    await board.save(task, draft: draft)
+    await waitFor { backend.updatedDrafts["1"] != nil }
+
+    let saved = backend.visibleTasks.first
+    #expect(saved?.title == "File taxes")
+    #expect(saved?.notes == "Bring the receipts")
+    #expect(saved?.dueAt == planned)
+    #expect(saved?.plannedOn == planned)
+    #expect(saved?.plannedTime == 555)
+    #expect(saved?.location == "Desk")
+    #expect(saved?.deadlineAt == deadline)
+    #expect(saved?.remindAt == reminder)
+    #expect(saved?.priority == .high)
+    #expect(saved?.priorityRank == 20)
+    #expect(saved?.overduePolicy == .escalate)
+    #expect(board.tasks.first?.dueAt == planned)
+  }
+
+  @Test("Soft delete hides the row without erasing it")
+  func softDeleteHides() async {
+    let tasks = [
+      TaskItem(id: "1", title: "One", done: false),
+      TaskItem(id: "2", title: "Two", done: false),
+    ]
+    let (board, backend) = makeBoard(tasks: tasks)
+    board.start()
+    await waitFor { board.phase == .ready }
+
+    await board.delete(tasks[0])
+    await waitFor { backend.storedTasks.first?.deletedAt != nil }
+
+    #expect(backend.visibleTasks.map(\.id) == ["2"])
+    #expect(backend.storedTasks.count == 2)
+    #expect(board.tasks.map(\.id) == ["2"])
   }
 }

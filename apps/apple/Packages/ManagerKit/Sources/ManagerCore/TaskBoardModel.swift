@@ -225,6 +225,45 @@ public final class TaskBoardModel {
     inFlight.remove(task.id)
   }
 
+  /// An explicit open from a row or the editor. This is the only place that
+  /// marks a task seen; loading or regrouping the board never calls it.
+  public func open(_ task: TaskItem) async {
+    guard !inFlight.contains(task.id), let original = tasks.first(where: { $0.id == task.id }) else {
+      return
+    }
+
+    inFlight.insert(task.id)
+    replace(original.withSeen())
+    do {
+      try await backend.markSeen(id: task.id)
+      replace(original.withSeen())
+      errorMessage = nil
+    } catch {
+      replace(original)
+      errorMessage = Self.message(for: error)
+    }
+    inFlight.remove(task.id)
+  }
+
+  /// Saves the full editor. Deadline and remind-at never write the planned day;
+  /// `TaskItem.applying` maps the planned day onto the legacy `dueAt` alias.
+  public func save(_ task: TaskItem, draft: TaskDraft) async {
+    guard !inFlight.contains(task.id), let original = tasks.first(where: { $0.id == task.id }) else {
+      return
+    }
+
+    inFlight.insert(task.id)
+    replace(original.applying(draft))
+    do {
+      try await backend.updateTask(id: task.id, draft: draft)
+      errorMessage = nil
+    } catch {
+      replace(original)
+      errorMessage = Self.message(for: error)
+    }
+    inFlight.remove(task.id)
+  }
+
   public func dismissError() {
     errorMessage = nil
   }
