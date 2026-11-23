@@ -35,4 +35,6 @@ Provider order for implementation: Antigravity Gemini 3.8 first, then OpenCode m
 
 Antigravity Gemini hit its individual quota on 2026-11-24 and does not reset for about seven days. Until then, reviews and the UI slice use other OpenCode models. Big Pickle does not review its own Apple or Android branches.
 
+MiMo died on the shared free OpenCode pool, the same limit that stopped DeepSeek, and it wrote nothing. The UI slice moves to Big Pickle, which has its own limit. The smaller free models stay on the Apple and Android reviews until that shared pool stops them too.
+
 The first Android attempt on free OpenCode DeepSeek wrote nothing. A Cursor retry started the Android edits and was stopped so it would not keep spending Cursor tokens. Big Pickle finishes that slice from those files. The Cursor UI attempt wrote nothing and was stopped. The UI slice moves to Antigravity Gemini.
