@@ -34,3 +34,23 @@ object DueDateMath {
     fun dayLabel(epochMillis: Long, locale: Locale = Locale.getDefault()): String =
         SimpleDateFormat("EEE, MMM d", locale).format(Date(epochMillis))
 }
+
+/**
+ * Labels for the two clocks. A deadline is an instant, so it shows a clock
+ * time; the planned day usually has none.
+ */
+object TaskDateLabels {
+    /** `Wed, Mar 4`, or `Wed, Mar 4 · 09:30` when the row has a clock time. */
+    fun planned(
+        dayMillis: Long,
+        minutes: Int?,
+        locale: Locale = Locale.getDefault(),
+    ): String {
+        val day = DueDateMath.dayLabel(dayMillis, locale)
+        return if (minutes == null) day else "$day · ${PlannedTimeMath.label(minutes, locale)}"
+    }
+
+    /** `Wed, Mar 4 · 18:00` for an instant such as `deadlineAt`. */
+    fun instant(epochMillis: Long, locale: Locale = Locale.getDefault()): String =
+        SimpleDateFormat("EEE, MMM d · HH:mm", locale).format(Date(epochMillis))
+}

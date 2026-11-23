@@ -7,6 +7,7 @@ import dev.convex.android.ServerError
 import dev.convex.android.WebSocketState
 import dev.labdm.manager.kit.ConnectionStatus
 import dev.labdm.manager.kit.TaskBackend
+import dev.labdm.manager.kit.TaskDraft
 import dev.labdm.manager.kit.TaskItem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -46,12 +47,13 @@ class ConvexTaskBackend(
             .distinctUntilChanged()
 
     override suspend fun createTask(title: String, dueAt: Long?) {
-        val args = buildMap<String, Any?> {
-            put("title", title)
-            // A JS number, not a BigInt: v.number() rejects Convex's integer encoding.
-            dueAt?.let { put("dueAt", it.toDouble()) }
+        createTask(TaskDraft(title = title, plannedOn = dueAt))
+    }
+
+    override suspend fun createTask(draft: TaskDraft) {
+        perform<TaskRecord> {
+            client.mutation<TaskRecord>(ConvexFunction.CREATE, draftArgs(draft, includeTitle = true))
         }
-        perform<TaskRecord> { client.mutation<TaskRecord>(ConvexFunction.CREATE, args) }
     }
 
     override suspend fun setTask(id: String, done: Boolean) {
@@ -60,9 +62,51 @@ class ConvexTaskBackend(
         }
     }
 
+    override suspend fun markSeen(id: String) {
+        perform<TaskRecord> {
+            client.mutation<TaskRecord>(ConvexFunction.MARK_SEEN, mapOf("id" to id))
+        }
+    }
+
+    override suspend fun updateTask(id: String, draft: TaskDraft) {
+        perform<TaskRecord> {
+            client.mutation<TaskRecord>(
+                ConvexFunction.UPDATE,
+                draftArgs(draft, includeTitle = true) + mapOf("id" to id),
+            )
+        }
+    }
+
     override suspend fun deleteTask(id: String) {
         perform<RemovalRecord> { client.mutation<RemovalRecord>(ConvexFunction.REMOVE, mapOf("id" to id)) }
     }
+
+    /**
+     * The planned day is written to both `plannedOn` and its legacy alias
+     * `dueAt`, because they are one fact. `deadlineAt` is sent on its own and
+     * never writes either of them.
+     *
+     * Numbers are sent as `Double`: v.number() rejects Convex's integer
+     * encoding. Absent optional fields are omitted rather than sent as null, so
+     * a partial edit cannot clear a column the editor did not touch.
+     */
+    private fun draftArgs(draft: TaskDraft, includeTitle: Boolean): Map<String, Any?> =
+        buildMap {
+            val facts = draft.withSeedRank()
+            if (includeTitle) put("title", facts.title)
+            facts.notes?.let { put("notes", it) }
+            facts.plannedOn?.let { day ->
+                put("plannedOn", day.toDouble())
+                put("dueAt", day.toDouble())
+            }
+            facts.plannedTime?.let { put("plannedTime", it.toDouble()) }
+            facts.location?.let { put("location", it) }
+            facts.deadlineAt?.let { put("deadlineAt", it.toDouble()) }
+            facts.remindAt?.let { put("remindAt", it.toDouble()) }
+            facts.priority?.let { put("priority", it.wire) }
+            facts.priorityRank?.let { put("priorityRank", it.toDouble()) }
+            put("overduePolicy", facts.overduePolicy.wire)
+        }
 
     private inline fun <reified T> perform(operation: () -> T): T =
         try {
