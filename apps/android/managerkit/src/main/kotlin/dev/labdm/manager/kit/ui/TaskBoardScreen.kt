@@ -326,6 +326,7 @@ private fun TaskEditorDialog(
                     DayButton(
                         dayMillis = draft.plannedOn,
                         label = "Planned day",
+                        allowClear = false,
                         onChange = { day ->
                             model.updateEditDraft { it.copy(plannedOn = day) }
                         },
@@ -333,6 +334,7 @@ private fun TaskEditorDialog(
                     TimeButton(
                         minutes = draft.plannedTime,
                         label = "Time",
+                        allowClear = false,
                         onChange = { minutes ->
                             model.updateEditDraft { it.copy(plannedTime = minutes) }
                         },
@@ -345,6 +347,7 @@ private fun TaskEditorDialog(
                     InstantButton(
                         instantMillis = draft.deadlineAt,
                         label = "Deadline",
+                        allowClear = false,
                         onChange = { instant ->
                             // A deadline never writes the planned day.
                             model.updateEditDraft { it.copy(deadlineAt = instant) }
@@ -353,6 +356,7 @@ private fun TaskEditorDialog(
                     InstantButton(
                         instantMillis = draft.remindAt,
                         label = "Remind at",
+                        allowClear = false,
                         onChange = { instant ->
                             model.updateEditDraft { it.copy(remindAt = instant) }
                         },
@@ -414,6 +418,7 @@ private fun PriorityChips(selected: Priority?, onSelect: (Priority?) -> Unit) {
 private fun DayButton(
     dayMillis: Long?,
     label: String,
+    allowClear: Boolean = true,
     onChange: (Long?) -> Unit,
 ) {
     val context = LocalContext.current
@@ -441,7 +446,7 @@ private fun DayButton(
     ) {
         Text(dayMillis?.let { "$label ${DueDateMath.dayLabel(it)}" } ?: "Set $label")
     }
-    if (dayMillis != null) {
+    if (allowClear && dayMillis != null) {
         TextButton(onClick = { onChange(null) }) { Text("Clear") }
     }
 }
@@ -451,6 +456,7 @@ private fun DayButton(
 private fun TimeButton(
     minutes: Int?,
     label: String,
+    allowClear: Boolean = true,
     onChange: (Int?) -> Unit,
 ) {
     val context = LocalContext.current
@@ -469,7 +475,7 @@ private fun TimeButton(
     ) {
         Text(minutes?.let { "$label ${PlannedTimeMath.label(it)}" } ?: "Set $label")
     }
-    if (minutes != null) {
+    if (allowClear && minutes != null) {
         TextButton(onClick = { onChange(null) }) { Text("Clear") }
     }
 }
@@ -479,6 +485,7 @@ private fun TimeButton(
 private fun InstantButton(
     instantMillis: Long?,
     label: String,
+    allowClear: Boolean = true,
     onChange: (Long?) -> Unit,
 ) {
     val context = LocalContext.current
@@ -518,7 +525,7 @@ private fun InstantButton(
     ) {
         Text(instantMillis?.let { "$label ${TaskDateLabels.instant(it)}" } ?: "Set $label")
     }
-    if (instantMillis != null) {
+    if (allowClear && instantMillis != null) {
         TextButton(onClick = { onChange(null) }) { Text("Clear") }
     }
 }

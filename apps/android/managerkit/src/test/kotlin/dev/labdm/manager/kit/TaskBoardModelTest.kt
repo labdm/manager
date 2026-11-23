@@ -121,6 +121,28 @@ class TaskBoardModelTest {
     }
 
     @Test
+    fun `a failed open leaves the row NEW and a later open tries again`() = runTest {
+        backend.emit(listOf(TaskItem("2", "Install Omarchy", done = false, origin = TaskOrigin.AGENT)))
+        runCurrent()
+        backend.failMutations = true
+
+        model.openTask(model.state.value.tasks.single())
+        runCurrent()
+
+        assertTrue(model.state.value.tasks.single().isNew)
+        assertNull(model.state.value.tasks.single().seenAt)
+        assertNotNull(model.state.value.errorMessage)
+        assertTrue(backend.seenCalls.isEmpty())
+
+        backend.failMutations = false
+        model.openTask(model.state.value.tasks.single())
+        runCurrent()
+
+        assertEquals(listOf("2"), backend.seenCalls)
+        assertFalse(model.state.value.tasks.single().isNew)
+    }
+
+    @Test
     fun `opening an already seen row does not call markSeen again`() = runTest {
         backend.emit(
             listOf(
@@ -213,6 +235,46 @@ class TaskBoardModelTest {
         assertNotNull(model.state.value.edit)
         assertEquals(false, model.state.value.edit?.isSaving)
         assertNotNull(model.state.value.errorMessage)
+    }
+
+    @Test
+    fun `a blank deadline leaves the stored deadline in place`() = runTest {
+        val deadline = 1_767_400_000_000L
+        val plannedOn = 1_767_312_000_000L
+        val remindAt = 1_767_390_000_000L
+        backend.emit(
+            listOf(
+                TaskItem(
+                    "1",
+                    "File taxes",
+                    done = false,
+                    seenAt = 1L,
+                    plannedOn = plannedOn,
+                    plannedTime = 90,
+                    deadlineAt = deadline,
+                    remindAt = remindAt,
+                )
+            )
+        )
+        runCurrent()
+        model.openTask(model.state.value.tasks.single())
+        model.updateEditDraft {
+            it.copy(plannedOn = null, plannedTime = null, deadlineAt = null, remindAt = null)
+        }
+
+        assertTrue(model.saveEdit())
+        runCurrent()
+
+        val saved = model.state.value.tasks.single()
+        assertEquals(deadline, saved.deadlineAt)
+        assertEquals(plannedOn, saved.plannedOn)
+        assertEquals(90, saved.plannedTime)
+        assertEquals(remindAt, saved.remindAt)
+        val sent = backend.updateCalls.single().second
+        assertEquals(deadline, sent.deadlineAt)
+        assertEquals(plannedOn, sent.plannedOn)
+        assertEquals(90, sent.plannedTime)
+        assertEquals(remindAt, sent.remindAt)
     }
 
     @Test

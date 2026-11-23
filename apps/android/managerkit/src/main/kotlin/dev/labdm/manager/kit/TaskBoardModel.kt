@@ -224,24 +224,26 @@ class TaskBoardModel(
     // MARK: - Opening and editing
 
     /**
-     * Opening a row is an explicit open: it stamps `seenAt` locally and calls
-     * `tasks:markSeen`, then shows the editor. Painting the list never calls it.
+     * Opening a row is an explicit open. `tasks:markSeen` runs first, and
+     * `seenAt` is stamped only after it succeeds, so a failed open leaves the
+     * row NEW and a later open tries again. Painting the list never calls it.
      */
     suspend fun openTask(task: TaskItem) {
-        val timestamp = now()
+        var opened = task
         if (task.seenAt == null) {
-            _state.update { current ->
-                current.copy(
-                    tasks = current.tasks.map { if (it.id == task.id) it.withSeen(timestamp) else it },
-                )
-            }
             try {
                 backend.markSeen(task.id)
+                val timestamp = now()
+                opened = task.withSeen(timestamp)
+                _state.update { current ->
+                    current.copy(
+                        tasks = current.tasks.map { if (it.id == task.id) opened else it },
+                    )
+                }
             } catch (error: Exception) {
                 _state.update { it.copy(errorMessage = message(error)) }
             }
         }
-        val opened = _state.value.tasks.firstOrNull { it.id == task.id } ?: task
         _state.update { it.copy(edit = TaskEdit(opened.id, TaskDraft.from(opened))) }
     }
 
@@ -285,14 +287,23 @@ class TaskBoardModel(
         // civil day. Re-normalizing it would slide it into the previous day in
         // any zone behind UTC, so keep it unless the user actually picked a
         // new day.
-        val plannedOn = if (edit.draft.plannedOn == original.plannedDay) {
-            original.plannedDay
-        } else {
-            edit.draft.plannedOn?.let { DueDateMath.startOfDay(it) }
+        // A blank date is not a clear. The mutation omits absent numbers, and
+        // the server keeps the stored value. Notes and location do clear,
+        // because an empty string is stored.
+        val plannedOn = when {
+            edit.draft.plannedOn == null -> original.plannedDay
+            edit.draft.plannedOn == original.plannedDay -> original.plannedDay
+            else -> DueDateMath.startOfDay(edit.draft.plannedOn)
         }
         val draft = edit.draft.copy(
             title = TaskTitle.normalize(edit.draft.title) ?: original.title,
+            notes = edit.draft.notes ?: "",
             plannedOn = plannedOn,
+            plannedTime = edit.draft.plannedTime ?: original.plannedTime,
+            location = edit.draft.location ?: "",
+            deadlineAt = edit.draft.deadlineAt ?: original.deadlineAt,
+            remindAt = edit.draft.remindAt ?: original.remindAt,
+            priority = edit.draft.priority ?: Priority.NORMAL,
         )
         val timestamp = now()
 

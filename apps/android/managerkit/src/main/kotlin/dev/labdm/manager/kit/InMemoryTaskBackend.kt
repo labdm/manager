@@ -92,9 +92,24 @@ class InMemoryTaskBackend(
 
     override suspend fun updateTask(id: String, draft: TaskDraft) {
         val timestamp = now()
-        val facts = draft.withSeedRank()
         store.value = store.value.map {
-            if (it.item.id == id) it.copy(item = it.item.withDraft(facts, timestamp)) else it
+            if (it.item.id != id) {
+                it
+            } else {
+                // Match tasks.update: an absent number is left alone. An empty
+                // string clears notes and location. A missing priority is normal.
+                val previous = it.item
+                val kept = draft.copy(
+                    notes = draft.notes ?: "",
+                    plannedOn = draft.plannedOn ?: previous.plannedDay,
+                    plannedTime = draft.plannedTime ?: previous.plannedTime,
+                    location = draft.location ?: "",
+                    deadlineAt = draft.deadlineAt ?: previous.deadlineAt,
+                    remindAt = draft.remindAt ?: previous.remindAt,
+                    priority = draft.priority ?: Priority.NORMAL,
+                )
+                it.copy(item = previous.withDraft(kept, timestamp))
+            }
         }
     }
 
