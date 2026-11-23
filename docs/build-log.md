@@ -30,3 +30,5 @@ Omitted priority is stored as `normal` / `10`, not left blank. `overduePolicy` o
 Delete sets `deletedAt` and does not call `db.delete`. Lists hide those rows. There is no `deletedAt` index and no `open` column yet.
 
 Client branches must typecheck against the current generated API. They cast at the Convex boundary when they send fields the generated types do not list yet. Apple and Android already post dynamic payloads. Their in-memory backends learn the new fields so unit tests do not need a server.
+
+The free OpenCode DeepSeek pool rejected the first Android attempt before it edited anything. Android is retried on Cursor's DeepSeek, off that pool. Apple stays on Big Pickle unless that same pool stops it.
