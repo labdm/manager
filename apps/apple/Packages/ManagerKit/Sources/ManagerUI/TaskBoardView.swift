@@ -11,6 +11,7 @@ public struct TaskBoardView: View {
   private let showsListPicker: Bool
 
   @State private var collapsedSections: Set<TaskSection> = [.completed]
+  @State private var editorTarget: EditorTarget?
 
   public init(model: TaskBoardModel, showsListPicker: Bool = false) {
     self.model = model
@@ -45,6 +46,9 @@ public struct TaskBoardView: View {
       .environment(\.defaultMinListRowHeight, 1)
     }
     .managerBackground()
+    .sheet(item: $editorTarget) { target in
+      TaskEditorView(taskID: target.id, model: model)
+    }
     #if os(macOS)
       .navigationTitle("Manager")
     #endif
@@ -164,6 +168,10 @@ public struct TaskBoardView: View {
         task: task,
         now: now,
         isWorking: model.isWorking(on: task.id),
+        onOpen: {
+          editorTarget = EditorTarget(id: task.id)
+          Task { await model.open(task) }
+        },
         onToggle: { Task { await model.toggle(task) } },
         onDelete: { Task { await model.delete(task) } }
       )
@@ -219,6 +227,10 @@ public struct TaskBoardView: View {
       }
     }
   }
+}
+
+private struct EditorTarget: Identifiable {
+  let id: String
 }
 
 private extension View {

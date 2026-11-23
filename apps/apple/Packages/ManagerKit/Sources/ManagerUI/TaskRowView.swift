@@ -1,11 +1,12 @@
 import ManagerCore
 import SwiftUI
 
-/// A task row: checkbox, title, due badge, with tap, swipe and context actions.
+/// A task row: checkbox, title, fact badges, with open, tap, swipe and context actions.
 public struct TaskRowView: View {
   public let task: TaskItem
   public let now: Date
   public let isWorking: Bool
+  public let onOpen: () -> Void
   public let onToggle: () -> Void
   public let onDelete: () -> Void
 
@@ -15,33 +16,56 @@ public struct TaskRowView: View {
     task: TaskItem,
     now: Date,
     isWorking: Bool = false,
+    onOpen: @escaping () -> Void,
     onToggle: @escaping () -> Void,
     onDelete: @escaping () -> Void
   ) {
     self.task = task
     self.now = now
     self.isWorking = isWorking
+    self.onOpen = onOpen
     self.onToggle = onToggle
     self.onDelete = onDelete
   }
 
   public var body: some View {
     HStack(alignment: .top, spacing: 12) {
-      TaskCheckbox(isDone: task.done, isWorking: isWorking)
-        .padding(.top, 1)
+      Button(action: onToggle) {
+        TaskCheckbox(isDone: task.done, isWorking: isWorking)
+          .padding(.top, 1)
+      }
+      .buttonStyle(.plain)
+      .disabled(isWorking)
+      .accessibilityLabel(task.done ? "Reopen" : "Complete")
+      .accessibilityHint(task.title)
 
       VStack(alignment: .leading, spacing: 3) {
-        Text(task.title)
-          .font(ManagerFont.rowTitle)
-          .foregroundStyle(task.done ? Color.managerMuted : Color.managerInk)
-          .strikethrough(task.done, color: Color.managerMuted)
-          .lineLimit(3)
-          .multilineTextAlignment(.leading)
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+          Text(task.title)
+            .font(ManagerFont.rowTitle)
+            .foregroundStyle(task.done ? Color.managerMuted : Color.managerInk)
+            .strikethrough(task.done, color: Color.managerMuted)
+            .lineLimit(3)
+            .multilineTextAlignment(.leading)
+
+          if task.isNew {
+            NewBadge()
+          }
+        }
 
         if let dueAt = task.dueAt {
           DueBadge(description: DueDateLabel.describe(dueAt: dueAt, now: now))
         }
+
+        if !factSummary.isEmpty {
+          Text(factSummary)
+            .font(ManagerFont.meta)
+            .foregroundStyle(Color.managerMuted)
+            .lineLimit(2)
+            .multilineTextAlignment(.leading)
+        }
       }
+      .frame(maxWidth: .infinity, alignment: .leading)
 
       Spacer(minLength: 0)
     }
@@ -53,14 +77,14 @@ public struct TaskRowView: View {
         .fill(isHovering && !task.done ? Color.managerRaised.opacity(0.7) : Color.clear)
     )
     .contentShape(Rectangle())
-    .onTapGesture(perform: onToggle)
-    .onHover { isHovering = $0 }
+    .onTapGesture(perform: onOpen)
     .accessibilityElement(children: .combine)
     .accessibilityAddTraits(.isButton)
-    .accessibilityHint(task.done ? "Reopens the task" : "Completes the task")
-    .accessibilityAction(named: Text(task.done ? "Reopen" : "Complete")) { onToggle() }
-    .accessibilityAction(named: Text("Delete")) { onDelete() }
+    .accessibilityLabel(task.isNew ? "NEW: \(task.title)" : task.title)
+    .accessibilityHint("Open details")
+    .onHover { isHovering = $0 }
     .contextMenu {
+      Button("Open details", action: onOpen)
       Button(task.done ? "Reopen" : "Complete", action: onToggle)
       Divider()
       Button("Delete", role: .destructive, action: onDelete)
@@ -76,5 +100,28 @@ public struct TaskRowView: View {
       }
       .tint(Color.managerAccent)
     }
+  }
+
+  private var factSummary: String {
+    var pieces: [String] = []
+    if let plannedTime = task.plannedTime {
+      pieces.append(TaskFacts.label(forPlannedTime: plannedTime))
+    }
+    if let location = task.location, !location.isEmpty {
+      pieces.append(location)
+    }
+    if let deadlineAt = task.deadlineAt {
+      pieces.append("Deadline \(DueDateLabel.short(dueAt: deadlineAt, now: now))")
+    }
+    if task.priority != .normal {
+      pieces.append(task.priority.rawValue.capitalized)
+    }
+    if task.overdue {
+      pieces.append("Overdue")
+    }
+    if let outcome = task.outcome {
+      pieces.append(outcome.capitalized)
+    }
+    return pieces.joined(separator: " · ")
   }
 }

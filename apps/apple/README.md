@@ -35,9 +35,9 @@ The generated plist and Xcode project are gitignored. The app reads configuratio
 
 ## Data flow
 
-`ClerkConvexAuthProvider` binds Clerk sessions to `ConvexClientWithAuth<String>`. `ConvexTaskBackend` subscribes to `tasks:list` and watches the websocket state; `TaskBoardModel` applies optimistic writes and rolls back on failure. `tasks:create`, `tasks:setDone` and `tasks:remove` live in `packages/backend/convex/tasks.ts` next to the web/MCP mutations.
+`ClerkConvexAuthProvider` binds Clerk sessions to `ConvexClientWithAuth<String>`. `ConvexTaskBackend` subscribes to `tasks:list` and watches the websocket state; `TaskBoardModel` applies optimistic writes and rolls back on failure. `tasks:create`, `tasks:update`, `tasks:setDone`, `tasks:remove` and `tasks:markSeen` live in `packages/backend/convex/tasks.ts` next to the web/MCP mutations. Opening a row is the only path that calls `markSeen`; painting the list never marks anything read.
 
-Convex encodes JavaScript numbers as tagged objects, so `dueAt` is decoded with `@OptionalConvexFloat`. A plain `Double` compiles but fails at runtime. Outgoing dates are sent as local-midnight milliseconds, matching the web app.
+Convex encodes JavaScript numbers as tagged objects, so every optional numeric wire field (`dueAt`, `plannedOn`, `plannedTime`, `deadlineAt`, `remindAt`, `priorityRank`, `effectiveRank`, `seenAt`, `completedAt`) is decoded with `@OptionalConvexFloat`. A plain `Double` compiles but fails at runtime. The planned day is sent as local-midnight milliseconds in both `dueAt` and `plannedOn`; exact instants such as `deadlineAt` are separate and never write the planned day.
 
 ## Commands
 
@@ -45,7 +45,7 @@ From the repo root:
 
 ```sh
 pnpm apple:project      # generate Config/Secrets.plist + Manager.xcodeproj
-pnpm apple:test         # 39 Swift tests: core logic, config, board and glass coverage
+pnpm apple:test         # 50 Swift tests: core logic, M1 facts, config, board and glass coverage
 pnpm apple:build:mac
 pnpm apple:build:ios
 pnpm apple:install:ios  # install + launch on the booted simulator

@@ -54,6 +54,21 @@ public struct DueBadge: View {
   }
 }
 
+/// The NEW mark on a row an agent or another person created.
+public struct NewBadge: View {
+  public init() {}
+
+  public var body: some View {
+    Text("NEW")
+      .font(.system(size: 9, weight: .bold, design: .rounded))
+      .foregroundStyle(Color.managerAccentInk)
+      .padding(.horizontal, 5)
+      .padding(.vertical, 2)
+      .background(Capsule(style: .continuous).fill(Color.managerAccent))
+      .accessibilityLabel("NEW")
+  }
+}
+
 /// A small count capsule used by the sidebar and section headers.
 public struct CountBadge: View {
   public let count: Int
