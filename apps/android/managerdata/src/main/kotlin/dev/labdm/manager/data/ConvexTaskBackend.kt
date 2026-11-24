@@ -56,6 +56,31 @@ class ConvexTaskBackend(
         }
     }
 
+    /**
+     * The first occurrence of a series comes from the sheet's explicit behavior
+     * and cadence. The backend names the 14-day cadence `biweekly`.
+     */
+    override suspend fun createRecurrence(
+        title: String,
+        behavior: String,
+        cadence: String,
+        periodStart: Long,
+    ) {
+        val wireCadence = if (cadence == "every14days") "biweekly" else cadence
+        perform<JsonElement?> {
+            client.mutation<JsonElement?>(
+                ConvexFunction.CREATE_RECURRENCE,
+                mapOf(
+                    "behavior" to behavior,
+                    "cadence" to wireCadence,
+                    "timezone" to java.util.TimeZone.getDefault().id,
+                    "title" to title,
+                    "anchorOn" to periodStart.toDouble(),
+                ),
+            )
+        }
+    }
+
     override suspend fun setTask(id: String, done: Boolean) {
         perform<TaskRecord> {
             client.mutation<TaskRecord>(ConvexFunction.SET_DONE, mapOf("id" to id, "done" to done))

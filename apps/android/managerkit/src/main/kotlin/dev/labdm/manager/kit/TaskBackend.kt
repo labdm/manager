@@ -32,6 +32,12 @@ interface TaskBackend {
      */
     suspend fun createTask(draft: TaskDraft)
 
+    /**
+     * Creates the first occurrence of a recurring series. Behavior and cadence
+     * are explicit choices from the sheet, never inferred from "daily".
+     */
+    suspend fun createRecurrence(title: String, behavior: String, cadence: String, periodStart: Long)
+
     /** Explicit setter, never a toggle: a retried tap must not invert state. */
     suspend fun setTask(id: String, done: Boolean)
 

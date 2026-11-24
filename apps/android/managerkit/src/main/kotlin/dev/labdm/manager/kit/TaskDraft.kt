@@ -22,6 +22,10 @@ data class TaskDraft(
     val recurrenceId: String? = null,
     val periodStart: Long? = null,
     val behavior: TaskBehavior? = null,
+    /** Presentation facts from the sheet. They are explicit, never inferred. */
+    val look: TaskLook = TaskLook.CHECK,
+    val series: SeriesBehavior = SeriesBehavior.NONE,
+    val cadence: SeriesCadence = SeriesCadence.DAILY,
 ) {
     /** Omitted priority and rank are `normal` / 10, never blank. */
     val resolvedPriority: Priority
@@ -58,6 +62,9 @@ data class TaskDraft(
             recurrenceId = task.recurrenceId,
             periodStart = task.periodStart,
             behavior = task.behavior,
+            look = task.look,
+            series = task.series,
+            cadence = task.cadence,
         )
     }
 }

@@ -43,6 +43,12 @@ data class TaskItem(
     val periodStart: Long? = null,
     /** How the series treats its open occurrences. Absent on one-off tasks. */
     val behavior: TaskBehavior? = null,
+    /** How this task is drawn. Absent rows are drawn as a check row. */
+    val look: TaskLook = TaskLook.CHECK,
+    /** The series machine chosen in the sheet. None means a standalone task. */
+    val series: SeriesBehavior = SeriesBehavior.NONE,
+    /** How often the series mints its next occurrence. */
+    val cadence: SeriesCadence = SeriesCadence.DAILY,
 ) {
     /** The planned day is one fact with two wire names. */
     val plannedDay: Long?
@@ -101,6 +107,9 @@ data class TaskItem(
                 overduePolicy = facts.overduePolicy,
             ),
             overduePolicy = facts.overduePolicy,
+            look = facts.look,
+            series = facts.series,
+            cadence = facts.cadence,
         )
     }
 }

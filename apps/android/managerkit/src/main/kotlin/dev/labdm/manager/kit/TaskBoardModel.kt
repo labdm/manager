@@ -37,8 +37,14 @@ data class BoardState(
     val draft: TaskDraft = TaskDraft(),
     val edit: TaskEdit? = null,
     val selectedSlice: TaskSlice = TaskSlice.TASKS,
-    val selectedView: TaskView = TaskView.HOME,
-    val findMoreOpen: Boolean = false,
+    val views: List<TaskView> = listOf(TaskView.HOME),
+    val selectedViewId: String = TaskView.HOME.id,
+    /** The grid button covers the screen with these tiles; it is never a rail. */
+    val showsDashboard: Boolean = false,
+    /** The bottom plus presents this sheet; no form is pushed into the column. */
+    val presentedSheet: BoardSheet? = null,
+    val composerFocusRequest: Int = 0,
+    val sheetEntities: List<BoardEntity> = emptyList(),
     val alerts: List<BoardAlert> = emptyList(),
     val questions: List<BoardQuestion> = emptyList(),
     val progression: ProgressionState? = null,
@@ -47,6 +53,28 @@ data class BoardState(
 ) {
     val draftTitle: String get() = draft.title
     val draftDueAt: Long? get() = draft.plannedOn
+
+    val selectedView: TaskView
+        get() = views.firstOrNull { it.id == selectedViewId } ?: TaskView.HOME
+
+    /**
+     * Tiles for the full-screen dashboard: one per view plus the add tile, which
+     * is always last and is the only dashboard path to the category sheet.
+     */
+    val dashboardTiles: List<DashboardTile>
+        get() {
+            val tiles = views.map { DashboardTile(it.id, it.title, it.icon, it.color) }.toMutableList()
+            if (tiles.none { it.title == "Add category" }) {
+                tiles += DashboardTile(
+                    id = "dashboard-add-category",
+                    title = "Add category",
+                    icon = Appearance.FALLBACK_ICON,
+                    color = Appearance.FALLBACK_COLOR,
+                    isAddTile = true,
+                )
+            }
+            return tiles
+        }
 
     /** Rows another person or an agent wrote and you have not opened. */
     val newCount: Int get() = tasks.count { it.isNew }
@@ -244,6 +272,8 @@ class TaskBoardModel(
      * row NEW and a later open tries again. Painting the list never calls it.
      */
     suspend fun openTask(task: TaskItem) {
+        // The editor is a sheet, not a form inserted into the board column.
+        _state.update { it.copy(presentedSheet = BoardSheet.EditTask(task.id)) }
         var opened = task
         if (task.seenAt == null) {
             try {
@@ -399,11 +429,160 @@ class TaskBoardModel(
         }
     }
 
-    // MARK: - Home shell
+    // MARK: - Sheets
+
+    /**
+     * The bottom plus opens the task sheet. It never inserts a form into the
+     * column. A time-bound slice still prefills that slice's first day, as the
+     * old quick-add did.
+     */
+    fun beginTask() {
+        _state.update { current ->
+            val day = when (current.selectedSlice) {
+                TaskSlice.TASKS -> null
+                else -> DueDateMath.startOfDay(now())
+            }
+            current.copy(
+                draft = current.draft.copy(plannedOn = day),
+                composerFocusRequest = current.composerFocusRequest + 1,
+                presentedSheet = BoardSheet.CreateTask,
+            )
+        }
+    }
+
+    fun present(sheet: BoardSheet) {
+        _state.update { it.copy(presentedSheet = sheet) }
+    }
+
+    fun dismissSheet() {
+        _state.update { current ->
+            current.copy(
+                presentedSheet = null,
+                edit = if (current.presentedSheet is BoardSheet.EditTask) null else current.edit,
+            )
+        }
+    }
+
+    /** The grid button covers the whole screen with tiles, never a side rail. */
+    fun openDashboard() {
+        _state.update { it.copy(showsDashboard = true, presentedSheet = null) }
+    }
+
+    fun closeDashboard() {
+        _state.update { it.copy(showsDashboard = false) }
+    }
+
+    /** Picking a tile selects that view and closes the cover. */
+    fun selectDashboardTile(tile: DashboardTile) {
+        if (tile.isAddTile) {
+            _state.update {
+                it.copy(showsDashboard = false, presentedSheet = BoardSheet.Category(null))
+            }
+            return
+        }
+        _state.update { it.copy(selectedViewId = tile.id, showsDashboard = false) }
+    }
+
+    /**
+     * Creates a task from the full sheet. Look, series and cadence are explicit
+     * choices; when a series is selected, only the first occurrence is minted
+     * here and the backend owns the rest.
+     */
+    suspend fun createTaskFromSheet(draft: TaskDraft): Boolean {
+        val title = TaskTitle.normalize(draft.title) ?: return false
+        if (_state.value.isSaving) return false
+
+        _state.update { it.copy(isSaving = true) }
+        return try {
+            backend.createTask(
+                draft.copy(
+                    title = title,
+                    plannedOn = draft.plannedOn?.let { DueDateMath.startOfDay(it) },
+                ),
+            )
+            _state.update { it.copy(isSaving = false, errorMessage = null) }
+            true
+        } catch (error: Exception) {
+            _state.update { it.copy(isSaving = false, errorMessage = message(error)) }
+            false
+        }
+    }
+
+    /** Creates the first occurrence of a series from the sheet. */
+    suspend fun createSeriesTask(draft: TaskDraft): Boolean {
+        val title = TaskTitle.normalize(draft.title) ?: return false
+        if (draft.series == SeriesBehavior.NONE || _state.value.isSaving) return false
+
+        val day = draft.plannedOn?.let { DueDateMath.startOfDay(it) }
+            ?: composerPlannedDay()
+            ?: DueDateMath.startOfDay(now())
+        _state.update { it.copy(isSaving = true) }
+        return try {
+            backend.createRecurrence(title, draft.series.wire, draft.cadence.wire, day)
+            _state.update { it.copy(isSaving = false, errorMessage = null) }
+            true
+        } catch (error: Exception) {
+            _state.update { it.copy(isSaving = false, errorMessage = message(error)) }
+            false
+        }
+    }
+
+    /**
+     * Saves a locally authored entity. Categories and views also land on the
+     * dashboard so the sheet flow is visible end to end. Unknown icons and
+     * colors fall back instead of crashing the board.
+     */
+    fun saveEntity(
+        kind: BoardEntityKind,
+        title: String,
+        icon: String,
+        color: String,
+    ): Boolean {
+        val trimmed = title.trim()
+        if (trimmed.isEmpty()) return false
+        entitySequence += 1
+        val entity = BoardEntity(
+            id = "entity-$entitySequence",
+            kind = kind,
+            title = trimmed,
+            icon = Appearance.icon(icon),
+            color = Appearance.color(color),
+        )
+        _state.update { current ->
+            val nextViews =
+                if (kind == BoardEntityKind.CATEGORY || kind == BoardEntityKind.VIEW) {
+                    current.views + TaskView(
+                        id = "view-${entity.id}",
+                        title = trimmed,
+                        icon = entity.icon,
+                        color = entity.color,
+                        kind = if (kind == BoardEntityKind.CATEGORY) {
+                            TaskViewKind.TEMPLATE
+                        } else {
+                            TaskViewKind.CUSTOM
+                        },
+                    )
+                } else {
+                    current.views
+                }
+            current.copy(
+                sheetEntities = current.sheetEntities + entity,
+                views = nextViews,
+                presentedSheet = null,
+            )
+        }
+        return true
+    }
+
+    private var entitySequence = 0
+
+    // MARK: - Views
 
     /** Selects the built-in Home view. */
-    fun selectHome() {
-        _state.update { it.copy(selectedView = TaskView.HOME, findMoreOpen = false) }
+    fun selectHome() = selectView(TaskView.HOME.id)
+
+    fun selectView(viewId: String) {
+        _state.update { it.copy(selectedViewId = viewId, showsDashboard = false) }
     }
 
     /** Selects a time slice for the main column. */
@@ -411,41 +590,39 @@ class TaskBoardModel(
         _state.update { it.copy(selectedSlice = slice) }
     }
 
-    /** Opens the Find more catalog. */
-    fun openFindMore() {
-        _state.update { it.copy(findMoreOpen = true) }
-    }
-
-    /** Closes the Find more catalog. */
-    fun closeFindMore() {
-        _state.update { it.copy(findMoreOpen = false) }
-    }
-
-    /** Installs a catalog template onto the rail. */
+    /** Installs a catalog template as a dashboard tile. */
     fun installTemplate(template: TaskTemplate) {
-        _state.update {
-            it.copy(
-                selectedView = TaskView(
-                    id = "view-${template.slug}",
-                    title = template.name,
-                    icon = TaskIcons.resolve(template.icon),
-                    color = TaskColors.resolve(template.color),
-                    kind = TaskViewKind.TEMPLATE,
-                ),
-                findMoreOpen = false,
+        val view =
+            TaskView(
+                id = "view-${template.slug}",
+                title = template.name,
+                icon = TaskIcons.resolve(template.icon),
+                color = TaskColors.resolve(template.color),
+                kind = TaskViewKind.TEMPLATE,
             )
+        _state.update { current ->
+            val views = if (current.views.any { it.id == view.id }) current.views else current.views + view
+            current.copy(views = views, selectedViewId = view.id, presentedSheet = null)
         }
     }
 
-    /** Creates a custom view from the editor's title, icon and color. Unknown values fall back. */
-    fun createCustomView(title: String, icon: String, color: String): TaskView =
-        TaskView(
-            id = "view-custom",
-            title = title,
-            icon = TaskIcons.resolve(icon),
-            color = TaskColors.resolve(color),
-            kind = TaskViewKind.CUSTOM,
-        )
+    /** Creates a custom view from a sheet's title, icon and color. */
+    fun createCustomView(title: String, icon: String, color: String): TaskView {
+        val trimmed = title.trim()
+        val view =
+            TaskView(
+                id = "view-${trimmed.replace(Regex("[^a-z0-9]+"), "-").trim('-').lowercase()}-custom",
+                title = trimmed,
+                icon = Appearance.icon(icon),
+                color = Appearance.color(color),
+                kind = TaskViewKind.CUSTOM,
+            )
+        _state.update { current ->
+            val views = if (current.views.any { it.id == view.id }) current.views else current.views + view
+            current.copy(views = views, selectedViewId = view.id, presentedSheet = null)
+        }
+        return view
+    }
 
     /** Marks an alert read; reading clears it from the band and keeps it in the log. */
     fun markAlertRead(alertId: String) {
