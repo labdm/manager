@@ -26,8 +26,23 @@ interface TaskBackend {
 
     suspend fun createTask(title: String, dueAt: Long?)
 
+    /**
+     * Creates a row with the full M1 facts. The signed-in caller is `self`, so
+     * the row is never NEW.
+     */
+    suspend fun createTask(draft: TaskDraft)
+
     /** Explicit setter, never a toggle: a retried tap must not invert state. */
     suspend fun setTask(id: String, done: Boolean)
+
+    /**
+     * Calls `tasks:markSeen`. Opening a row is an explicit open, not painting
+     * the list, so it is a mutation rather than a side effect of composition.
+     */
+    suspend fun markSeen(id: String)
+
+    /** Writes the editable facts of an existing row. Delete stays [deleteTask]. */
+    suspend fun updateTask(id: String, draft: TaskDraft)
 
     suspend fun deleteTask(id: String)
 }

@@ -19,6 +19,13 @@ sealed interface BoardPhase {
     data class Failed(val message: String) : BoardPhase
 }
 
+/** An open editor for one row. Absent means no editor is showing. */
+data class TaskEdit(
+    val taskId: String,
+    val draft: TaskDraft,
+    val isSaving: Boolean = false,
+)
+
 data class BoardState(
     val tasks: List<TaskItem> = emptyList(),
     val phase: BoardPhase = BoardPhase.Idle,
@@ -27,19 +34,26 @@ data class BoardState(
     val inFlight: Set<String> = emptySet(),
     val errorMessage: String? = null,
     val isSaving: Boolean = false,
-    val draftTitle: String = "",
-    val draftDueAt: Long? = null,
-)
+    val draft: TaskDraft = TaskDraft(),
+    val edit: TaskEdit? = null,
+) {
+    val draftTitle: String get() = draft.title
+    val draftDueAt: Long? get() = draft.plannedOn
+
+    /** Rows another person or an agent wrote and you have not opened. */
+    val newCount: Int get() = tasks.count { it.isNew }
+}
 
 /**
  * Presentation state for the task board.
  *
- * Owns the live list, composer draft and optimistic mutations. No Convex or
- * Clerk imports: the whole state machine is unit tested against an in-memory
- * backend, mirroring Swift's `TaskBoardModel`.
+ * Owns the live list, composer draft, row editor and optimistic mutations. No
+ * Convex or Clerk imports: the whole state machine is unit tested against an
+ * in-memory backend, mirroring Swift's `TaskBoardModel`.
  */
 class TaskBoardModel(
     private val backend: TaskBackend,
+    private val now: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(BoardState())
@@ -90,9 +104,9 @@ class TaskBoardModel(
 
     /** Restarts after a failure without losing the composer draft. */
     fun retry() {
-        val draft = _state.value.draftTitle to _state.value.draftDueAt
+        val draft = _state.value.draft
         stop()
-        _state.update { it.copy(draftTitle = draft.first, draftDueAt = draft.second) }
+        _state.update { it.copy(draft = draft) }
         start()
     }
 
@@ -125,26 +139,54 @@ class TaskBoardModel(
 
     // MARK: - Composer
 
-    fun updateDraft(title: String) {
-        _state.update { it.copy(draftTitle = title) }
+    fun updateDraft(title: String) = updateDraft { it.copy(title = title) }
+
+    /** The planned day. Stored as the start of that local day, never a deadline. */
+    fun setDraftDueAt(epochMillis: Long?) = setDraftPlannedOn(epochMillis)
+
+    fun setDraftPlannedOn(epochMillis: Long?) = updateDraft { it.copy(plannedOn = epochMillis) }
+
+    fun setDraftPlannedTime(minutes: Int?) = updateDraft {
+        if (PlannedTimeMath.isValid(minutes)) it.copy(plannedTime = minutes) else it
     }
 
-    fun setDraftDueAt(epochMillis: Long?) {
-        _state.update { it.copy(draftDueAt = epochMillis) }
+    fun setDraftNotes(notes: String?) = updateDraft { it.copy(notes = notes?.takeIf(String::isNotBlank)) }
+
+    fun setDraftLocation(location: String?) =
+        updateDraft { it.copy(location = location?.takeIf(String::isNotBlank)) }
+
+    /** A deadline is its own instant and does not touch the planned day. */
+    fun setDraftDeadlineAt(epochMillis: Long?) = updateDraft { it.copy(deadlineAt = epochMillis) }
+
+    fun setDraftRemindAt(epochMillis: Long?) = updateDraft { it.copy(remindAt = epochMillis) }
+
+    fun setDraftPriority(priority: Priority?) = updateDraft {
+        it.copy(priority = priority, priorityRank = priority?.seedRank)
+    }
+
+    fun setDraftOverduePolicy(policy: OverduePolicy) = updateDraft {
+        it.copy(overduePolicy = policy)
+    }
+
+    private fun updateDraft(transform: (TaskDraft) -> TaskDraft) {
+        _state.update { it.copy(draft = transform(it.draft)) }
     }
 
     val draftValidationMessage: String?
         get() {
-            val title = _state.value.draftTitle.trim()
-            return if (title.isNotEmpty() && title.length > TaskTitle.MAX_LENGTH) {
-                "Titles are limited to ${TaskTitle.MAX_LENGTH} characters."
-            } else {
-                null
+            val draft = _state.value.draft
+            val title = draft.title.trim()
+            return when {
+                title.isNotEmpty() && title.length > TaskTitle.MAX_LENGTH ->
+                    "Titles are limited to ${TaskTitle.MAX_LENGTH} characters."
+                !PlannedTimeMath.isValid(draft.plannedTime) ->
+                    "Time must be between 00:00 and 23:59."
+                else -> null
             }
         }
 
     val canSubmitDraft: Boolean
-        get() = !_state.value.isSaving && TaskTitle.isValid(_state.value.draftTitle)
+        get() = !_state.value.isSaving && TaskTitle.isValid(_state.value.draft.title)
 
     /** Creates a task from the composer. Returns true when the draft was cleared. */
     suspend fun addTask(): Boolean {
@@ -153,15 +195,20 @@ class TaskBoardModel(
             _state.update { it.copy(errorMessage = validationMessage) }
             return false
         }
-        val title = TaskTitle.normalize(_state.value.draftTitle) ?: return false
+        val draft = _state.value.draft
+        val title = TaskTitle.normalize(draft.title) ?: return false
         if (_state.value.isSaving) return false
 
         _state.update { it.copy(isSaving = true) }
         try {
-            val dueAt = _state.value.draftDueAt?.let { DueDateMath.startOfDay(it) }
-            backend.createTask(title, dueAt)
+            backend.createTask(
+                draft.copy(
+                    title = title,
+                    plannedOn = draft.plannedOn?.let { DueDateMath.startOfDay(it) },
+                )
+            )
             _state.update {
-                it.copy(draftTitle = "", draftDueAt = null, errorMessage = null, isSaving = false)
+                it.copy(draft = TaskDraft(), errorMessage = null, isSaving = false)
             }
             return true
         } catch (error: Exception) {
@@ -171,7 +218,117 @@ class TaskBoardModel(
     }
 
     fun clearDraft() {
-        _state.update { it.copy(draftTitle = "", draftDueAt = null) }
+        _state.update { it.copy(draft = TaskDraft()) }
+    }
+
+    // MARK: - Opening and editing
+
+    /**
+     * Opening a row is an explicit open. `tasks:markSeen` runs first, and
+     * `seenAt` is stamped only after it succeeds, so a failed open leaves the
+     * row NEW and a later open tries again. Painting the list never calls it.
+     */
+    suspend fun openTask(task: TaskItem) {
+        var opened = task
+        if (task.seenAt == null) {
+            try {
+                backend.markSeen(task.id)
+                val timestamp = now()
+                opened = task.withSeen(timestamp)
+                _state.update { current ->
+                    current.copy(
+                        tasks = current.tasks.map { if (it.id == task.id) opened else it },
+                    )
+                }
+            } catch (error: Exception) {
+                _state.update { it.copy(errorMessage = message(error)) }
+            }
+        }
+        _state.update { it.copy(edit = TaskEdit(opened.id, TaskDraft.from(opened))) }
+    }
+
+    fun updateEditDraft(transform: (TaskDraft) -> TaskDraft) {
+        _state.update { current ->
+            val edit = current.edit ?: return@update current
+            current.copy(edit = edit.copy(draft = transform(edit.draft)))
+        }
+    }
+
+    fun closeEditor() {
+        _state.update { it.copy(edit = null) }
+    }
+
+    val editValidationMessage: String?
+        get() {
+            val edit = _state.value.edit ?: return null
+            val title = edit.draft.title.trim()
+            return when {
+                title.isEmpty() -> "A task needs a title."
+                title.length > TaskTitle.MAX_LENGTH ->
+                    "Titles are limited to ${TaskTitle.MAX_LENGTH} characters."
+                !PlannedTimeMath.isValid(edit.draft.plannedTime) ->
+                    "Time must be between 00:00 and 23:59."
+                else -> null
+            }
+        }
+
+    /** Saves the editor, optimistic and rolled back on failure. */
+    suspend fun saveEdit(): Boolean {
+        val edit = _state.value.edit ?: return false
+        val validationMessage = editValidationMessage
+        if (validationMessage != null) {
+            _state.update { it.copy(errorMessage = validationMessage) }
+            return false
+        }
+        if (edit.isSaving) return false
+        val original = _state.value.tasks.firstOrNull { it.id == edit.taskId } ?: return false
+
+        // The editor is seeded with a day that is already at the start of a
+        // civil day. Re-normalizing it would slide it into the previous day in
+        // any zone behind UTC, so keep it unless the user actually picked a
+        // new day.
+        // A blank date is not a clear. The mutation omits absent numbers, and
+        // the server keeps the stored value. Notes and location do clear,
+        // because an empty string is stored.
+        val plannedOn = when {
+            edit.draft.plannedOn == null -> original.plannedDay
+            edit.draft.plannedOn == original.plannedDay -> original.plannedDay
+            else -> DueDateMath.startOfDay(edit.draft.plannedOn)
+        }
+        val draft = edit.draft.copy(
+            title = TaskTitle.normalize(edit.draft.title) ?: original.title,
+            notes = edit.draft.notes ?: "",
+            plannedOn = plannedOn,
+            plannedTime = edit.draft.plannedTime ?: original.plannedTime,
+            location = edit.draft.location ?: "",
+            deadlineAt = edit.draft.deadlineAt ?: original.deadlineAt,
+            remindAt = edit.draft.remindAt ?: original.remindAt,
+            priority = edit.draft.priority ?: Priority.NORMAL,
+        )
+        val timestamp = now()
+
+        _state.update { current ->
+            current.copy(
+                edit = edit.copy(isSaving = true),
+                tasks = current.tasks.map {
+                    if (it.id == edit.taskId) it.withDraft(draft, timestamp) else it
+                },
+            )
+        }
+        return try {
+            backend.updateTask(edit.taskId, draft)
+            _state.update { it.copy(edit = null, errorMessage = null) }
+            true
+        } catch (error: Exception) {
+            restore(original)
+            _state.update {
+                it.copy(
+                    edit = it.edit?.copy(isSaving = false),
+                    errorMessage = message(error),
+                )
+            }
+            false
+        }
     }
 
     // MARK: - Mutations
@@ -188,7 +345,7 @@ class TaskBoardModel(
         _state.update { current ->
             current.copy(
                 inFlight = current.inFlight + id,
-                tasks = current.tasks.map { if (it.id == id) it.withDone(done) else it },
+                tasks = current.tasks.map { if (it.id == id) it.withDone(done, now()) else it },
             )
         }
         try {
@@ -202,6 +359,7 @@ class TaskBoardModel(
         }
     }
 
+    /** Delete is the existing remove mutation. There is no trash screen. */
     suspend fun delete(task: TaskItem) {
         if (isWorking(task.id)) return
         val index = _state.value.tasks.indexOfFirst { it.id == task.id }
