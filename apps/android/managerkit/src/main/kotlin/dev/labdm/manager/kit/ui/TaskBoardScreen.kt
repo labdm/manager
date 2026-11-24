@@ -1,41 +1,30 @@
 package dev.labdm.manager.kit.ui
 
-import android.app.DatePickerDialog
-import android.app.TimePickerDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -44,45 +33,32 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.labdm.manager.kit.BoardAlert
 import dev.labdm.manager.kit.BoardColumnSections
 import dev.labdm.manager.kit.BoardPhase
-import dev.labdm.manager.kit.BoardState
 import dev.labdm.manager.kit.BoardQuestion
 import dev.labdm.manager.kit.BoardQuestionOption
-import dev.labdm.manager.kit.DueDateMath
-import dev.labdm.manager.kit.OverduePolicy
-import dev.labdm.manager.kit.PlannedTimeMath
-import dev.labdm.manager.kit.Priority
+import dev.labdm.manager.kit.BoardState
 import dev.labdm.manager.kit.ProgressionState
 import dev.labdm.manager.kit.QuestState
 import dev.labdm.manager.kit.TaskBoardModel
 import dev.labdm.manager.kit.TaskDateLabels
-import dev.labdm.manager.kit.TaskDraft
 import dev.labdm.manager.kit.TaskItem
-import dev.labdm.manager.kit.TaskSlice
-import dev.labdm.manager.kit.TaskView
-import dev.labdm.manager.kit.TaskViewKind
-import kotlinx.coroutines.CoroutineScope
+import dev.labdm.manager.kit.TaskLook
 import kotlinx.coroutines.launch
-import java.util.Calendar
-import java.util.Date
 
 /**
  * The signed-in screen. `account` and `onSignOut` come from the app layer
  * because the account control is a Clerk composable, like Apple's `Accessory`.
  *
- * The Home shell: a left rail with Home and Find more, a main column with the
- * Tasks / Daily / Weekly / Monthly tabs and a composing `+`, and the column that
- * draws alerts, questions, task rows, progression bars and quest steppers.
+ * The Home shell has no side rail: one board column, a bottom bar with the four
+ * time slices, a grid button that covers the screen with category tiles, and a
+ * plus that presents the task sheet. Creating or editing anything presents a
+ * modal bottom sheet; no form is ever pushed into the column.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,145 +71,41 @@ fun TaskBoardScreen(
     val state by model.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
-    Scaffold(
-        modifier = modifier,
-        topBar = {
-            TopAppBar(
-                title = { Text("Manager") },
-                actions = {
-                    account()
-                    IconButton(onClick = onSignOut) {
-                        Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Sign out")
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .background(MaterialTheme.colorScheme.background),
-        ) {
-            HomeRail(
-                selectedView = state.selectedView,
-                findMoreOpen = state.findMoreOpen,
-                onHome = { model.selectHome() },
-                onFindMore = { model.openFindMore() },
-                modifier = Modifier.width(104.dp),
-            )
-            HomeMain(
+    Box(modifier = modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Manager") },
+                    actions = {
+                        account()
+                        IconButton(onClick = onSignOut) {
+                            Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Sign out")
+                        }
+                    },
+                )
+            },
+            bottomBar = { BottomChromeBar(model = model, state = state) },
+        ) { padding ->
+            BoardColumn(
                 model = model,
                 state = state,
                 scope = scope,
-                modifier = Modifier.weight(1f),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(padding),
             )
         }
-    }
 
-    state.edit?.let { edit ->
-        TaskEditorDialog(model = model, draft = edit.draft, isSaving = edit.isSaving)
-    }
-}
-@Composable
-private fun HomeRail(
-    selectedView: TaskView,
-    findMoreOpen: Boolean,
-    onHome: () -> Unit,
-    onFindMore: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        RailButton(
-            icon = Icons.Filled.Home,
-            label = "Home",
-            selected = selectedView.kind == TaskViewKind.HOME && !findMoreOpen,
-            onClick = onHome,
-        )
-        RailButton(
-            icon = Icons.Filled.List,
-            label = "Find more",
-            selected = findMoreOpen,
-            onClick = onFindMore,
-        )
-    }
-}
-
-@Composable
-private fun RailButton(
-    icon: ImageVector,
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
-private fun HomeMain(
-    model: TaskBoardModel,
-    state: BoardState,
-    scope: CoroutineScope,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        MainTabs(
-            selectedSlice = state.selectedSlice,
-            onSliceSelect = { model.selectSlice(it) },
-            onCompose = { scope.launch { model.addTaskInCurrentSlice() } },
-        )
-        Composer(model = model)
-        BoardColumn(model = model, state = state, scope = scope)
-    }
-}
-
-@Composable
-private fun MainTabs(
-    selectedSlice: TaskSlice,
-    onSliceSelect: (TaskSlice) -> Unit,
-    onCompose: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        TaskSlice.entries.forEach { slice ->
-            if (slice == selectedSlice) {
-                Button(onClick = { onSliceSelect(slice) }) { Text(slice.wire.replaceFirstChar { it.uppercase() }) }
-            } else {
-                OutlinedButton(onClick = { onSliceSelect(slice) }) { Text(slice.wire.replaceFirstChar { it.uppercase() }) }
-            }
+        if (state.showsDashboard) {
+            CategoryDashboard(
+                model = model,
+                state = state,
+                onClose = { model.closeDashboard() },
+            )
         }
-        Button(onClick = onCompose) { Text("+") }
+
+        BoardSheetHost(model = model, state = state)
     }
 }
 
@@ -241,22 +113,45 @@ private fun MainTabs(
 private fun BoardColumn(
     model: TaskBoardModel,
     state: BoardState,
-    scope: CoroutineScope,
+    scope: kotlinx.coroutines.CoroutineScope,
+    modifier: Modifier = Modifier,
 ) {
     val tasks = model.tasksForCurrentSlice()
-    val sections = BoardColumnSections.of(
-        tasks = tasks,
-        alerts = state.unreadAlerts,
-        questions = state.openQuestions,
-        progression = state.progression,
-        quest = state.quest,
-        pinnedTaskIds = state.pinnedTaskIds,
-    )
+    val sections =
+        BoardColumnSections.of(
+            tasks = tasks,
+            alerts = state.unreadAlerts,
+            questions = state.openQuestions,
+            progression = state.progression,
+            quest = state.quest,
+            pinnedTaskIds = state.pinnedTaskIds,
+        )
 
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier =
+            modifier
+                .verticalScroll(rememberScrollState())
+                .background(MaterialTheme.colorScheme.background)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        if (state.phase == BoardPhase.Loading) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
+        model.connectionNotice?.let { Notice(it) }
+        state.errorMessage?.let {
+            Notice(
+                text = it,
+                action = { TextButton(onClick = { model.dismissError() }) { Text("Dismiss") } },
+            )
+        }
+        (state.phase as? BoardPhase.Failed)?.let { failed ->
+            Notice(
+                text = failed.message,
+                action = { TextButton(onClick = { model.retry() }) { Text("Retry") } },
+            )
+        }
+
         sections.alerts.forEach { alert ->
             AlertBand(
                 alert = alert,
@@ -266,27 +161,11 @@ private fun BoardColumn(
         sections.questions.forEach { question ->
             QuestionGroup(
                 question = question,
-                onAnswer = { option: BoardQuestionOption -> model.answerQuestion(question.id, option.id) },
+                onAnswer = { option -> model.answerQuestion(question.id, option.id) },
             )
         }
-        sections.pinnedTasks.forEach { task ->
-            TaskRow(
-                task = task,
-                busy = task.id in state.inFlight,
-                onOpen = { scope.launch { model.openTask(task) } },
-                onCheckedChange = { done -> scope.launch { model.setDone(task.id, done) } },
-                onDelete = { scope.launch { model.delete(task) } },
-            )
-        }
-        sections.tasks.forEach { task ->
-            TaskRow(
-                task = task,
-                busy = task.id in state.inFlight,
-                onOpen = { scope.launch { model.openTask(task) } },
-                onCheckedChange = { done -> scope.launch { model.setDone(task.id, done) } },
-                onDelete = { scope.launch { model.delete(task) } },
-            )
-        }
+        sections.pinnedTasks.forEach { task -> TaskRowFor(task, state, model, scope) }
+        sections.tasks.forEach { task -> TaskRowFor(task, state, model, scope) }
         sections.progression?.let { ProgressionBar(progression = it) }
         sections.quest?.let { QuestStepper(quest = it) }
         if (sections.isEmpty) {
@@ -297,6 +176,22 @@ private fun BoardColumn(
             )
         }
     }
+}
+
+@Composable
+private fun TaskRowFor(
+    task: TaskItem,
+    state: BoardState,
+    model: TaskBoardModel,
+    scope: kotlinx.coroutines.CoroutineScope,
+) {
+    TaskRow(
+        task = task,
+        busy = task.id in state.inFlight,
+        onOpen = { scope.launch { model.openTask(task) } },
+        onCheckedChange = { done -> scope.launch { model.setDone(task.id, done) } },
+        onDelete = { scope.launch { model.delete(task) } },
+    )
 }
 
 @Composable
@@ -353,7 +248,9 @@ private fun QuestionGroup(
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
             )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 question.options.forEach { option ->
                     FilterChip(
                         selected = false,
@@ -368,7 +265,12 @@ private fun QuestionGroup(
 
 @Composable
 private fun ProgressionBar(progression: ProgressionState) {
-    val progress = if (progression.target > 0) progression.current.coerceIn(0, progression.target).toFloat() / progression.target else 0f
+    val progress =
+        if (progression.target > 0) {
+            progression.current.coerceIn(0, progression.target).toFloat() / progression.target
+        } else {
+            0f
+        }
     Card(Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -436,7 +338,6 @@ private fun QuestStepper(quest: QuestState) {
                         )
                     }
                 }
-                // An empty next step is the waiting case: the quest stays open.
                 if (quest.nextStep == null) {
                     Text(
                         text = "Waiting",
@@ -449,45 +350,11 @@ private fun QuestStepper(quest: QuestState) {
     }
 }
 
-@Composable
-private fun Composer(model: TaskBoardModel) {
-    val state by model.state.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
-    val draft = state.draft
-
-    OutlinedTextField(
-        value = draft.title,
-        onValueChange = { model.updateDraft(it) },
-        label = { Text("New task") },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
-        isError = model.draftValidationMessage != null,
-        supportingText = model.draftValidationMessage?.let { { Text(it) } },
-    )
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(
-            onClick = { scope.launch { model.addTask() } },
-            enabled = model.canSubmitDraft,
-        ) {
-            Text("Add task")
-        }
-        DayButton(
-            dayMillis = draft.plannedOn,
-            label = "Planned day",
-            onChange = { model.setDraftPlannedOn(it) },
-        )
-        TimeButton(
-            minutes = draft.plannedTime,
-            label = "Time",
-            onChange = { model.setDraftPlannedTime(it) },
-        )
-        PriorityChips(
-            selected = draft.priority,
-            onSelect = { model.setDraftPriority(it) },
-        )
-    }
-}
-
+/**
+ * The look is stored on the task. `check` is a checkbox row, `row` is a plain
+ * line with no checkbox and `card` is an emphasized card. Unknown values fall
+ * back to `check` at the wire boundary.
+ */
 @Composable
 private fun TaskRow(
     task: TaskItem,
@@ -496,360 +363,120 @@ private fun TaskRow(
     onCheckedChange: (Boolean) -> Unit,
     onDelete: () -> Unit,
 ) {
-    Card(Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
+    when (task.look) {
+        TaskLook.ROW ->
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = !busy, onClick = onOpen)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TaskBody(task, Modifier.weight(1f))
+                IconButton(onClick = onDelete, enabled = !busy) {
+                    Icon(Icons.Filled.Delete, contentDescription = "Delete ${task.title}")
+                }
+            }
+
+        TaskLook.CARD ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors =
+                    CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+            ) {
+                TaskRowContent(task, busy, onOpen, onCheckedChange, onDelete)
+            }
+
+        TaskLook.CHECK ->
+            Card(Modifier.fillMaxWidth()) {
+                TaskRowContent(task, busy, onOpen, onCheckedChange, onDelete)
+            }
+    }
+}
+
+@Composable
+private fun TaskRowContent(
+    task: TaskItem,
+    busy: Boolean,
+    onOpen: () -> Unit,
+    onCheckedChange: (Boolean) -> Unit,
+    onDelete: () -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
                 .clickable(enabled = !busy, onClick = onOpen)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Checkbox(
-                checked = task.done,
-                onCheckedChange = onCheckedChange,
-                enabled = !busy,
-            )
-            Column(Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    if (task.isNew) NewMark()
-                    Text(
-                        text = task.title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = if (task.isNew) FontWeight.SemiBold else null,
-                        textDecoration = if (task.done) TextDecoration.LineThrough else null,
-                    )
-                }
-                task.notes?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    task.plannedDay?.let {
-                        Meta(
-                            TaskDateLabels.planned(it, task.plannedTime),
-                            MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    task.deadlineAt?.let {
-                        Meta(
-                            if (task.overdue) "Overdue · ${TaskDateLabels.instant(it)}"
-                            else "Due · ${TaskDateLabels.instant(it)}",
-                            if (task.overdue) MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    task.location?.let { Meta(it, MaterialTheme.colorScheme.onSurfaceVariant) }
-                    task.priority?.let {
-                        Meta(
-                            it.label,
-                            if (task.overdue) MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-            IconButton(onClick = onDelete, enabled = !busy) {
-                Icon(Icons.Filled.Delete, contentDescription = "Delete ${task.title}")
-            }
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Checkbox(
+            checked = task.done,
+            onCheckedChange = onCheckedChange,
+            enabled = !busy,
+        )
+        TaskBody(task, Modifier.weight(1f))
+        IconButton(onClick = onDelete, enabled = !busy) {
+            Icon(Icons.Filled.Delete, contentDescription = "Delete ${task.title}")
         }
     }
 }
 
 @Composable
-private fun Meta(text: String, color: androidx.compose.ui.graphics.Color) {
-    Text(text = text, style = MaterialTheme.typography.labelSmall, color = color)
-}
-
-/** The NEW mark that leaves the row once it is opened. */
-@Composable
-private fun NewMark() {
-    Surface(
-        color = MaterialTheme.colorScheme.tertiaryContainer,
-        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-        shape = MaterialTheme.shapes.extraSmall,
-        modifier = Modifier.semantics { contentDescription = "New" },
-    ) {
-        Text(
-            text = "NEW",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-        )
-    }
-}
-
-@Composable
-private fun TaskEditorDialog(
-    model: TaskBoardModel,
-    draft: TaskDraft,
-    isSaving: Boolean,
+private fun TaskBody(
+    task: TaskItem,
+    modifier: Modifier = Modifier,
 ) {
-    val scope = rememberCoroutineScope()
-
-    AlertDialog(
-        onDismissRequest = { model.closeEditor() },
-        title = { Text("Edit task") },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                OutlinedTextField(
-                    value = draft.title,
-                    onValueChange = { value -> model.updateEditDraft { it.copy(title = value) } },
-                    label = { Text("Title") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    isError = model.editValidationMessage != null,
-                    supportingText = model.editValidationMessage?.let { { Text(it) } },
-                )
-                OutlinedTextField(
-                    value = draft.notes.orEmpty(),
-                    onValueChange = { value ->
-                        model.updateEditDraft { it.copy(notes = value.ifBlank { null }) }
-                    },
-                    label = { Text("Notes") },
-                    minLines = 2,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = draft.location.orEmpty(),
-                    onValueChange = { value ->
-                        model.updateEditDraft { it.copy(location = value.ifBlank { null }) }
-                    },
-                    label = { Text("Location") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                HorizontalDivider()
-                Text("Planned", style = MaterialTheme.typography.labelMedium)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DayButton(
-                        dayMillis = draft.plannedOn,
-                        label = "Planned day",
-                        allowClear = false,
-                        onChange = { day ->
-                            model.updateEditDraft { it.copy(plannedOn = day) }
-                        },
-                    )
-                    TimeButton(
-                        minutes = draft.plannedTime,
-                        label = "Time",
-                        allowClear = false,
-                        onChange = { minutes ->
-                            model.updateEditDraft { it.copy(plannedTime = minutes) }
-                        },
-                    )
-                }
-
-                HorizontalDivider()
-                Text("Deadline", style = MaterialTheme.typography.labelMedium)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    InstantButton(
-                        instantMillis = draft.deadlineAt,
-                        label = "Deadline",
-                        allowClear = false,
-                        onChange = { instant ->
-                            // A deadline never writes the planned day.
-                            model.updateEditDraft { it.copy(deadlineAt = instant) }
-                        },
-                    )
-                    InstantButton(
-                        instantMillis = draft.remindAt,
-                        label = "Remind at",
-                        allowClear = false,
-                        onChange = { instant ->
-                            model.updateEditDraft { it.copy(remindAt = instant) }
-                        },
-                    )
-                }
-
-                HorizontalDivider()
-                PriorityChips(
-                    selected = draft.priority,
-                    onSelect = { priority -> model.updateEditDraft { it.copy(priority = priority) } },
-                )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OverduePolicy.entries.forEach { policy ->
-                        FilterChip(
-                            selected = draft.overduePolicy == policy,
-                            onClick = {
-                                model.updateEditDraft { it.copy(overduePolicy = policy) }
-                            },
-                            label = { Text(policy.wire) },
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { scope.launch { model.saveEdit() } },
-                enabled = !isSaving,
-            ) {
-                Text("Save")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = { model.closeEditor() }) { Text("Cancel") }
-        },
-    )
-}
-
-@Composable
-private fun PriorityChips(selected: Priority?, onSelect: (Priority?) -> Unit) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(
-            selected = selected == null,
-            onClick = { onSelect(null) },
-            label = { Text("default") },
-        )
-        Priority.seeds.forEach { priority ->
-            FilterChip(
-                selected = selected == priority,
-                onClick = { onSelect(if (selected == priority) null else priority) },
-                label = { Text(priority.label) },
-            )
-        }
-    }
-}
-
-/** The planned day. Written as the start of that local day. */
-@Composable
-private fun DayButton(
-    dayMillis: Long?,
-    label: String,
-    allowClear: Boolean = true,
-    onChange: (Long?) -> Unit,
-) {
-    val context = LocalContext.current
-    val calendar = Calendar.getInstance().apply {
-        time = Date(dayMillis ?: System.currentTimeMillis())
-    }
-
-    TextButton(
-        onClick = {
-            DatePickerDialog(
-                context,
-                { _, year, month, day ->
-                    val picked = Calendar.getInstance().apply {
-                        set(Calendar.YEAR, year)
-                        set(Calendar.MONTH, month)
-                        set(Calendar.DAY_OF_MONTH, day)
-                    }
-                    onChange(DueDateMath.startOfDay(picked.timeInMillis))
-                },
-                calendar.get(Calendar.YEAR),
-                calendar.get(Calendar.MONTH),
-                calendar.get(Calendar.DAY_OF_MONTH),
-            ).show()
-        },
-    ) {
-        Text(dayMillis?.let { "$label ${DueDateMath.dayLabel(it)}" } ?: "Set $label")
-    }
-    if (allowClear && dayMillis != null) {
-        TextButton(onClick = { onChange(null) }) { Text("Clear") }
-    }
-}
-
-/** Minutes from midnight on the planned day. Cleared without touching the day. */
-@Composable
-private fun TimeButton(
-    minutes: Int?,
-    label: String,
-    allowClear: Boolean = true,
-    onChange: (Int?) -> Unit,
-) {
-    val context = LocalContext.current
-    val current = minutes ?: 9 * 60
-
-    TextButton(
-        onClick = {
-            TimePickerDialog(
-                context,
-                { _, hour, minute -> onChange(hour * 60 + minute) },
-                current / 60,
-                current % 60,
-                true,
-            ).show()
-        },
-    ) {
-        Text(minutes?.let { "$label ${PlannedTimeMath.label(it)}" } ?: "Set $label")
-    }
-    if (allowClear && minutes != null) {
-        TextButton(onClick = { onChange(null) }) { Text("Clear") }
-    }
-}
-
-/** An exact instant: date, then time. Used for the deadline and the reminder. */
-@Composable
-private fun InstantButton(
-    instantMillis: Long?,
-    label: String,
-    allowClear: Boolean = true,
-    onChange: (Long?) -> Unit,
-) {
-    val context = LocalContext.current
-    val start = Calendar.getInstance().apply {
-        time = Date(instantMillis ?: System.currentTimeMillis())
-    }
-
-    TextButton(
-        onClick = {
-            DatePickerDialog(
-                context,
-                { _, year, month, day ->
-                    TimePickerDialog(
-                        context,
-                        { _, hour, minute ->
-                            val picked = Calendar.getInstance().apply {
-                                set(Calendar.YEAR, year)
-                                set(Calendar.MONTH, month)
-                                set(Calendar.DAY_OF_MONTH, day)
-                                set(Calendar.HOUR_OF_DAY, hour)
-                                set(Calendar.MINUTE, minute)
-                                set(Calendar.SECOND, 0)
-                                set(Calendar.MILLISECOND, 0)
-                            }
-                            onChange(picked.timeInMillis)
-                        },
-                        start.get(Calendar.HOUR_OF_DAY),
-                        start.get(Calendar.MINUTE),
-                        true,
-                    ).show()
-                },
-                start.get(Calendar.YEAR),
-                start.get(Calendar.MONTH),
-                start.get(Calendar.DAY_OF_MONTH),
-            ).show()
-        },
-    ) {
-        Text(instantMillis?.let { "$label ${TaskDateLabels.instant(it)}" } ?: "Set $label")
-    }
-    if (allowClear && instantMillis != null) {
-        TextButton(onClick = { onChange(null) }) { Text("Clear") }
-    }
-}
-
-@Composable
-private fun Notice(
-    text: String,
-    action: (@Composable () -> Unit)? = null,
-) {
-    Card(Modifier.fillMaxWidth()) {
+    Column(modifier) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(text, Modifier.weight(1f), color = MaterialTheme.colorScheme.error)
-            action?.invoke()
+            if (task.isNew) NewMark()
+            Text(
+                text = task.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = if (task.isNew) FontWeight.SemiBold else null,
+                textDecoration = if (task.done) TextDecoration.LineThrough else null,
+            )
+        }
+        task.notes?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            task.plannedDay?.let {
+                Meta(
+                    TaskDateLabels.planned(it, task.plannedTime),
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            task.deadlineAt?.let {
+                Meta(
+                    if (task.overdue) "Overdue · ${TaskDateLabels.instant(it)}"
+                    else "Due · ${TaskDateLabels.instant(it)}",
+                    if (task.overdue) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            task.location?.let { Meta(it, MaterialTheme.colorScheme.onSurfaceVariant) }
+            task.priority?.let {
+                Meta(
+                    it.label,
+                    if (task.overdue) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

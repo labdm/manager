@@ -17,6 +17,7 @@ object ConvexFunction {
     const val MARK_SEEN = "tasks:markSeen"
     const val SET_DONE = "tasks:setDone"
     const val REMOVE = "tasks:remove"
+    const val CREATE_RECURRENCE = "recurrences:create"
 }
 
 /**

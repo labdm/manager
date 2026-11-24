@@ -404,6 +404,13 @@ class TaskBoardModelTest {
             createDraftCalls += draft
         }
 
+        override suspend fun createRecurrence(
+            title: String,
+            behavior: String,
+            cadence: String,
+            periodStart: Long,
+        ) = Unit
+
         override suspend fun setTask(id: String, done: Boolean) {
             if (failMutations) error("setDone failed")
             doneCalls += id to done
