@@ -15,6 +15,7 @@ enum ConvexFunction {
   static let markSeen = "tasks:markSeen"
   static let recurrencesCreate = "recurrences:create"
   static let viewsInstallTemplate = "views:installTemplate"
+  static let viewsCreateCustom = "views:createCustom"
   static let boardSlice = "board:slice"
 }
 

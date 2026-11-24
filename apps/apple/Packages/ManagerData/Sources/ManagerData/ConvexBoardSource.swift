@@ -1,4 +1,3 @@
-import Combine
 import ConvexMobile
 import Foundation
 import ManagerCore
@@ -14,6 +13,25 @@ private struct BoardSlicePayload: Decodable {
   let questions: [QuestionRecord]?
   let progressions: [ProgressionRecord]?
   let quests: [QuestRecord]?
+
+  private enum CodingKeys: String, CodingKey {
+    case views
+    case rail
+    case alerts
+    case questions
+    case progressions
+    case quests
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    views = try container.decodeIfPresent([ViewRecord].self, forKey: .rail)
+      ?? container.decodeIfPresent([ViewRecord].self, forKey: .views)
+    alerts = try container.decodeIfPresent([AlertRecord].self, forKey: .alerts)
+    questions = try container.decodeIfPresent([QuestionRecord].self, forKey: .questions)
+    progressions = try container.decodeIfPresent([ProgressionRecord].self, forKey: .progressions)
+    quests = try container.decodeIfPresent([QuestRecord].self, forKey: .quests)
+  }
 
   var snapshot: BoardSnapshot {
     BoardSnapshot(
@@ -120,6 +138,23 @@ private struct QuestRecord: Decodable {
   let steps: [StepRecord]?
   let isWaiting: Bool?
 
+  private enum CodingKeys: String, CodingKey {
+    case id
+    case title
+    case steps
+    case isWaiting
+    case waiting
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = try container.decode(String.self, forKey: .id)
+    title = try container.decodeIfPresent(String.self, forKey: .title)
+    steps = try container.decodeIfPresent([StepRecord].self, forKey: .steps)
+    isWaiting = try container.decodeIfPresent(Bool.self, forKey: .waiting)
+      ?? container.decodeIfPresent(Bool.self, forKey: .isWaiting)
+  }
+
   var quest: BoardQuest {
     BoardQuest(
       id: id,
@@ -143,30 +178,28 @@ private struct StepRecord: Decodable {
 // MARK: - BoardSource on the Convex client
 
 extension ConvexTaskBackend {
-  /// Live board content via `board:slice`, subscribed exactly like `tasks:list`.
+  /// One shot of `board:slice`. The function is a mutation: it ensures Home
+  /// and mints recurrences, so it cannot be a live query.
   public func boardSliceUpdates() -> AsyncThrowingStream<BoardSnapshot, Error> {
-    let publisher = client.subscribe(to: ConvexFunction.boardSlice, yielding: BoardSlicePayload.self)
-
-    return AsyncThrowingStream { continuation in
-      let box = CancellableBox()
-      box.cancellable = publisher.sink(
-        receiveCompletion: { completion in
-          switch completion {
-          case .finished:
-            continuation.finish()
-          case let .failure(error):
-            continuation.finish(throwing: Self.userFacing(error))
+    AsyncThrowingStream { continuation in
+      let task = Task {
+        do {
+          let args: [String: ConvexEncodable?] = [
+            "tab": "tasks",
+            "timezone": TimeZone.current.identifier,
+          ]
+          let payload: BoardSlicePayload = try await self.perform {
+            try await self.client.mutation(ConvexFunction.boardSlice, with: args)
           }
-        },
-        receiveValue: { payload in
           let snapshot = payload.snapshot
           self.boardSnapshot = snapshot
           continuation.yield(snapshot)
+          continuation.finish()
+        } catch {
+          continuation.finish(throwing: error)
         }
-      )
-      continuation.onTermination = { _ in
-        box.cancellable?.cancel()
       }
+      continuation.onTermination = { _ in task.cancel() }
     }
   }
 
@@ -174,10 +207,7 @@ extension ConvexTaskBackend {
   /// model; this is the wire call behind `views:installTemplate`.
   public func installTemplate(_ template: ViewTemplate) async throws {
     let args: [String: ConvexEncodable?] = [
-      "id": template.id,
-      "title": template.title,
-      "icon": template.icon,
-      "color": template.color,
+      "slug": template.id,
     ]
     try await perform {
       try await self.client.mutation(ConvexFunction.viewsInstallTemplate, with: args)
@@ -189,10 +219,9 @@ extension ConvexTaskBackend {
       "title": title,
       "icon": icon,
       "color": color,
-      "custom": true,
     ]
     try await perform {
-      try await self.client.mutation(ConvexFunction.viewsInstallTemplate, with: args)
+      try await self.client.mutation(ConvexFunction.viewsCreateCustom, with: args)
     }
   }
 
@@ -202,7 +231,9 @@ extension ConvexTaskBackend {
     let args: [String: ConvexEncodable?] = [
       "title": title,
       "behavior": behavior,
-      "periodStart": dayMilliseconds(periodStart),
+      "cadence": "daily",
+      "timezone": TimeZone.current.identifier,
+      "anchorOn": dayMilliseconds(periodStart),
     ]
     try await perform {
       try await self.client.mutation(ConvexFunction.recurrencesCreate, with: args)
