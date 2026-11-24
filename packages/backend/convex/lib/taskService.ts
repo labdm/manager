@@ -1,5 +1,6 @@
 import type { DatabaseReader, DatabaseWriter } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import { unlockNextQuestStep } from "./questService";
 import {
   assertEpoch,
   assertOrigin,
@@ -33,6 +34,11 @@ export type TaskView = {
   origin: string;
   effectiveRank: number;
   overdue: boolean;
+  recurrenceId?: Id<"recurrences">;
+  periodStart?: number;
+  presentationHint?: string;
+  open?: boolean;
+  escalatedAt?: number;
 };
 
 export function taskView(task: Doc<"tasks">, now = Date.now()): TaskView {
@@ -47,8 +53,12 @@ export function taskView(task: Doc<"tasks">, now = Date.now()): TaskView {
   const overduePolicy = task.overduePolicy ?? "none";
   const origin = task.origin ?? "self";
 
+  // The cron may already have persisted the bump. Never add it twice.
   const effectiveRank =
-    isOverdue && isSeedPriority(priority) && overduePolicy === "escalate"
+    isOverdue &&
+    isSeedPriority(priority) &&
+    overduePolicy === "escalate" &&
+    task.escalatedAt === undefined
       ? Math.min(priorityRank + 10, 30)
       : priorityRank;
 
@@ -74,6 +84,11 @@ export function taskView(task: Doc<"tasks">, now = Date.now()): TaskView {
     origin,
     effectiveRank,
     overdue: isOverdue,
+    recurrenceId: task.recurrenceId,
+    periodStart: task.periodStart,
+    presentationHint: task.presentationHint,
+    open: task.open,
+    escalatedAt: task.escalatedAt,
   };
 }
 
@@ -88,7 +103,10 @@ export async function listTasks(
     .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
     .collect();
 
-  const active = tasks.filter((task) => task.deletedAt === undefined);
+  // Superseded and missed rows stay in storage, but not on the open board.
+  const active = tasks.filter(
+    (task) => task.deletedAt === undefined && task.outcome === undefined,
+  );
 
   active.sort((a, b) => {
     if (a.done !== b.done) return a.done ? 1 : -1;
@@ -111,6 +129,9 @@ export type CreateTaskInput = {
   priorityRank?: number;
   overduePolicy?: string;
   origin?: "self" | "agent" | "member";
+  presentationHint?: string;
+  recurrenceId?: Id<"recurrences">;
+  periodStart?: number;
 };
 
 /** Creates a task owned by the specified user. */
@@ -154,6 +175,10 @@ export async function createTask(
     origin,
     seenAt,
     ownerId,
+    presentationHint: input.presentationHint,
+    recurrenceId: input.recurrenceId,
+    periodStart: input.periodStart,
+    open: true,
   });
 
   const task = await db.get(id);
@@ -248,7 +273,11 @@ export async function updateTask(
     }
   }
 
+  const wasDone = task.done;
   await db.patch(task._id, patch);
+  if (input.done === true && !wasDone) {
+    await unlockNextQuestStep(db, task._id, ownerId);
+  }
   const updated = await db.get(taskId);
   if (!updated) throw new Error("Task not found");
   return taskView(updated);
@@ -273,7 +302,9 @@ export async function setTaskDone(
     completedAt = undefined;
   }
 
+  const wasDone = task.done;
   await db.patch(task._id, { done, completedAt });
+  if (done && !wasDone) await unlockNextQuestStep(db, task._id, ownerId);
   return taskView({ ...task, done, completedAt });
 }
 
@@ -288,10 +319,12 @@ export async function toggleTask(
     throw new Error("Task not found");
   }
 
-  const done = !task.done;
+  const wasDone = task.done;
+  const done = !wasDone;
   const completedAt = done ? Date.now() : undefined;
 
   await db.patch(task._id, { done, completedAt });
+  if (done && !wasDone) await unlockNextQuestStep(db, task._id, ownerId);
   return taskView({ ...task, done, completedAt });
 }
 

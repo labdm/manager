@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { findCurrentUser, requireUser } from "./users";
 import * as taskService from "./lib/taskService";
+import { reconcileOwner } from "./lib/recurrenceService";
 
 /** Tasks owned by the signed-in user. Signed-out callers get an empty list. */
 export const list = query({
@@ -10,6 +11,20 @@ export const list = query({
     const user = await findCurrentUser(ctx);
     if (!user) return [];
     return await taskService.listTasks(ctx.db, user._id);
+  },
+});
+
+/**
+ * Lazy mint for clients. `list` stays a query so subscriptions keep working;
+ * call this before or alongside a list to move a series forward immediately.
+ * The cron covers the closed-app case.
+ */
+export const reconcile = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    await reconcileOwner(ctx.db, user._id);
+    return { success: true };
   },
 });
 

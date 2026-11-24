@@ -1,12 +1,13 @@
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import { mutation, query } from "./_generated/server";
+import { mutation } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { assertMcpRoleProof } from "./lib/mcpRoleSignature";
+import { reconcileOwner } from "./lib/recurrenceService";
 import * as taskService from "./lib/taskService";
 import { findUserByTokenIdentifier, upsertUserByTokenIdentifier } from "./users";
 
-const proofArgs = {
+export const proofArgs = {
   clerkUserId: v.string(),
   expiresAt: v.number(),
   signature: v.string(),
@@ -28,7 +29,7 @@ function mcpIssuer(): string {
 }
 
 /** Looks up the user for queries. Returns null if user has not yet interacted with the system. */
-async function findMcpUser(
+export async function findMcpUser(
   ctx: QueryCtx,
   args: Proof,
 ): Promise<Doc<"users"> | null> {
@@ -38,7 +39,7 @@ async function findMcpUser(
 }
 
 /** Ensures the user exists for mutations, auto-provisioning if first MCP interaction. */
-async function requireMcpUser(
+export async function requireMcpUser(
   ctx: MutationCtx,
   args: Proof,
 ): Promise<Doc<"users">> {
@@ -49,11 +50,12 @@ async function requireMcpUser(
   });
 }
 
-export const list = query({
+/** Mutation so a lazy reconcile can happen before the list is returned. */
+export const list = mutation({
   args: proofArgs,
   handler: async (ctx, args) => {
-    const user = await findMcpUser(ctx, args);
-    if (!user) return [];
+    const user = await requireMcpUser(ctx, args);
+    await reconcileOwner(ctx.db, user._id);
     return await taskService.listTasks(ctx.db, user._id);
   },
 });

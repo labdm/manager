@@ -35,6 +35,31 @@ const KNOWN_TOOL_ERRORS = [
   "Invalid priorityRank",
   "Invalid overduePolicy",
   "Invalid origin",
+  "Invalid behavior",
+  "Unsupported cadence",
+  "Invalid timezone",
+  "Invalid epoch",
+  "Invalid tab",
+  "Invalid computed key",
+  "Unknown template",
+  "Invalid subject type",
+  "Invalid target type",
+  "Invalid role",
+  "Invalid override mode",
+  "Home cannot be deleted",
+  "View not found",
+  "Attachment not found",
+  "Progression not found",
+  "Quest not found",
+  "Question not found",
+  "Question answered",
+  "Unknown option",
+  "Options are required",
+  "Invalid amount",
+  "Invalid target",
+  "Invalid gate",
+  "Invalid quest status",
+  "Recurrence not found",
 ] as const;
 
 function misconfigured(message: string): Response {
@@ -113,7 +138,7 @@ function mcpHandler(resourceUrl: string) {
           const signed = await signedProof(ctx.http?.authInfo);
           if (signed.kind !== "ok") return toolError(signed.text);
           try {
-            return toolJson(await convexClient().query(api.mcpTasks.list, signed.proof));
+            return toolJson(await convexClient().mutation(api.mcpTasks.list, signed.proof));
           } catch (error) {
             return toolError(knownError(error, "Could not list tasks"));
           }
@@ -125,7 +150,7 @@ function mcpHandler(resourceUrl: string) {
         {
           title: "Create task",
           description:
-            "Creates a task for the signed-in user. Note: planned day is not a deadline, do not create a task for a summary, replace vs stack exist but recurrence is not in this milestone.",
+            "Creates a task for the signed-in user. A planned day is not a deadline; never copy one into deadlineAt. Do not create a task for a summary: alerts exist for information.",
           inputSchema: z.object({
             title: z.string(),
             notes: z.string().optional(),
@@ -171,7 +196,7 @@ function mcpHandler(resourceUrl: string) {
         {
           title: "Update task",
           description:
-            "Updates one of the signed-in user's tasks. Note: planned day is not a deadline, do not create a task for a summary, replace vs stack exist but recurrence is not in this milestone.",
+            "Updates one of the signed-in user's tasks. A planned day is not a deadline; never copy one into deadlineAt. Do not create a task for a summary.",
           inputSchema: z.object({
             id: z.string(),
             title: z.string().optional(),
@@ -290,11 +315,473 @@ function mcpHandler(resourceUrl: string) {
           }
         },
       );
+
+      server.registerTool(
+        "create_recurrence",
+        {
+          title: "Create recurrence",
+          description:
+            "Creates a recurring series. behavior is required: replace keeps one open occurrence (dishes), stack leaves every period open (journal). The planned day is never a deadline.",
+          inputSchema: z.object({
+            behavior: z.enum(["replace", "stack"]),
+            cadence: z.string(),
+            timezone: z.string(),
+            title: z.string(),
+            notes: z.string().optional(),
+            plannedTime: z.number().int().min(0).max(1439).optional(),
+            location: z.string().optional(),
+            priority: z.string().optional(),
+            overduePolicy: z.string().optional(),
+            anchorOn: z.number().optional(),
+          }),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.createRecurrenceTool, {
+                ...signed.proof,
+                ...args,
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not create recurrence"));
+          }
+        },
+      );
+
+      server.registerTool(
+        "list_recurrences",
+        {
+          title: "List recurrences",
+          description: "Lists the signed-in user's recurring series and mints due occurrences.",
+          inputSchema: z.object({}),
+        },
+        async (_args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.listRecurrencesTool, signed.proof),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not list recurrences"));
+          }
+        },
+      );
+
+      server.registerTool(
+        "get_slice",
+        {
+          title: "Get Home slice",
+          description:
+            "Returns the Home rail, the current tab's tasks, progressions, quests, alerts and questions for a timezone.",
+          inputSchema: z.object({
+            tab: z.enum(["tasks", "daily", "weekly", "monthly"]),
+            viewId: z.string().optional(),
+            timezone: z.string(),
+          }),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.getSlice, {
+                ...signed.proof,
+                tab: args.tab,
+                viewId: args.viewId as Id<"views"> | undefined,
+                timezone: args.timezone,
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not get slice"));
+          }
+        },
+      );
+
+      server.registerTool(
+        "create_view",
+        {
+          title: "Create view",
+          description:
+            "Installs a catalog template by slug, enables a computed view by key (new, high, today), or creates a custom view with a title.",
+          inputSchema: z.object({
+            slug: z.string().optional(),
+            key: z.string().optional(),
+            title: z.string().optional(),
+            icon: z.string().optional(),
+            color: z.string().optional(),
+          }),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.createViewTool, {
+                ...signed.proof,
+                ...args,
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not create view"));
+          }
+        },
+      );
+
+      server.registerTool(
+        "attach",
+        {
+          title: "Attach subject to target",
+          description:
+            "Links a task, progression, quest, event or category to a category, event, quest, progression or space. A second attachment is allowed.",
+          inputSchema: z.object({
+            subjectType: z.string(),
+            subjectId: z.string(),
+            targetType: z.string(),
+            targetId: z.string(),
+            role: z.enum(["primary", "extra"]).optional(),
+          }),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.attachTool, {
+                ...signed.proof,
+                ...args,
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not attach"));
+          }
+        },
+      );
+
+      server.registerTool(
+        "detach",
+        {
+          title: "Detach",
+          description: "Soft-deletes an attachment without deleting the subject.",
+          inputSchema: z.object({ attachmentId: z.string() }),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.detachTool, {
+                ...signed.proof,
+                attachmentId: args.attachmentId as Id<"attachments">,
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not detach"));
+          }
+        },
+      );
+
+      const pinSchemas = {
+        viewId: z.string(),
+        subjectType: z.string(),
+        subjectId: z.string(),
+      };
+      const pinBody = (args: {
+        viewId: string;
+        subjectType: string;
+        subjectId: string;
+      }) => ({
+        viewId: args.viewId as Id<"views">,
+        subjectType: args.subjectType,
+        subjectId: args.subjectId,
+      });
+
+      server.registerTool(
+        "pin",
+        {
+          title: "Pin to view",
+          description: "Sorts a subject first in one view without changing its priority or date.",
+          inputSchema: z.object(pinSchemas),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.pinTool, {
+                ...signed.proof,
+                ...pinBody(args),
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not pin"));
+          }
+        },
+      );
+
+      server.registerTool(
+        "unpin",
+        {
+          title: "Unpin from view",
+          description: "Removes a pin from one view.",
+          inputSchema: z.object(pinSchemas),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.unpinTool, {
+                ...signed.proof,
+                ...pinBody(args),
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not unpin"));
+          }
+        },
+      );
+
+      for (const mode of ["include", "exclude"] as const) {
+        server.registerTool(
+          mode,
+          {
+            title: mode === "include" ? "Include in view" : "Exclude from view",
+            description:
+              mode === "include"
+                ? "Adds a subject to a computed view without changing its fields."
+                : "Hides a subject from a computed view without deleting it.",
+            inputSchema: z.object(pinSchemas),
+          },
+          async (args, ctx) => {
+            const signed = await signedProof(ctx.http?.authInfo);
+            if (signed.kind !== "ok") return toolError(signed.text);
+            try {
+              const fn =
+                mode === "include"
+                  ? api.mcpBoard.includeTool
+                  : api.mcpBoard.excludeTool;
+              return toolJson(
+                await convexClient().mutation(fn, {
+                  ...signed.proof,
+                  ...pinBody(args),
+                }),
+              );
+            } catch (error) {
+              return toolError(knownError(error, `Could not ${mode}`));
+            }
+          },
+        );
+      }
+
+      server.registerTool(
+        "create_progression",
+        {
+          title: "Create progression",
+          description: "Creates a meter or step track shown as a bar in the Home column.",
+          inputSchema: z.object({
+            title: z.string(),
+            mode: z.enum(["meter", "steps"]).optional(),
+            target: z.number(),
+            unit: z.string().optional(),
+          }),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.createProgressionTool, {
+                ...signed.proof,
+                ...args,
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not create progression"));
+          }
+        },
+      );
+
+      server.registerTool(
+        "log_progress",
+        {
+          title: "Log progress",
+          description: "Adds an amount to a meter progression.",
+          inputSchema: z.object({
+            progressionId: z.string(),
+            amount: z.number(),
+          }),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.logProgressTool, {
+                ...signed.proof,
+                progressionId: args.progressionId as Id<"progressions">,
+                amount: args.amount,
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not log progress"));
+          }
+        },
+      );
+
+      server.registerTool(
+        "create_quest",
+        {
+          title: "Create quest",
+          description: "Creates a chain of tasks. Steps are added with add_quest_step.",
+          inputSchema: z.object({
+            title: z.string(),
+            status: z.string().optional(),
+            scripting: z.string().optional(),
+          }),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.createQuestTool, {
+                ...signed.proof,
+                ...args,
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not create quest"));
+          }
+        },
+      );
+
+      server.registerTool(
+        "add_quest_step",
+        {
+          title: "Add quest step",
+          description:
+            "Adds a task as a quest step. Later steps start locked and unlock when the available step is completed.",
+          inputSchema: z.object({
+            questId: z.string(),
+            taskId: z.string(),
+            position: z.number().optional(),
+            gate: z.enum(["available", "locked"]).optional(),
+          }),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.addQuestStepTool, {
+                ...signed.proof,
+                questId: args.questId as Id<"quests">,
+                taskId: args.taskId as Id<"tasks">,
+                position: args.position,
+                gate: args.gate,
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not add quest step"));
+          }
+        },
+      );
+
+      server.registerTool(
+        "create_question",
+        {
+          title: "Create question",
+          description: "Creates an open question with options. Not a task and has no checkbox.",
+          inputSchema: z.object({
+            prompt: z.string(),
+            options: z.array(
+              z.object({
+                id: z.string().optional(),
+                label: z.string(),
+                effect: z.any().optional(),
+              }),
+            ),
+          }),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.createQuestionTool, {
+                ...signed.proof,
+                ...args,
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not create question"));
+          }
+        },
+      );
+
+      server.registerTool(
+        "answer_question",
+        {
+          title: "Answer question",
+          description: "Records the chosen option and removes the question from the open board.",
+          inputSchema: z.object({
+            questionId: z.string(),
+            optionId: z.string(),
+          }),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.answerQuestionTool, {
+                ...signed.proof,
+                questionId: args.questionId as Id<"questions">,
+                optionId: args.optionId,
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not answer question"));
+          }
+        },
+      );
+
+      server.registerTool(
+        "create_alert",
+        {
+          title: "Create alert",
+          description:
+            "Writes an informational note to the alert band. Use this for summaries; alerts have no checkbox.",
+          inputSchema: z.object({
+            title: z.string(),
+            body: z.string().optional(),
+            source: z.enum(["agent", "member"]).optional(),
+          }),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.createAlertTool, {
+                ...signed.proof,
+                ...args,
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not create alert"));
+          }
+        },
+      );
     },
     {
       serverInfo: { name: "manager", version: "0.1.0" },
       instructions:
-        "Manager user MCP. Sign in once with Clerk OAuth; the client refreshes the access token. whoami reads users.role in Convex. create_task, update_task, list_tasks, complete_task, reopen_task, and delete_task use the tasks table. Note: planned day is not a deadline, do not create a task for a summary, replace vs stack exist but recurrence is not in this milestone.",
+        "Manager user MCP. Sign in once with Clerk OAuth; the client refreshes the access token. whoami reads users.role in Convex. create_task, update_task, list_tasks, complete_task, reopen_task, and delete_task use the tasks table. create_recurrence is real: choose replace for dishes (one open occurrence, older ones superseded) or stack for a journal (every period stays open); behavior is required. Views, attachments, pins, include/exclude, progressions, quests, questions and alerts are available through get_slice and the matching create tools. Never copy a planned day into a deadline, never copy a deadline into a planned day, and do not create a task for a summary: write an alert instead.",
       maxSubscriptions: 0,
     },
   );
