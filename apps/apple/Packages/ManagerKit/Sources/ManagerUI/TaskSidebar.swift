@@ -14,10 +14,10 @@ public struct TaskSidebar: View {
     self.model = model
   }
 
-  private var selection: Binding<String> {
+  private var selection: Binding<String?> {
     Binding(
       get: { model.selectedViewID },
-      set: { model.selectedViewID = $0 }
+      set: { if let id = $0 { model.selectedViewID = id } }
     )
   }
 
