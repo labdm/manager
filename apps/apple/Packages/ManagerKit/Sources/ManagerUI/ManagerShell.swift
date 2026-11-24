@@ -142,7 +142,7 @@ public struct ManagerShell<Accessory: View>: View {
 
   private var splitShell: some View {
     NavigationSplitView {
-      List(selection: destinationSelection) {
+      List(selection: sidebarSelection) {
         ForEach(ShellDestination.allCases) { destination in
           Label(destination.title, systemImage: destination.systemImage)
             .modifier(OptionalBadge(count: model.badgeCount(for: destination)))
@@ -213,6 +213,15 @@ public struct ManagerShell<Accessory: View>: View {
     Binding(
       get: { model.selectedDestination },
       set: { model.selectDestination($0) }
+    )
+  }
+
+  /// iOS only offers `List(selection:)` for an optional selection. A cleared
+  /// sidebar row keeps the current destination.
+  private var sidebarSelection: Binding<ShellDestination?> {
+    Binding(
+      get: { model.selectedDestination },
+      set: { if let destination = $0 { model.selectDestination(destination) } }
     )
   }
 

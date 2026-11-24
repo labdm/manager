@@ -25,7 +25,7 @@ struct SheetChromeTests {
     #expect(shell.contains("ForEach(ShellDestination.allCases)"))
     #expect(shell.contains(".tabItem"))
     #expect(shell.contains("NavigationSplitView"))
-    #expect(shell.contains("List(selection: destinationSelection)"))
+    #expect(shell.contains("List(selection: sidebarSelection)"))
     #expect(shell.contains("navigationDestination(for: ShellMenuRoute.self)"))
     #expect(!shell.contains("BottomTabBar"))
     #expect(!shell.contains("CategoryDashboardView"))
