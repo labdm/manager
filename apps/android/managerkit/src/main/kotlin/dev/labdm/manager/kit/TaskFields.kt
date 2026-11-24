@@ -33,6 +33,30 @@ object DueDateMath {
 
     fun dayLabel(epochMillis: Long, locale: Locale = Locale.getDefault()): String =
         SimpleDateFormat("EEE, MMM d", locale).format(Date(epochMillis))
+
+    /** The start of the week containing [epochMillis], local midnight. Weeks start Monday. */
+    fun weekStart(epochMillis: Long, timeZone: TimeZone = TimeZone.getDefault()): Long {
+        val calendar = Calendar.getInstance(timeZone).apply { time = Date(epochMillis) }
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
+        val daysSinceMonday = ((dayOfWeek - 2) % 7 + 7) % 7
+        calendar.add(Calendar.DAY_OF_MONTH, -daysSinceMonday)
+        return calendar.timeInMillis
+    }
+
+    /** The first local midnight of the civil month containing [epochMillis]. */
+    fun monthStart(epochMillis: Long, timeZone: TimeZone = TimeZone.getDefault()): Long {
+        val calendar = Calendar.getInstance(timeZone).apply { time = Date(epochMillis) }
+        calendar.set(Calendar.DAY_OF_MONTH, 1)
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        return calendar.timeInMillis
+    }
 }
 
 /**

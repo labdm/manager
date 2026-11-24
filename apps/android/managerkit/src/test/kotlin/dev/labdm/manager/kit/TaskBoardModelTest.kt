@@ -348,6 +348,31 @@ class TaskBoardModelTest {
         assertTrue(model.state.value.tasks.isEmpty())
     }
 
+    // MARK: - Home shell
+
+    @Test
+    fun `the plus button composes a task in the current slice`() = runTest {
+        model.updateDraft("Dishes")
+        model.selectSlice(TaskSlice.DAILY)
+
+        assertTrue(model.addTaskInCurrentSlice())
+        runCurrent()
+
+        val draft = backend.createDraftCalls.single()
+        assertEquals(DueDateMath.startOfDay(now), draft.plannedOn)
+    }
+
+    @Test
+    fun `the plus button composes into the tasks slice without prefilling a day`() = runTest {
+        model.updateDraft("Dishes")
+        model.selectSlice(TaskSlice.TASKS)
+
+        assertTrue(model.addTaskInCurrentSlice())
+        runCurrent()
+
+        assertNull(backend.createDraftCalls.single().plannedOn)
+    }
+
     private class RecordingBackend(
         initial: List<TaskItem>,
     ) : TaskBackend {
