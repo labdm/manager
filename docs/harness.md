@@ -31,22 +31,25 @@ When `deadlineAt` passes and the task remains open and not trashed, an overdue p
 - **`escalate`**:
   - The task remains open, but louder.
   - For standard seed priorities (`low` 0, `normal` 10, `high` 20, `urgent` 30), `effectiveRank` is increased by +10 (capped at 30, `urgent`). Custom string priorities stay at their rank.
-  - Escalate does not alter the stored `priorityRank` in the database; it is derived as `effectiveRank` dynamically on read.
+  - The rank bump is derived immediately on read and persisted once by the reconcile cron (`priorityRank` = min(seed + 10, 30)). A custom priority string is never bumped. `retire` persists `outcome: "missed"`; neither policy sets `deletedAt`.
 
-## 3. Recurrence Preview: Replace vs. Stack
+## 3. Recurrence: Replace vs. Stack
 
-Recurrence is scheduled for Milestone 2, but agents must understand the domain distinction now when modeling workflows:
+Recurrence is shipped. Use `create_recurrence` with a **required** `behavior` (`replace` or `stack`), a `cadence` (`daily`, `weekly`, `monthly`), and an IANA `timezone`. Minting is lazy and idempotent on `(recurrenceId, periodStart)`, where a period starts at local midnight in that timezone (weeks start Monday). `list_recurrences`, `get_slice`, and a reconcile cron all move a series forward, including when the app has been closed.
 
 - **`replace`**:
   - At most one open occurrence exists on the board.
   - When a new period begins, the uncompleted prior period's occurrence is marked `outcome: "superseded"` and leaves the active board (e.g. daily dishes: missing Monday's dishes must not display Monday + Tuesday cards side by side).
+  - Superseded rows stay in storage for later history and achievement queries; they are not trash.
 - **`stack`**:
   - Every period mints an occurrence and leaves older open occurrences on the board.
-  - Missed periods accumulate for backfilling (e.g. daily journal entries: each day's entry remains open until completed).
+  - Missed periods accumulate for backfilling with no core cap (e.g. daily journal entries: each day's entry remains open until completed).
+
+New series default their anchor to the current period, so creation mints one row. Minted occurrences carry the recurrence's template fields, `plannedOn` and `dueAt` set to the period start, and no `deadlineAt`. A planned day is still not a deadline.
 
 ## 4. Do Not Create a Task for a Summary
 
 - **Manager is an actionable task tracker, not a notification feed or conversational echo chamber.**
 - **Do not create tasks for agent summaries, meeting recaps, status updates, or context notes.**
 - A task is an atomic unit of work that a human can complete and check off. If there is no specific action required from the user, do not write a task.
-- Informational notes, travel notifications ("Flight is Thursday"), and background summaries belong in **alerts** (Milestone 6), which appear in a dedicated notification band without checkboxes. Until alerts land, deliver summaries directly in conversation, not in the `tasks` table.
+- Informational notes, travel notifications ("Flight is Thursday"), and background summaries belong in **alerts**: use `create_alert`. They appear in a dedicated notification band without checkboxes, stay in the log after being read, and are never written to the `tasks` table.

@@ -1,0 +1,176 @@
+/**
+ * Civil-day arithmetic using Intl only. No date library, no server timezone
+ * assumptions. A "period start" is always epoch ms at local midnight in the
+ * recurrence's IANA timezone.
+ */
+
+const WEEKDAY_INDEX: Record<string, number> = {
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+  Sun: 7,
+};
+
+const formatterCache = new Map<string, Intl.DateTimeFormat>();
+
+function formatterFor(timezone: string): Intl.DateTimeFormat {
+  const cached = formatterCache.get(timezone);
+  if (cached) return cached;
+  let formatter: Intl.DateTimeFormat;
+  try {
+    formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      weekday: "short",
+      hourCycle: "h23",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  } catch {
+    throw new Error("Invalid timezone");
+  }
+  formatterCache.set(timezone, formatter);
+  return formatter;
+}
+
+export function assertTimezone(timezone: string): void {
+  formatterFor(timezone);
+}
+
+type ZonedParts = {
+  year: number;
+  month: number;
+  day: number;
+  weekday: number;
+  hour: number;
+  minute: number;
+  second: number;
+};
+
+function partsAt(epochMs: number, timezone: string): ZonedParts {
+  if (!Number.isSafeInteger(epochMs)) throw new Error("Invalid epoch");
+  const values = new Map<string, string>();
+  for (const part of formatterFor(timezone).formatToParts(new Date(epochMs))) {
+    if (part.type !== "literal") values.set(part.type, part.value);
+  }
+  const weekday = WEEKDAY_INDEX[values.get("weekday") ?? ""];
+  if (!weekday) throw new Error("Could not read weekday");
+  return {
+    year: Number(values.get("year")),
+    month: Number(values.get("month")),
+    day: Number(values.get("day")),
+    weekday,
+    hour: Number(values.get("hour")),
+    minute: Number(values.get("minute")),
+    second: Number(values.get("second")),
+  };
+}
+
+function offsetAt(epochMs: number, timezone: string): number {
+  const parts = partsAt(epochMs, timezone);
+  const asUtc = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+  );
+  return asUtc - Math.floor(epochMs / 1000) * 1000;
+}
+
+/** Epoch ms at local midnight of a civil date in `timezone`. */
+export function utcFromCivil(
+  year: number,
+  month: number,
+  day: number,
+  timezone: string,
+): number {
+  const guess = Date.UTC(year, month - 1, day);
+  const first = guess - offsetAt(guess, timezone);
+  return guess - offsetAt(first, timezone);
+}
+
+/** Epoch ms at local midnight of the civil day containing `epochMs`. */
+export function civilDayStart(epochMs: number, timezone: string): number {
+  const parts = partsAt(epochMs, timezone);
+  return utcFromCivil(parts.year, parts.month, parts.day, timezone);
+}
+
+/** Monday of the local week containing `epochMs`, at local midnight. */
+export function weekStart(epochMs: number, timezone: string): number {
+  const day = civilDayStart(epochMs, timezone);
+  const parts = partsAt(day, timezone);
+  const daysSinceMonday = (parts.weekday + 6) % 7;
+  return utcFromCivil(parts.year, parts.month, parts.day - daysSinceMonday, timezone);
+}
+
+/** The 1st of the local month containing `epochMs`, at local midnight. */
+export function monthStart(epochMs: number, timezone: string): number {
+  const parts = partsAt(civilDayStart(epochMs, timezone), timezone);
+  return utcFromCivil(parts.year, parts.month, 1, timezone);
+}
+
+export type Cadence = "daily" | "weekly" | "monthly";
+
+export function isCadence(value: string): value is Cadence {
+  return value === "daily" || value === "weekly" || value === "monthly";
+}
+
+/** Start of the period containing `epochMs` for the given seed cadence. */
+export function periodStartFor(
+  cadence: string,
+  epochMs: number,
+  timezone: string,
+): number {
+  if (!isCadence(cadence)) throw new Error("Unsupported cadence");
+  if (cadence === "daily") return civilDayStart(epochMs, timezone);
+  if (cadence === "weekly") return weekStart(epochMs, timezone);
+  return monthStart(epochMs, timezone);
+}
+
+/** Move a normalized period start by whole periods, in civil time. */
+export function addPeriods(
+  cadence: string,
+  start: number,
+  count: number,
+  timezone: string,
+): number {
+  if (!isCadence(cadence)) throw new Error("Unsupported cadence");
+  if (!Number.isInteger(count)) throw new Error("Invalid period count");
+  const parts = partsAt(start, timezone);
+  if (cadence === "daily") {
+    return utcFromCivil(parts.year, parts.month, parts.day + count, timezone);
+  }
+  if (cadence === "weekly") {
+    return utcFromCivil(parts.year, parts.month, parts.day + count * 7, timezone);
+  }
+  return utcFromCivil(parts.year, parts.month + count, 1, timezone);
+}
+
+/** Number of whole periods from `from` to `to`; both must be normalized. */
+export function periodsBetween(
+  cadence: string,
+  from: number,
+  to: number,
+  timezone: string,
+): number {
+  if (!isCadence(cadence)) throw new Error("Unsupported cadence");
+  const fromParts = partsAt(from, timezone);
+  const toParts = partsAt(to, timezone);
+  if (cadence === "monthly") {
+    return (
+      (toParts.year - fromParts.year) * 12 + (toParts.month - fromParts.month)
+    );
+  }
+  const step = cadence === "weekly" ? 7 : 1;
+  const fromUtc = Date.UTC(fromParts.year, fromParts.month - 1, fromParts.day);
+  const toUtc = Date.UTC(toParts.year, toParts.month - 1, toParts.day);
+  return Math.floor((toUtc - fromUtc) / (step * 86_400_000));
+}

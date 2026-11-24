@@ -8,15 +8,34 @@
  * @module
  */
 
+import type * as alerts from "../alerts.js";
+import type * as attachments from "../attachments.js";
+import type * as board from "../board.js";
 import type * as downloads from "../downloads.js";
+import type * as lib_boardService from "../lib/boardService.js";
+import type * as lib_civilDates from "../lib/civilDates.js";
 import type * as lib_downloadAssets from "../lib/downloadAssets.js";
+import type * as lib_linkService from "../lib/linkService.js";
 import type * as lib_mcpRoleSignature from "../lib/mcpRoleSignature.js";
+import type * as lib_overdueService from "../lib/overdueService.js";
+import type * as lib_phase2Service from "../lib/phase2Service.js";
+import type * as lib_questService from "../lib/questService.js";
+import type * as lib_recurrenceService from "../lib/recurrenceService.js";
 import type * as lib_taskFields from "../lib/taskFields.js";
 import type * as lib_taskService from "../lib/taskService.js";
+import type * as lib_viewService from "../lib/viewService.js";
 import type * as mcpAuth from "../mcpAuth.js";
+import type * as mcpBoard from "../mcpBoard.js";
 import type * as mcpTasks from "../mcpTasks.js";
+import type * as overrides from "../overrides.js";
+import type * as pins from "../pins.js";
+import type * as progressions from "../progressions.js";
+import type * as questions from "../questions.js";
+import type * as quests from "../quests.js";
+import type * as recurrences from "../recurrences.js";
 import type * as tasks from "../tasks.js";
 import type * as users from "../users.js";
+import type * as views from "../views.js";
 
 import type {
   ApiFromModules,
@@ -25,15 +44,34 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  alerts: typeof alerts;
+  attachments: typeof attachments;
+  board: typeof board;
   downloads: typeof downloads;
+  "lib/boardService": typeof lib_boardService;
+  "lib/civilDates": typeof lib_civilDates;
   "lib/downloadAssets": typeof lib_downloadAssets;
+  "lib/linkService": typeof lib_linkService;
   "lib/mcpRoleSignature": typeof lib_mcpRoleSignature;
+  "lib/overdueService": typeof lib_overdueService;
+  "lib/phase2Service": typeof lib_phase2Service;
+  "lib/questService": typeof lib_questService;
+  "lib/recurrenceService": typeof lib_recurrenceService;
   "lib/taskFields": typeof lib_taskFields;
   "lib/taskService": typeof lib_taskService;
+  "lib/viewService": typeof lib_viewService;
   mcpAuth: typeof mcpAuth;
+  mcpBoard: typeof mcpBoard;
   mcpTasks: typeof mcpTasks;
+  overrides: typeof overrides;
+  pins: typeof pins;
+  progressions: typeof progressions;
+  questions: typeof questions;
+  quests: typeof quests;
+  recurrences: typeof recurrences;
   tasks: typeof tasks;
   users: typeof users;
+  views: typeof views;
 }>;
 
 /**
