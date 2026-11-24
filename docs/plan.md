@@ -88,6 +88,10 @@ Replace: at most one open occurrence. On a new period, the previous open row bec
 
 **Layout.** Home's horizontal tabs are Tasks, Daily, Weekly, Monthly, plus a create button. Tasks means no time filter inside the view. Daily, Weekly, and Monthly are the day, week, and month events. Active seasons can appear as further tabs. Changing tabs does not change which row types exist. The column, top to bottom: unread alerts, open questions, pinned rows, then tasks, progression bars, and quest steppers. A layout document can still move facets between axes. "All" is a query mode, not a stored event.
 
+### Web shell
+
+The web and desktop shell puts those tabs in a fixed bottom glass bar instead of a side rail. The grid button opens a full-screen dashboard of view, category, event, progression, and resource tiles; it is a page takeover, not a drawer. Creation and editing happen in one sheet: a centered dialog at 800px and up, a fixed bottom sheet below that. The board behind it does not reflow. A task sheet chooses its look (`check`, `row`, `card`) and its series (`none`, `replace`, `stack`) explicitly; cadence (`daily`, `weekly`, `monthly`, `every 14 days`) never implies a behavior. Appearance is picked from a searchable Lucide grid with palette swatches and a live preview, never typed. Sheet writes go through `makeFunctionReference`; a missing deployment shows its error in the sheet. Details: [docs/ui.md](ui.md).
+
 **Presentation pack.** A string id plus a token bag (accent, icon, copy overrides such as `limitedLabel`). Clients register components. Unknown ids use the default shell and still apply tokens. No pack id is branched on inside `taskService`.
 
 ## Prebuilt catalog

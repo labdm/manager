@@ -1,26 +1,46 @@
 import { api } from "@manager/backend/convex/_generated/api";
 import type { Id } from "@manager/backend/convex/_generated/dataModel";
-import { useMutation } from "convex/react";
+import { useConvex, useMutation } from "convex/react";
 import { useCallback, useEffect, useState } from "react";
 import { HomeLayout } from "./HomeLayout";
 import {
   boardSliceRef,
+  createCategoryRef,
+  createEventRef,
+  createProgressionRef,
+  createRecurrenceRef,
+  createResourceRef,
   createCustomViewRef,
+  createTaskRef,
   enableComputedViewRef,
   installTemplateRef,
+  listCategoriesRef,
+  listEventsRef,
+  listResourcesRef,
   pinRef,
   removeViewRef,
+  setResourceEffectRef,
   unpinRef,
+  updateCategoryRef,
+  updateEventRef,
+  updateProgressionRef,
+  updateResourceRef,
+  updateTaskRef,
+  updateViewRef,
 } from "./homeApi";
 import type { ComputedViewSlug } from "./homeCatalog";
+import type { BoardSlice, BoardTab } from "./homeTypes";
 import type {
-  BoardSlice,
-  BoardTab,
-  CustomViewInput,
-} from "./homeTypes";
+  DashboardData,
+  EntityInput,
+  ResourceEffectInput,
+  ResourceItem,
+  SeriesInput,
+} from "./sheetTypes";
 import type { TaskCreatePayload, TaskUpdatePayload } from "./taskTypes";
 import "./tasks.css";
 import "./home.css";
+import "./sheets.css";
 
 function resolvedTimezone(): string {
   try {
@@ -43,17 +63,37 @@ const EMPTY_BOARD: BoardSlice = {
   questions: [],
 };
 
-/** The signed-in Home shell: rail, tabs, and the mixed board column. */
+const EMPTY_DASHBOARD: DashboardData = {
+  categories: [],
+  events: [],
+  resources: [],
+};
+
+/** The signed-in Home shell: bottom tabs, one board column, and sheets. */
 export function HomePage() {
+  const convex = useConvex();
   const ensureUser = useMutation(api.users.ensure);
-  const createTask = useMutation(api.tasks.create);
   const toggleTask = useMutation(api.tasks.toggle);
   const removeTask = useMutation(api.tasks.remove);
-  const updateTask = useMutation(api.tasks.update);
   const markSeen = useMutation(api.tasks.markSeen);
+
+  const createTask = useMutation(createTaskRef);
+  const updateTask = useMutation(updateTaskRef);
+  const setResourceEffect = useMutation(setResourceEffectRef);
+  const createRecurrence = useMutation(createRecurrenceRef);
+
+  const createCategory = useMutation(createCategoryRef);
+  const updateCategory = useMutation(updateCategoryRef);
+  const createEvent = useMutation(createEventRef);
+  const updateEvent = useMutation(updateEventRef);
+  const createResource = useMutation(createResourceRef);
+  const updateResource = useMutation(updateResourceRef);
+  const createProgression = useMutation(createProgressionRef);
+  const updateProgression = useMutation(updateProgressionRef);
 
   const installTemplate = useMutation(installTemplateRef);
   const createCustomView = useMutation(createCustomViewRef);
+  const updateView = useMutation(updateViewRef);
   const enableComputedView = useMutation(enableComputedViewRef);
   const removeView = useMutation(removeViewRef);
   const pin = useMutation(pinRef);
@@ -68,7 +108,10 @@ export function HomePage() {
   const [tab, setTab] = useState<BoardTab>("tasks");
 
   const loadBoard = useCallback(
-    async (nextTab: BoardTab = tab, nextViewId: string | undefined = activeViewId) => {
+    async (
+      nextTab: BoardTab = tab,
+      nextViewId: string | undefined = activeViewId
+    ) => {
       const result = await sliceBoard({
         tab: nextTab,
         timezone: TIMEZONE,
@@ -77,7 +120,7 @@ export function HomePage() {
       setBoard(result);
       return result;
     },
-    [activeViewId, sliceBoard, tab],
+    [activeViewId, sliceBoard, tab]
   );
 
   useEffect(() => {
@@ -118,9 +161,25 @@ export function HomePage() {
   const data = board ?? EMPTY_BOARD;
   const viewId = activeViewId ?? (board ? board.activeViewId : undefined);
 
-  async function handleCreateTask(payload: TaskCreatePayload) {
-    await createTask(payload);
+  async function loadDashboard(): Promise<DashboardData> {
+    const [categories, events, resources] = await Promise.all([
+      convex.query(listCategoriesRef, {}),
+      convex.query(listEventsRef, {}),
+      convex.query(listResourcesRef, {}),
+    ]);
+    return { categories, events, resources };
+  }
+
+  async function loadResources(): Promise<ResourceItem[]> {
+    return await convex.query(listResourcesRef, {});
+  }
+
+  async function handleCreateTask(
+    payload: TaskCreatePayload
+  ): Promise<Id<"tasks">> {
+    const created = await createTask({ ...payload });
     await loadBoard();
+    return created.id;
   }
 
   async function handleToggleTask(id: Id<"tasks">) {
@@ -134,7 +193,7 @@ export function HomePage() {
   }
 
   async function handleUpdateTask(payload: TaskUpdatePayload) {
-    await updateTask(payload);
+    await updateTask({ ...payload });
     await loadBoard();
   }
 
@@ -144,17 +203,120 @@ export function HomePage() {
     return result;
   }
 
-  async function handleInstallTemplate(slug: string) {
-    await installTemplate({ slug });
+  async function handleCreateSeries(input: SeriesInput) {
+    await createRecurrence({
+      behavior: input.behavior,
+      cadence: input.cadence,
+      timezone: input.timezone,
+      title: input.title,
+      ...(input.notes ? { notes: input.notes } : {}),
+      ...(input.plannedTime != null ? { plannedTime: input.plannedTime } : {}),
+      ...(input.location ? { location: input.location } : {}),
+      ...(input.priority ? { priority: input.priority } : {}),
+      ...(input.priorityRank != null ? { priorityRank: input.priorityRank } : {}),
+      ...(input.overduePolicy ? { overduePolicy: input.overduePolicy } : {}),
+      presentation: input.presentation ?? "check",
+      ...(input.anchorOn != null ? { anchorOn: input.anchorOn } : {}),
+      ...(input.resourceEffect ? { resourceEffect: input.resourceEffect } : {}),
+    });
     await loadBoard();
   }
 
-  async function handleCreateCustom(input: CustomViewInput) {
-    await createCustomView({
-      title: input.title,
-      icon: input.icon,
-      color: input.color,
+  async function handleSetResourceEffect(input: ResourceEffectInput) {
+    await setResourceEffect({
+      taskId: input.taskId,
+      resourceId: input.resourceId,
+      delta: input.delta,
     });
+    await loadBoard();
+  }
+
+  async function handleSaveEntity(input: EntityInput, id?: string) {
+    switch (input.kind) {
+      case "category":
+        if (id) {
+          await updateCategory({
+            id,
+            name: input.title,
+            icon: input.icon,
+            color: input.color,
+          });
+        } else {
+          await createCategory({
+            name: input.title,
+            icon: input.icon,
+            color: input.color,
+          });
+        }
+        break;
+      case "event": {
+        const eventArgs = {
+          title: input.title,
+          kind: input.eventKind || "day",
+          startsAt: input.startsAt ?? Date.now(),
+          endsAt: input.endsAt ?? input.startsAt ?? Date.now(),
+          icon: input.icon,
+          color: input.color,
+        };
+        if (id) {
+          await updateEvent({ id, ...eventArgs });
+        } else {
+          await createEvent(eventArgs);
+        }
+        break;
+      }
+      case "view":
+        if (id) {
+          await updateView({
+            viewId: id,
+            title: input.title,
+            icon: input.icon,
+            color: input.color,
+          });
+        } else {
+          await createCustomView({
+            title: input.title,
+            icon: input.icon,
+            color: input.color,
+          });
+        }
+        break;
+      case "progression": {
+        const progressionArgs = {
+          title: input.title,
+          mode: input.mode ?? "meter",
+          target: input.target ?? 1,
+          unit: input.unit || undefined,
+        };
+        if (id) {
+          await updateProgression({ id, ...progressionArgs });
+        } else {
+          await createProgression(progressionArgs);
+        }
+        break;
+      }
+      case "resource": {
+        const resourceArgs = {
+          title: input.title,
+          quantity: input.quantity ?? 0,
+          unit: input.unit || undefined,
+          lowAt: input.lowAt,
+          icon: input.icon,
+          color: input.color,
+        };
+        if (id) {
+          await updateResource({ id, ...resourceArgs });
+        } else {
+          await createResource(resourceArgs);
+        }
+        break;
+      }
+    }
+    await loadBoard();
+  }
+
+  async function handleInstallTemplate(slug: string) {
+    await installTemplate({ slug });
     await loadBoard();
   }
 
@@ -192,6 +354,10 @@ export function HomePage() {
       quests={data.quests}
       alerts={data.alerts}
       questions={data.questions}
+      categories={EMPTY_DASHBOARD.categories}
+      events={EMPTY_DASHBOARD.events}
+      resources={EMPTY_DASHBOARD.resources}
+      timezone={TIMEZONE}
       loading={!ready || board === null}
       notice={error}
       onSelectView={setActiveViewId}
@@ -202,11 +368,15 @@ export function HomePage() {
       onUpdateTask={handleUpdateTask}
       onMarkSeen={handleMarkSeen}
       onInstallTemplate={handleInstallTemplate}
-      onCreateCustom={handleCreateCustom}
       onEnableComputed={handleEnableComputed}
       onRemoveView={handleRemoveView}
       onPinTask={handlePinTask}
       onUnpinTask={handleUnpinTask}
+      onLoadDashboard={loadDashboard}
+      onLoadResources={loadResources}
+      onCreateSeries={handleCreateSeries}
+      onSetResourceEffect={handleSetResourceEffect}
+      onSaveEntity={handleSaveEntity}
     />
   );
 }

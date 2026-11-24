@@ -60,8 +60,7 @@
   margin: 0 0 1rem;
 }
 
-button,
-.add-form button {
+button {
   appearance: none;
   border: 0;
   background: #0f6e56;
@@ -77,77 +76,7 @@ button:disabled {
   cursor: default;
 }
 
-.btn-text-toggle {
-  background: transparent !important;
-  color: #0f6e56 !important;
-  padding: 0.55rem 0.6rem !important;
-  text-decoration: underline;
-  font-size: 0.88rem !important;
-}
-
-.btn-text-toggle:hover {
-  color: #1c1915 !important;
-}
-
-.add-form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin-bottom: 1.25rem;
-  padding-bottom: 1.25rem;
-  border-bottom: 1px solid #efe7d8;
-}
-
-.add-form-primary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  align-items: center;
-}
-
-.add-form input[type="text"] {
-  flex: 1 1 12rem;
-  min-width: 0;
-  border: 1px solid #e4dccb;
-  background: #fff;
-  border-radius: 999px;
-  padding: 0.6rem 0.9rem;
-  font: inherit;
-  color: inherit;
-}
-
-.add-form input[type="date"],
-.add-form input[type="time"],
-.add-form input[type="datetime-local"],
-.add-form select {
-  border: 1px solid #e4dccb;
-  background: #fff;
-  border-radius: 999px;
-  padding: 0.55rem 0.8rem;
-  font: inherit;
-  color: inherit;
-}
-
-.add-form-extra {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.8rem;
-  padding: 0.75rem 0.5rem;
-  background: #fbf8f0;
-  border-radius: 0.75rem;
-}
-
-.form-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.form-field label {
-  font-size: 0.75rem;
-  color: #6f675c;
-  font-weight: 500;
-}
+/* Task column */
 
 .tasks {
   list-style: none;
@@ -168,12 +97,6 @@ button:disabled {
 
 .task:hover {
   background-color: rgba(239, 231, 216, 0.25);
-}
-
-.task.open {
-  background-color: #fbf8f1;
-  border: 1px solid #e4dccb;
-  padding: 0.8rem;
 }
 
 .task-row-main {
@@ -228,6 +151,18 @@ button:disabled {
 .task.done .title {
   color: #8a8175;
   text-decoration: line-through;
+}
+
+.task.look-row .title {
+  font-size: 0.95rem;
+}
+
+.task.look-card .task-summary {
+  background: #fffdf8;
+  border: 1px solid #e4dccb;
+  border-radius: 0.8rem;
+  padding: 0.75rem 0.9rem;
+  box-shadow: 0 1px 0 rgba(28, 25, 21, 0.04);
 }
 
 .badge-new {
@@ -320,18 +255,14 @@ button:disabled {
   gap: 0.4rem;
 }
 
-.btn-row-open {
+.btn-row-open,
+.btn-row-pin {
   background: transparent !important;
   color: #6f675c !important;
   border: 1px solid #e4dccb !important;
   padding: 0.25rem 0.6rem !important;
   font-size: 0.78rem !important;
   border-radius: 0.35rem !important;
-}
-
-.btn-row-open:hover {
-  color: #1c1915 !important;
-  border-color: #8a8175 !important;
 }
 
 .btn-row-delete {
@@ -346,60 +277,7 @@ button:disabled {
   color: #8d2c1f !important;
 }
 
-/* Inline editor */
-.task-editor {
-  margin-top: 0.8rem;
-  padding-top: 0.8rem;
-  border-top: 1px solid #e4dccb;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.editor-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: 0.65rem;
-}
-
-.editor-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.editor-field.full-width {
-  grid-column: 1 / -1;
-}
-
-.editor-field label {
-  font-size: 0.75rem;
-  color: #6f675c;
-  font-weight: 500;
-}
-
-.editor-field input,
-.editor-field select,
-.editor-field textarea {
-  border: 1px solid #e4dccb;
-  background: #fff;
-  border-radius: 0.4rem;
-  padding: 0.45rem 0.6rem;
-  font: inherit;
-  font-size: 0.9rem;
-  color: inherit;
-}
-
-.editor-field textarea {
-  resize: vertical;
-}
-
-.editor-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-top: 0.4rem;
-}
+/* Sheet buttons reuse these names. */
 
 .btn-save {
   background: #0f6e56 !important;
