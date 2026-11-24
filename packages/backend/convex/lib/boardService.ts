@@ -89,7 +89,7 @@ export type BoardSlice = {
   rail: { id: string; title: string; icon: string | null; color: string | null; kind: string }[];
   activeViewId: string;
   tab: SliceTab;
-  tasks: TaskView[];
+  tasks: Array<TaskView & { pinned: boolean }>;
   progressions: ProgressionView[];
   quests: QuestView[];
   alerts: AlertView[];
@@ -277,11 +277,12 @@ export async function boardSlice(
     present.add(row.subjectId);
   }
 
-  tasks.sort((a, b) => {
-    const aPinned = pinned(pins, "task", String(a.id)) ? 1 : 0;
-    const bPinned = pinned(pins, "task", String(b.id)) ? 1 : 0;
-    return bPinned - aPinned;
-  });
+  const boardTasks = tasks
+    .map((task) => ({
+      ...task,
+      pinned: pinned(pins, "task", String(task.id)),
+    }))
+    .sort((a, b) => Number(b.pinned) - Number(a.pinned));
 
   const [progressionDocs, ownerTasks] = await Promise.all([
     db
@@ -356,7 +357,7 @@ export async function boardSlice(
     rail,
     activeViewId: String(activeView._id),
     tab: input.tab,
-    tasks,
+    tasks: boardTasks,
     progressions,
     quests,
     alerts,
