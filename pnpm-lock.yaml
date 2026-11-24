@@ -396,12 +396,12 @@ importers:
       convex:
         specifier: ^1.51.0
         version: 1.51.0(@clerk/react@6.19.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)
+      lucide-react:
+        specifier: ^1.78.0
+        version: 1.78.0(@types/react@19.3.0)(react@19.3.1)
       react:
         specifier: 19.3.1
         version: 19.3.1
-      react-dom:
-        specifier: ^19
-        version: 19.3.1(react@19.3.1)
     devDependencies:
       '@types/node':
         specifier: ^26.6.6
@@ -409,12 +409,18 @@ importers:
       '@types/react':
         specifier: ^19.3.0
         version: 19.3.0
+      '@types/react-dom':
+        specifier: 19.3.0
+        version: 19.3.0(@types/react@19.3.0)
       '@typescript/native':
         specifier: npm:typescript@^7.0.2
         version: typescript@7.0.2
       eslint:
         specifier: ^10.15.0
         version: 10.15.0
+      react-dom:
+        specifier: 19.3.1
+        version: 19.3.1(react@19.3.1)
       typescript:
         specifier: npm:@typescript/typescript6@^6.0.2
         version: '@typescript/typescript6@6.0.2'
@@ -2048,6 +2054,15 @@ packages:
 
   lodash@4.18.1:
     resolution: {integrity: sha512-dMInicTPVE8d1e5otfwmmjlxkZoUpiVLwyeTdUsi/Caj/gfzzblBcCE5sRHV/AsjuCmxWrte2TNGSYuCeCq+0Q==}
+
+  lucide-react@1.78.0:
+    resolution: {integrity: sha512-61NFdT5ZfAY8xs3LWKkB78GVeuiCcjYFEXeHWxWP+mQhP+UWLGsA9hJZQPtIyXRDhOvT8kgmWwAIyH5L7RIhAA==}
+    peerDependencies:
+      '@types/react': '*'
+      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
 
   magic-string@1.4.5:
     resolution: {integrity: sha512-oLLC2+YvQUfAa+vxoufE/yc1icb87M9iXIRqAoR/2EhE/8cb3SF/+Gi0c2By1B+5Vz2e2vQtUvHiu1+63Znh+w==}
@@ -4066,6 +4081,12 @@ snapshots:
       p-locate: 5.0.0
 
   lodash@4.18.1: {}
+
+  lucide-react@1.78.0(@types/react@19.3.0)(react@19.3.1):
+    dependencies:
+      react: 19.3.1
+    optionalDependencies:
+      '@types/react': 19.3.0
 
   magic-string@1.4.5:
     dependencies:
