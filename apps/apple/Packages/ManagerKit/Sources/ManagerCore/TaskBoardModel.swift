@@ -308,10 +308,10 @@ public final class TaskBoardModel {
       await open(task)
     case let .alert(alert):
       await markAlertSeen(alert)
-    case let .invite(invite):
-      markInviteSeen(invite)
-    case let .question(question):
-      markQuestionSeen(question)
+    case .invite, .question:
+      // Invites and questions have no mark-seen mutation. Accept, decline, and
+      // answer are the writes that clear NEW, and only after they succeed.
+      break
     default:
       break
     }
@@ -650,20 +650,6 @@ public final class TaskBoardModel {
       errorMessage = nil
     } catch {
       errorMessage = Self.message(for: error)
-    }
-  }
-
-  private func markInviteSeen(_ invite: BoardInvite) {
-    guard let index = boardSnapshot.invites.firstIndex(where: { $0.id == invite.id }) else { return }
-    if boardSnapshot.invites[index].seenAt == nil {
-      boardSnapshot.invites[index].seenAt = Date()
-    }
-  }
-
-  private func markQuestionSeen(_ question: BoardQuestion) {
-    guard let index = boardSnapshot.questions.firstIndex(where: { $0.id == question.id }) else { return }
-    if boardSnapshot.questions[index].seenAt == nil {
-      boardSnapshot.questions[index].seenAt = Date()
     }
   }
 

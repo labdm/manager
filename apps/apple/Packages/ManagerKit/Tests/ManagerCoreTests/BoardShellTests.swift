@@ -145,10 +145,13 @@ struct BoardShellTests {
 
     let alert = board.boardSnapshot.alerts[0]
     board.dismissAlert(alert)
-    // History keeps the record; only the Tasks feed drops it.
+    // Reading clears NEW. The Tasks feed still shows the note because the
+    // author is an agent and the default activity setting is others.
     #expect(board.boardSnapshot.alerts.count == 1)
+    #expect(board.boardSnapshot.alerts[0].seenAt != nil)
     #expect(board.boardSections(now: now, calendar: calendar).map(\.id)
-      == ["tasks", "progressions", "quests"])
+      == ["messages", "tasks", "progressions", "quests"])
+    #expect(board.rows(for: .messages, chip: .all).count == 1)
   }
 
   @Test("Activity on Tasks defaults to other people and can include or hide everyone")
@@ -157,25 +160,54 @@ struct BoardShellTests {
     backend.boardSnapshot = BoardSnapshot(
       alerts: [
         BoardAlert(id: "agent", title: "Agent", body: "", author: "agent"),
+        BoardAlert(id: "read", title: "Read", body: "", author: "member", seenAt: now),
         BoardAlert(id: "self", title: "Self", body: "", author: "self"),
       ],
       questions: [], progressions: [], quests: []
     )
     let board = TaskBoardModel(backend: backend)
     board.start()
-    await waitFor { board.boardSnapshot.alerts.count == 2 }
+    await waitFor { board.boardSnapshot.alerts.count == 3 }
 
     #expect(board.boardSections(now: now, calendar: calendar).map(\.id) == ["messages"])
-    #expect(board.boardSections(now: now, calendar: calendar)[0].rows.count == 1)
+    // Read activity from other people stays. The signed-in user's own note does not.
+    #expect(board.boardSections(now: now, calendar: calendar)[0].rows.map(\.title) == ["Agent", "Read"])
 
     await board.setActivityOnTasks(.all)
     #expect(backend.activityOnTasksValues == [.all])
-    #expect(board.boardSections(now: now, calendar: calendar)[0].rows.count == 2)
+    #expect(board.boardSections(now: now, calendar: calendar)[0].rows.count == 3)
 
     await board.setActivityOnTasks(.none)
     #expect(board.boardSections(now: now, calendar: calendar).isEmpty)
     // The Messages destination always shows the full history.
-    #expect(board.rows(for: .messages, chip: .all).count == 2)
+    #expect(board.rows(for: .messages, chip: .all).count == 3)
+  }
+
+  @Test("Opening an invite or a question does not stamp seenAt")
+  func openingInviteOrQuestionDoesNotStampSeen() async {
+    let invite = BoardInvite(id: "invite", groupId: "home", email: "ada@example.com")
+    let question = BoardQuestion(
+      id: "glass",
+      prompt: "How do you want to fix the broken window?",
+      options: [QuestionOption(id: "buy", label: "Buy glass")]
+    )
+    let backend = InMemoryTaskBackend()
+    backend.boardSnapshot = BoardSnapshot(
+      alerts: [],
+      questions: [question],
+      progressions: [],
+      quests: [],
+      invites: [invite]
+    )
+    let board = TaskBoardModel(backend: backend)
+    board.start()
+    await waitFor { board.boardSnapshot.invites.count == 1 && board.boardSnapshot.questions.count == 1 }
+
+    await board.selectRow(.invite(invite))
+    await board.selectRow(.question(question))
+    #expect(board.selectedRowID == "question-\(question.id)")
+    #expect(board.boardSnapshot.invites[0].seenAt == nil)
+    #expect(board.boardSnapshot.questions[0].seenAt == nil)
   }
 
   @Test("A composed message uses alerts and stays in History")

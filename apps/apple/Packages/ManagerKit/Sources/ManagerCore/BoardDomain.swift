@@ -227,8 +227,9 @@ public enum BoardSlice: String, CaseIterable, Identifiable, Codable, Sendable {
 
 // MARK: - Mixed rows
 
-/// An agent or person note. It has no checkbox; reading it clears it from the
-/// band and leaves it in the log.
+/// An agent or person note. It has no checkbox. Reading it clears NEW. The
+/// Tasks feed keeps the note when the activity setting includes the author.
+/// History always keeps it.
 public struct BoardAlert: Identifiable, Hashable, Codable, Sendable {
   public var id: String
   public var title: String
@@ -589,7 +590,7 @@ public struct BoardSnapshot: Codable, Sendable {
         && chip.contains(task, now: now, calendar: calendar)
         && inGroup(task.groupID)
     }
-    let visibleAlerts = alerts.filter { activity.includes($0) && $0.seenAt == nil }
+    let visibleAlerts = alerts.filter { activity.includes($0) }
     let openQuestions = questions.filter { $0.answeredAt == nil }
     let pendingInvites = invites.filter { $0.isPending }
     let visibleProgressions = progressions.filter { _ in inGroup(nil) }
