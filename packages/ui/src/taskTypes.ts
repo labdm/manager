@@ -1,4 +1,5 @@
 import type { Id } from "@manager/backend/convex/_generated/dataModel";
+import type { SeriesBehavior, SeriesCadence, TaskLook } from "./sheetTypes";
 
 export type Priority = "low" | "normal" | "high" | "urgent" | string;
 export type OverduePolicy = "none" | "retire" | "escalate";
@@ -27,6 +28,10 @@ export interface TaskItem {
   seenAt?: number | null;
   completedAt?: number | null;
   deletedAt?: number | null;
+  recurrenceId?: string | null;
+  periodStart?: number | null;
+  presentation?: string | null;
+  resourceEffect?: { resourceId: string; delta: number } | null;
 }
 
 export interface TaskDraft {
@@ -39,6 +44,11 @@ export interface TaskDraft {
   remindAt: string; // YYYY-MM-DDTHH:mm
   priority: string;
   overduePolicy: OverduePolicy;
+  look: TaskLook;
+  series: SeriesBehavior;
+  cadence: SeriesCadence;
+  resourceId: string;
+  resourceDelta: string;
 }
 
 export interface TaskCreatePayload {
@@ -53,6 +63,7 @@ export interface TaskCreatePayload {
   priority?: string;
   priorityRank?: number;
   overduePolicy?: OverduePolicy;
+  presentation?: TaskLook;
 }
 
 /**
@@ -72,4 +83,5 @@ export interface TaskUpdatePayload {
   priority?: string;
   priorityRank?: number;
   overduePolicy?: OverduePolicy;
+  presentation?: TaskLook;
 }

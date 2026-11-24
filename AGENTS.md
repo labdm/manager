@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Manager is Dmytro Afonin's ADHD-first, gamified life manager — not just another checkbox list. Architecture: [docs/architecture.md](docs/architecture.md).
+Manager is Dmytro Afonin's ADHD-first, gamified life manager — not just another checkbox list. Architecture: [docs/architecture.md](docs/architecture.md). Web and desktop UI layout: [docs/ui.md](docs/ui.md).
 
 This tree is the Convex backend, the shared React UI, the static web app, the Tauri desktop client, the MCP server, and the native Apple and Android clients.
 

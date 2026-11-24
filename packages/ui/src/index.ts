@@ -5,5 +5,8 @@ export { TasksPage } from "./TasksPage";
 export { formatDueAt } from "./formatDueAt";
 export * from "./homeCatalog";
 export * from "./homeTypes";
+export * from "./iconCatalog";
+export * from "./sheetFacts";
+export * from "./sheetTypes";
 export * from "./taskFacts";
 export * from "./taskTypes";
