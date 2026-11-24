@@ -21,8 +21,8 @@ export interface BoardView {
 }
 
 /**
- * A task as it appears on the board. The board query returns the same shape as
- * `tasks.list`, with the view pin flag included when the row is pinned.
+ * A task as it appears on the board. `board.slice` returns the same shape as
+ * `tasks.list`, with `pinned` set when this view pins the row.
  */
 export interface BoardTask extends TaskItem {
   pinned?: boolean;

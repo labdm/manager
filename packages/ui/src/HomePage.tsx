@@ -1,7 +1,7 @@
 import { api } from "@manager/backend/convex/_generated/api";
 import type { Id } from "@manager/backend/convex/_generated/dataModel";
-import { useMutation, useQuery } from "convex/react";
-import { useEffect, useState } from "react";
+import { useMutation } from "convex/react";
+import { useCallback, useEffect, useState } from "react";
 import { HomeLayout } from "./HomeLayout";
 import {
   boardSliceRef,
@@ -59,20 +59,25 @@ export function HomePage() {
   const pin = useMutation(pinRef);
   const unpin = useMutation(unpinRef);
 
+  const sliceBoard = useMutation(boardSliceRef);
+
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [board, setBoard] = useState<BoardSlice | null>(null);
   const [activeViewId, setActiveViewId] = useState<string | undefined>();
   const [tab, setTab] = useState<BoardTab>("tasks");
 
-  const board = useQuery(
-    boardSliceRef,
-    ready
-      ? {
-          tab,
-          timezone: TIMEZONE,
-          ...(activeViewId ? { viewId: activeViewId } : {}),
-        }
-      : "skip"
+  const loadBoard = useCallback(
+    async (nextTab: BoardTab = tab, nextViewId: string | undefined = activeViewId) => {
+      const result = await sliceBoard({
+        tab: nextTab,
+        timezone: TIMEZONE,
+        ...(nextViewId ? { viewId: nextViewId } : {}),
+      });
+      setBoard(result);
+      return result;
+    },
+    [activeViewId, sliceBoard, tab],
   );
 
   useEffect(() => {
@@ -90,31 +95,58 @@ export function HomePage() {
     };
   }, [ensureUser]);
 
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+    sliceBoard({
+      tab,
+      timezone: TIMEZONE,
+      ...(activeViewId ? { viewId: activeViewId } : {}),
+    })
+      .then((result) => {
+        if (!cancelled) setBoard(result);
+      })
+      .catch((caught: unknown) => {
+        if (cancelled) return;
+        setError(caught instanceof Error ? caught.message : "Could not load the board");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeViewId, ready, sliceBoard, tab]);
+
   const data = board ?? EMPTY_BOARD;
-  const viewId = activeViewId ?? data.activeViewId ?? "home";
+  const viewId = activeViewId ?? (board ? board.activeViewId : undefined);
 
   async function handleCreateTask(payload: TaskCreatePayload) {
     await createTask(payload);
+    await loadBoard();
   }
 
   async function handleToggleTask(id: Id<"tasks">) {
     await toggleTask({ id });
+    await loadBoard();
   }
 
   async function handleDeleteTask(id: Id<"tasks">) {
     await removeTask({ id });
+    await loadBoard();
   }
 
   async function handleUpdateTask(payload: TaskUpdatePayload) {
     await updateTask(payload);
+    await loadBoard();
   }
 
   async function handleMarkSeen(id: Id<"tasks">) {
-    return await markSeen({ id });
+    const result = await markSeen({ id });
+    await loadBoard();
+    return result;
   }
 
   async function handleInstallTemplate(slug: string) {
     await installTemplate({ slug });
+    await loadBoard();
   }
 
   async function handleCreateCustom(input: CustomViewInput) {
@@ -123,23 +155,31 @@ export function HomePage() {
       icon: input.icon,
       color: input.color,
     });
+    await loadBoard();
   }
 
   async function handleEnableComputed(slug: ComputedViewSlug) {
-    await enableComputedView({ slug });
+    const key = slug === "high-priority" ? "high" : slug;
+    await enableComputedView({ key });
+    await loadBoard();
   }
 
   async function handleRemoveView(removeId: string) {
     await removeView({ viewId: removeId });
     if (activeViewId === removeId) setActiveViewId(undefined);
+    else await loadBoard();
   }
 
   async function handlePinTask(taskId: Id<"tasks">) {
-    await pin({ viewId, subject: { type: "task", id: taskId } });
+    if (!viewId) return;
+    await pin({ viewId, subjectType: "task", subjectId: taskId });
+    await loadBoard();
   }
 
   async function handleUnpinTask(taskId: Id<"tasks">) {
-    await unpin({ viewId, subject: { type: "task", id: taskId } });
+    if (!viewId) return;
+    await unpin({ viewId, subjectType: "task", subjectId: taskId });
+    await loadBoard();
   }
 
   return (
@@ -152,7 +192,7 @@ export function HomePage() {
       quests={data.quests}
       alerts={data.alerts}
       questions={data.questions}
-      loading={!ready || board === undefined}
+      loading={!ready || board === null}
       notice={error}
       onSelectView={setActiveViewId}
       onSelectTab={setTab}

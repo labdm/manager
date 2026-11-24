@@ -1,15 +1,16 @@
 import { makeFunctionReference } from "convex/server";
 import type { Id } from "@manager/backend/convex/_generated/dataModel";
 import type { BoardSlice, BoardSliceArgs, CustomViewInput } from "./homeTypes";
-import type { ComputedViewSlug } from "./homeCatalog";
+
 
 /**
- * The M3 board functions are newer than the checked-in generated API. Function
- * references let the UI call them by path until `convex dev` regenerates
- * `api.d.ts`; the argument and return contracts stay local and typed here.
+ * The Home functions are newer than the checked-in generated API. `board.slice`
+ * is a mutation because loading the board also mints recurrences and ensures
+ * the Home view. Arguments match the Convex handlers: flat pin ids, and
+ * `enableComputed` takes `key` (`high`, not `high-priority`).
  */
 export const boardSliceRef = makeFunctionReference<
-  "query",
+  "mutation",
   BoardSliceArgs & Record<string, unknown>,
   BoardSlice
 >("board:slice");
@@ -28,7 +29,7 @@ export const createCustomViewRef = makeFunctionReference<
 
 export const enableComputedViewRef = makeFunctionReference<
   "mutation",
-  { slug: ComputedViewSlug },
+  { key: "new" | "high" | "today" },
   unknown
 >("views:enableComputed");
 
@@ -38,14 +39,10 @@ export const removeViewRef = makeFunctionReference<
   unknown
 >("views:remove");
 
-export interface PinSubject {
-  type: "task";
-  id: Id<"tasks">;
-}
-
 export interface PinArgs {
   viewId: string;
-  subject: PinSubject;
+  subjectType: "task";
+  subjectId: Id<"tasks">;
 }
 
 export const pinRef = makeFunctionReference<
