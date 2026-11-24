@@ -1,11 +1,13 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { findCurrentUser, requireUser } from "./users";
+import { groupWire } from "./lib/clientWire";
 import {
   createGroup,
   defaultGroupForUser,
   listGroups,
   listMembers,
+  membershipFor,
   removeGroup,
   renameGroup,
 } from "./lib/groupService";
@@ -14,8 +16,14 @@ export const list = query({
   args: {},
   handler: async (ctx) => {
     const user = await findCurrentUser(ctx);
-    if (!user) return [];
-    return await listGroups(ctx.db, user._id);
+    if (!user) return { groups: [] };
+    const rows = await listGroups(ctx.db, user._id);
+    const groups = [];
+    for (const row of rows) {
+      const member = await membershipFor(ctx.db, user._id, row._id);
+      groups.push(groupWire(row, member));
+    }
+    return { groups };
   },
 });
 
@@ -36,7 +44,8 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    return await createGroup(ctx.db, user._id, args);
+    const created = await createGroup(ctx.db, user._id, args);
+    return { id: created._id };
   },
 });
 

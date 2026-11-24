@@ -2,24 +2,41 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { findCurrentUser, requireUser } from "./users";
+import { flatCronRouting, routingWire } from "./lib/clientWire";
 import {
   createRouting,
   listRoutings,
   removeRouting,
   runCronRouting,
 } from "./lib/routingService";
-import { routingExecution, routingTrigger } from "./schema";
 
+/** Shell create. Nested cron and state triggers stay on the MCP tool. */
 export const create = mutation({
   args: {
     name: v.string(),
-    trigger: routingTrigger,
-    execution: routingExecution,
+    trigger: v.literal("cron"),
+    cadence: v.union(
+      v.literal("daily"),
+      v.literal("weekly"),
+      v.literal("monthly"),
+    ),
+    executionKind: v.literal("createTask"),
+    title: v.string(),
     groupId: v.optional(v.id("spaces")),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    return await createRouting(ctx.db, user._id, args);
+    const created = await createRouting(
+      ctx.db,
+      user._id,
+      flatCronRouting({
+        name: args.name,
+        cadence: args.cadence,
+        title: args.title,
+        groupId: args.groupId,
+      }),
+    );
+    return { id: created._id };
   },
 });
 
@@ -27,8 +44,9 @@ export const list = query({
   args: {},
   handler: async (ctx) => {
     const user = await findCurrentUser(ctx);
-    if (!user) return [];
-    return await listRoutings(ctx.db, user._id);
+    if (!user) return { routings: [] };
+    const rows = await listRoutings(ctx.db, user._id);
+    return { routings: rows.map(routingWire) };
   },
 });
 

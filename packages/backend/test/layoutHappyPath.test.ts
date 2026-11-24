@@ -3,10 +3,12 @@ import type { Id } from "../convex/_generated/dataModel";
 import { boardSlice } from "../convex/lib/boardService";
 import { createCategory } from "../convex/lib/categoryService";
 import { civilDayStart } from "../convex/lib/civilDates";
+import { flatCronRouting, groupWire, routingWire } from "../convex/lib/clientWire";
 import {
   addMembership,
   defaultGroupForUser,
   membershipFor,
+  removeGroup,
 } from "../convex/lib/groupService";
 import { createInvite } from "../convex/lib/inviteService";
 import { setOverride } from "../convex/lib/linkService";
@@ -198,5 +200,54 @@ describe("layout happy path", () => {
     await setTaskDone(writer, owner._id, task.id, true);
     expect(db.all("alerts").filter((row) => row.title === "Task completed")).toHaveLength(2);
     expect(db.all("routingRuns")).toHaveLength(2);
+  });
+
+  it("stores the flat client cron payload and lists the shell wire", async () => {
+    const db = fakeDb();
+    const writer = db.asWriter();
+    const owner = await provision(db, "clerk|wire", "wire@example.com");
+    const reader = db.asReader();
+    const group = await defaultGroupForUser(reader, owner._id);
+    const member = await membershipFor(reader, owner._id, group._id);
+
+    expect(groupWire(group, member)).toMatchObject({
+      id: group._id,
+      name: "Personal",
+      isDefault: true,
+      role: "owner",
+      canInvite: true,
+    });
+
+    const routing = await createRouting(
+      writer,
+      owner._id,
+      flatCronRouting({
+        name: "Morning",
+        cadence: "daily",
+        title: "Stretch",
+        groupId: group._id,
+        now: NOW,
+      }),
+    );
+    expect(routing.trigger).toEqual({
+      type: "cron",
+      cadence: "daily",
+      timezone: "UTC",
+      anchorOn: civilDayStart(NOW, "UTC"),
+    });
+    expect(routing.execution).toEqual({ type: "createTask", title: "Stretch" });
+    expect(routingWire(routing)).toMatchObject({
+      id: routing._id,
+      name: "Morning",
+      title: "Morning",
+      trigger: "cron",
+      cadence: "daily",
+      executionKind: "createTask",
+      execution: "createTask",
+    });
+
+    await expect(removeGroup(writer, owner._id, group._id)).rejects.toThrow(
+      "Default group cannot be deleted",
+    );
   });
 });
