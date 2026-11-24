@@ -2,7 +2,7 @@
 
 This is the **shipped** layout contract for the shared React UI in `packages/ui`, used by the web app and the desktop client. The mechanics it exposes are described in [plan.md](plan.md); this file is about where they are drawn and which mutation a sheet calls.
 
-The next shell is the Layout evolution section of [plan.md](plan.md). It replaces this bottom bar, the grid dashboard, and the card look. Do not extend this chrome. Implement that section only after it is accepted. Until that work is merged, the checks below still apply to this build.
+The next shell is the Layout evolution section of [plan.md](plan.md). It replaces this bottom bar, the grid dashboard, and the card look. Web adopts Tailwind and shadcn/ui in `packages/ui` as the first step of that shell. Apple uses system tab and split views. Android uses the Material 3 navigation bar and rail. Do not extend this hand-written chrome. Implement that section only after it is accepted. Until that work is merged, the checks below still apply to this build.
 
 ## Chrome
 

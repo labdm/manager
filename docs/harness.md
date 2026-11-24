@@ -52,7 +52,7 @@ New series default their anchor to the current period, so creation mints one row
 - **Manager is an actionable task tracker, not a notification feed or conversational echo chamber.**
 - **Do not create tasks for agent summaries, meeting recaps, status updates, or context notes.**
 - A task is an atomic unit of work that a human can complete and check off. If there is no specific action required from the user, do not write a task.
-- Informational notes, travel notifications ("Flight is Thursday"), and background summaries are **messages**. Use `create_alert`. The stored table is `alerts`. The screen says Message. An unseen message is a row in the Inbox; reading it keeps the row in the Messages log. There is no checkbox, and it is never written to the `tasks` table.
+- Informational notes, travel notifications ("Flight is Thursday"), and background summaries are **messages**. Use `create_alert`. The stored table is `alerts`. The screen says Message. History shows every activity record. The Tasks page shows the subset from Settings, which defaults to other people and agents. There is no checkbox, and it is never written to the `tasks` table.
 
 ## 5. Resources and Stock
 
