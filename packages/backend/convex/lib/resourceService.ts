@@ -1,9 +1,17 @@
 import type { DatabaseReader, DatabaseWriter } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import {
+  assertCanWriteGroup,
+  readableDocs,
+  readableGroupIds,
+  resolveGroupId,
+} from "./groupService";
+import { fireStateRoutings, stateRevision } from "./routingService";
 import { normalizeTitle } from "./taskFields";
 
 export type ResourceView = {
   id: Id<"resources">;
+  groupId: Id<"spaces">;
   title: string;
   unit: string | null;
   quantity: number;
@@ -24,6 +32,7 @@ export type ResourceInput = {
   lowAt?: number;
   icon?: string;
   color?: string;
+  groupId?: Id<"spaces">;
 };
 
 export type ResourceUpdate = Partial<ResourceInput>;
@@ -49,6 +58,7 @@ function requiredNumber(value: number, name: string): number {
 export function resourceView(resource: Doc<"resources">): ResourceView {
   return {
     id: resource._id,
+    groupId: resource.groupId,
     title: resource.title,
     unit: resource.unit ?? null,
     quantity: resource.quantity,
@@ -62,10 +72,7 @@ export async function listResources(
   db: DatabaseReader,
   ownerId: Id<"users">,
 ): Promise<ResourceView[]> {
-  const rows = await db
-    .query("resources")
-    .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-    .collect();
+  const rows = await readableDocs(db, ownerId, "resources");
   return rows
     .filter((row) => row.deletedAt === undefined)
     .sort((a, b) => a.title.localeCompare(b.title) || a._creationTime - b._creationTime)
@@ -78,7 +85,11 @@ async function liveResource(
   resourceId: Id<"resources">,
 ): Promise<Doc<"resources">> {
   const resource = await db.get(resourceId);
-  if (!resource || resource.ownerId !== ownerId || resource.deletedAt !== undefined) {
+  if (!resource || resource.deletedAt !== undefined) {
+    throw new Error("Resource not found");
+  }
+  const groups = await readableGroupIds(db, ownerId);
+  if (!groups.has(String(resource.groupId))) {
     throw new Error("Resource not found");
   }
   return resource;
@@ -116,11 +127,20 @@ async function syncLowStockAlert(
   const unit = resource.unit ? ` ${resource.unit}` : "";
   await db.insert("alerts", {
     ownerId,
+    groupId: resource.groupId,
     title: `Low stock: ${resource.title}`,
     body: `${resource.quantity}${unit} left (low at ${resource.lowAt}${unit})`,
     source: String(resource._id),
+    kind: "note",
+    authorOrigin: "agent",
     resourceId: resource._id,
     deletedAt: undefined,
+  });
+  await fireStateRoutings(db, resource.groupId, {
+    subjectType: "resource",
+    subjectId: String(resource._id),
+    event: "low",
+    revision: stateRevision(`${String(resource._id)}:low:${resource.quantity}`),
   });
 }
 
@@ -132,10 +152,24 @@ async function changeQuantity(
   now: number,
 ): Promise<void> {
   const resource = await db.get(resourceId);
-  if (!resource || resource.ownerId !== ownerId || resource.deletedAt !== undefined) return;
+  if (!resource || resource.deletedAt !== undefined) return;
+  const groups = await readableGroupIds(db, ownerId);
+  if (!groups.has(String(resource.groupId))) return;
   const quantity = resource.quantity + amount;
   await db.patch(resourceId, { quantity });
   await syncLowStockAlert(db, ownerId, { ...resource, quantity }, now);
+}
+
+/** One-shot delta used by resourceDelta routing executions. */
+export async function applyResourceDelta(
+  db: DatabaseWriter,
+  ownerId: Id<"users">,
+  resourceId: Id<"resources">,
+  delta: number,
+  now = Date.now(),
+): Promise<void> {
+  if (!Number.isFinite(delta)) throw new Error("Invalid delta");
+  await changeQuantity(db, ownerId, resourceId, delta, now);
 }
 
 export async function createResource(
@@ -146,8 +180,11 @@ export async function createResource(
 ): Promise<ResourceView> {
   const quantity = requiredNumber(input.quantity, "quantity");
   const lowAt = optionalNumber(input.lowAt, "lowAt");
+  const groupId = await resolveGroupId(db, ownerId, input.groupId);
+  await assertCanWriteGroup(db, ownerId, groupId);
   const id = await db.insert("resources", {
     ownerId,
+    groupId,
     title: normalizeTitle(input.title),
     unit: optionalString(input.unit),
     quantity,
@@ -169,8 +206,14 @@ export async function updateResource(
   input: ResourceUpdate,
   now = Date.now(),
 ): Promise<ResourceView> {
-  await liveResource(db, ownerId, resourceId);
+  const current = await liveResource(db, ownerId, resourceId);
+  await assertCanWriteGroup(db, ownerId, current.groupId);
   const patch: Partial<Doc<"resources">> = {};
+  if (input.groupId !== undefined) {
+    const groupId = await resolveGroupId(db, ownerId, input.groupId);
+    await assertCanWriteGroup(db, ownerId, groupId);
+    patch.groupId = groupId;
+  }
 
   // A blank string is not a clear, and a missing number is not a zero.
   const title = optionalString(input.title);
@@ -200,7 +243,8 @@ export async function removeResource(
   resourceId: Id<"resources">,
   now = Date.now(),
 ): Promise<{ success: true; id: Id<"resources"> }> {
-  await liveResource(db, ownerId, resourceId);
+  const resource = await liveResource(db, ownerId, resourceId);
+  await assertCanWriteGroup(db, ownerId, resource.groupId);
   await db.patch(resourceId, { deletedAt: now });
   const effects = await db
     .query("taskResourceEffects")
@@ -282,10 +326,16 @@ export async function setTaskResourceEffect(
   now = Date.now(),
 ): Promise<ResourceEffect> {
   const task = await db.get(taskId);
-  if (!task || task.ownerId !== ownerId || task.deletedAt !== undefined) {
+  if (!task || task.deletedAt !== undefined) {
     throw new Error("Task not found");
   }
-  await liveResource(db, ownerId, resourceId);
+  const groups = await readableGroupIds(db, ownerId);
+  if (!groups.has(String(task.groupId))) throw new Error("Task not found");
+  await assertCanWriteGroup(db, ownerId, task.groupId);
+  const resource = await liveResource(db, ownerId, resourceId);
+  if (String(resource.groupId) !== String(task.groupId)) {
+    throw new Error("Resource not found");
+  }
   if (!Number.isFinite(delta)) throw new Error("Invalid delta");
 
   const [existing] = await liveEffectsForTask(db, ownerId, taskId);
@@ -319,9 +369,12 @@ export async function clearTaskResourceEffect(
   now = Date.now(),
 ): Promise<{ success: true; id: Id<"tasks"> }> {
   const task = await db.get(taskId);
-  if (!task || task.ownerId !== ownerId || task.deletedAt !== undefined) {
+  if (!task || task.deletedAt !== undefined) {
     throw new Error("Task not found");
   }
+  const groups = await readableGroupIds(db, ownerId);
+  if (!groups.has(String(task.groupId))) throw new Error("Task not found");
+  await assertCanWriteGroup(db, ownerId, task.groupId);
   const effects = await liveEffectsForTask(db, ownerId, taskId);
   for (const effect of effects) {
     if (effect.applied) {

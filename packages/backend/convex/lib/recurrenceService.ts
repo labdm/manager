@@ -8,6 +8,12 @@ import {
   periodsBetween,
   periodStartFor,
 } from "./civilDates";
+import {
+  assertCanWriteGroup,
+  readableDocs,
+  readableGroupIds,
+  resolveGroupId,
+} from "./groupService";
 import type { ResourceEffect } from "./resourceService";
 import {
   assertEpoch,
@@ -33,6 +39,7 @@ export type RecurrenceInput = {
   presentation?: string;
   resourceEffect?: ResourceEffect;
   anchorOn?: number;
+  groupId?: Id<"spaces">;
 };
 
 function normalizeBehavior(value: string): "replace" | "stack" {
@@ -61,16 +68,20 @@ export async function createRecurrence(
   );
   const overduePolicy = normalizeOverduePolicy(input.overduePolicy);
   const presentation = normalizePresentation(input.presentation);
+  const groupId = await resolveGroupId(db, ownerId, input.groupId);
+  await assertCanWriteGroup(db, ownerId, groupId);
 
   let resourceEffect: ResourceEffect | undefined;
   if (input.resourceEffect !== undefined) {
     const { resourceId, delta } = input.resourceEffect;
     if (!Number.isFinite(delta)) throw new Error("Invalid delta");
     const resource = await db.get(resourceId);
+    const groups = await readableGroupIds(db, ownerId);
     if (
       !resource ||
-      resource.ownerId !== ownerId ||
-      resource.deletedAt !== undefined
+      resource.deletedAt !== undefined ||
+      !groups.has(String(resource.groupId)) ||
+      String(resource.groupId) !== String(groupId)
     ) {
       throw new Error("Resource not found");
     }
@@ -83,6 +94,7 @@ export async function createRecurrence(
 
   const id = await db.insert("recurrences", {
     ownerId,
+    groupId,
     behavior,
     cadence,
     timezone: input.timezone,
@@ -111,10 +123,7 @@ export async function listRecurrences(
   db: DatabaseReader,
   ownerId: Id<"users">,
 ): Promise<Doc<"recurrences">[]> {
-  const rows = await db
-    .query("recurrences")
-    .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-    .collect();
+  const rows = await readableDocs(db, ownerId, "recurrences");
   return rows.filter((row) => row.deletedAt === undefined);
 }
 
@@ -140,6 +149,7 @@ async function mint(
     recurrence.ownerId,
     {
       title: recurrence.title,
+      groupId: recurrence.groupId,
       notes: recurrence.notes,
       plannedOn: periodStart,
       plannedTime: recurrence.plannedTime,

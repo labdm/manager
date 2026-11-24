@@ -1,5 +1,6 @@
 import type { DatabaseWriter } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import { readableDocs } from "./groupService";
 
 /**
  * Completing an available quest step unlocks the next locked step in the same
@@ -58,14 +59,15 @@ export async function questViews(
   db: DatabaseWriter,
   ownerId: Id<"users">,
 ): Promise<QuestView[]> {
-  const quests = await db
-    .query("quests")
-    .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-    .collect();
-  const steps = await db
+  const quests = await readableDocs(db, ownerId, "quests");
+  const readableQuestIds = new Set(quests.map((quest) => String(quest._id)));
+  const ownedSteps = await db
     .query("questSteps")
     .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
     .collect();
+  const steps = ownedSteps.filter((step) =>
+    readableQuestIds.has(String(step.questId)),
+  );
   const taskIds = Array.from(new Set(steps.map((step) => step.taskId)));
   const tasks = await Promise.all(taskIds.map((id) => db.get(id)));
   const taskById = new Map(

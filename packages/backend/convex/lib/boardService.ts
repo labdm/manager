@@ -6,13 +6,21 @@ import {
   civilDayStart,
   periodStartFor,
 } from "./civilDates";
+import {
+  assertCanReadGroup,
+  defaultGroupForUser,
+  readableDocs,
+  readableGroupIds,
+  resolveGroupId,
+} from "./groupService";
 import { listTasks, taskView, type TaskView } from "./taskService";
 import { listResources, type ResourceView } from "./resourceService";
 import { questViews, type QuestView } from "./questService";
 import { ensureHome, ownerViews, viewSummary } from "./viewService";
+import { listAlertHistory } from "./phase2Service";
 import { reconcileOwner } from "./recurrenceService";
 
-export type SliceTab = "tasks" | "daily" | "weekly" | "monthly";
+export type SliceTab = "tasks" | "daily" | "weekly" | "monthly" | "events";
 
 const RHYTHMS = [
   { kind: "day", cadence: "daily", labels: ["Yesterday", "Today", "Tomorrow"] },
@@ -20,7 +28,7 @@ const RHYTHMS = [
   { kind: "month", cadence: "monthly", labels: ["Last month", "This month", "Next month"] },
 ] as const;
 
-const TAB_KINDS: Record<Exclude<SliceTab, "tasks">, string> = {
+const TAB_KINDS: Record<Exclude<SliceTab, "tasks" | "events">, string> = {
   daily: "day",
   weekly: "week",
   monthly: "month",
@@ -31,10 +39,12 @@ export async function ensureRhythmEvents(
   ownerId: Id<"users">,
   timezone: string,
   now: number,
+  groupId?: Id<"spaces">,
 ): Promise<Doc<"events">[]> {
+  const group = await resolveGroupId(db, ownerId, groupId);
   const existing = await db
     .query("events")
-    .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+    .withIndex("by_group", (q) => q.eq("groupId", group))
     .collect();
   const live = existing.filter((event) => event.deletedAt === undefined);
   const created: Doc<"events">[] = [];
@@ -54,6 +64,7 @@ export async function ensureRhythmEvents(
       }
       const id = await db.insert("events", {
         ownerId,
+        groupId: group,
         title: rhythm.labels[offset + 1],
         kind: rhythm.kind,
         startsAt,
@@ -78,7 +89,14 @@ export type ProgressionView = {
   unit: string;
 };
 
-export type AlertView = { id: string; title: string; body: string };
+export type AlertView = {
+  id: string;
+  title: string;
+  body: string;
+  kind: Doc<"alerts">["kind"];
+  authorOrigin: Doc<"alerts">["authorOrigin"];
+  seenAt?: number;
+};
 
 export type QuestionView = {
   id: string;
@@ -90,6 +108,8 @@ export type BoardSlice = {
   rail: { id: string; title: string; icon: string | null; color: string | null; kind: string }[];
   activeViewId: string;
   tab: SliceTab;
+  activeEventId: string | null;
+  unseen: Record<SliceTab, number>;
   tasks: Array<TaskView & { pinned: boolean }>;
   resources: ResourceView[];
   progressions: ProgressionView[];
@@ -102,6 +122,10 @@ export type SliceInput = {
   tab: SliceTab;
   viewId?: Id<"views">;
   timezone: string;
+  /** An omitted group id reads across every group the caller belongs to. */
+  groupId?: Id<"spaces">;
+  /** The named event selected for the Events chip. */
+  eventId?: Id<"events">;
 };
 
 function attached(
@@ -130,6 +154,17 @@ function pinned(
   );
 }
 
+function isUnseen(task: TaskView): boolean {
+  return (
+    task.seenAt === undefined &&
+    (task.origin === "agent" || task.origin === "member")
+  );
+}
+
+function unseenCount(tasks: TaskView[]): number {
+  return tasks.filter(isUnseen).length;
+}
+
 export async function boardSlice(
   db: DatabaseWriter,
   ownerId: Id<"users">,
@@ -141,15 +176,31 @@ export async function boardSlice(
     input.tab !== "tasks" &&
     input.tab !== "daily" &&
     input.tab !== "weekly" &&
-    input.tab !== "monthly"
+    input.tab !== "monthly" &&
+    input.tab !== "events"
   ) {
     throw new Error("Invalid tab");
   }
 
+  const selectedGroup = input.groupId
+    ? await resolveGroupId(db, ownerId, input.groupId)
+    : undefined;
+  if (selectedGroup) await assertCanReadGroup(db, ownerId, selectedGroup);
+  const homeGroup = await defaultGroupForUser(db, ownerId);
+
   await reconcileOwner(db, ownerId, now);
-  const home = await ensureHome(db, ownerId);
-  const views = await ownerViews(db, ownerId);
-  const events = await ensureRhythmEvents(db, ownerId, input.timezone, now);
+  const home = await ensureHome(db, ownerId, homeGroup._id);
+  const allViews = await ownerViews(db, ownerId);
+  const views = selectedGroup
+    ? allViews.filter((view) => view.groupId === selectedGroup)
+    : allViews;
+  const events = await ensureRhythmEvents(
+    db,
+    ownerId,
+    input.timezone,
+    now,
+    homeGroup._id,
+  );
 
   const activeView =
     (input.viewId && views.find((view) => view._id === input.viewId)) || home;
@@ -180,9 +231,69 @@ export async function boardSlice(
   const overrides = allOverrides.filter((row) => row.deletedAt === undefined);
 
   let tasks = await listTasks(db, ownerId, now);
+  if (selectedGroup) {
+    tasks = tasks.filter((task) => task.groupId === selectedGroup);
+  }
   const today = civilDayStart(now, input.timezone);
 
-  if (input.tab === "tasks") {
+  const namedEvents = (await readableDocs(db, ownerId, "events"))
+    .filter(
+      (event) =>
+        event.deletedAt === undefined &&
+        event.kind !== "day" &&
+        event.kind !== "week" &&
+        event.kind !== "month" &&
+        (!selectedGroup || event.groupId === selectedGroup),
+    )
+    .sort((a, b) => a.startsAt - b.startsAt);
+  const activeEvent =
+    input.eventId !== undefined
+      ? namedEvents.find((event) => event._id === input.eventId)
+      : namedEvents.find(
+          (event) => event.startsAt <= now && now < event.endsAt,
+        ) ?? null;
+
+  const baseTasks = tasks;
+  const inPeriod = (task: TaskView, kind: string): boolean => {
+    const period = events.find(
+      (event) => event.kind === kind && event.startsAt <= now && now < event.endsAt,
+    );
+    if (!period) return false;
+    return (
+      (task.plannedOn !== undefined &&
+        task.plannedOn >= period.startsAt &&
+        task.plannedOn < period.endsAt) ||
+      attached(
+        attachments,
+        "task",
+        String(task.id),
+        "event",
+        String(period._id),
+      )
+    );
+  };
+  const unseen: Record<SliceTab, number> = {
+    tasks: 0,
+    daily: unseenCount(baseTasks.filter((task) => inPeriod(task, "day"))),
+    weekly: unseenCount(baseTasks.filter((task) => inPeriod(task, "week"))),
+    monthly: unseenCount(baseTasks.filter((task) => inPeriod(task, "month"))),
+    events: 0,
+  };
+
+  if (input.tab === "events") {
+    tasks = activeEvent
+      ? tasks.filter((task) =>
+          attached(
+            attachments,
+            "task",
+            String(task.id),
+            "event",
+            String(activeEvent._id),
+          ),
+        )
+      : [];
+    unseen.events = unseenCount(tasks);
+  } else if (input.tab === "tasks") {
     if (activeView.kind === "template" && activeView.categoryId) {
       tasks = tasks.filter((task) =>
         attached(
@@ -233,29 +344,11 @@ export async function boardSlice(
           ),
       );
     }
+    unseen.tasks = unseenCount(tasks);
   } else {
     const kind = TAB_KINDS[input.tab];
-    const period = events.find(
-      (event) =>
-        event.kind === kind && event.startsAt <= now && now < event.endsAt,
-    );
-    tasks = tasks.filter((task) => {
-      const inPeriod =
-        task.plannedOn !== undefined &&
-        period !== undefined &&
-        task.plannedOn >= period.startsAt &&
-        task.plannedOn < period.endsAt;
-      const byAttachment =
-        period !== undefined &&
-        attached(
-          attachments,
-          "task",
-          String(task.id),
-          "event",
-          String(period._id),
-        );
-      return inPeriod || byAttachment;
-    });
+    tasks = tasks.filter((task) => inPeriod(task, kind));
+    unseen[input.tab] = unseenCount(tasks);
   }
 
   const excluded = new Set(
@@ -268,16 +361,26 @@ export async function boardSlice(
   const included = overrides.filter(
     (row) => row.mode === "include" && row.subjectType === "task",
   );
+  const readable = await readableGroupIds(db, ownerId);
   const present = new Set(tasks.map((task) => String(task.id)));
   for (const row of included) {
     if (present.has(row.subjectId)) continue;
     const task = await db.get(row.subjectId as Id<"tasks">);
-    if (!task || task.deletedAt !== undefined || task.done || task.outcome !== undefined) {
+    if (
+      !task ||
+      task.deletedAt !== undefined ||
+      task.done ||
+      task.outcome !== undefined ||
+      !readable.has(String(task.groupId)) ||
+      (selectedGroup && String(task.groupId) !== String(selectedGroup))
+    ) {
       continue;
     }
     tasks.push(taskView(task, now));
     present.add(row.subjectId);
   }
+
+  unseen[input.tab] = unseenCount(tasks);
 
   const boardTasks = tasks
     .map((task) => ({
@@ -286,23 +389,22 @@ export async function boardSlice(
     }))
     .sort((a, b) => Number(b.pinned) - Number(a.pinned));
 
+  const inGroup = <T extends { groupId: Id<"spaces"> }>(rows: T[]): T[] =>
+    selectedGroup
+      ? rows.filter((row) => row.groupId === selectedGroup)
+      : rows;
+
   const [progressionDocs, ownerTasks, resources] = await Promise.all([
-    db
-      .query("progressions")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect(),
-    db
-      .query("tasks")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect(),
+    readableDocs(db, ownerId, "progressions"),
+    readableDocs(db, ownerId, "tasks"),
     listResources(db, ownerId),
   ]);
   const doneTaskIds = new Set(
-    ownerTasks
+    inGroup(ownerTasks)
       .filter((task) => task.done && task.deletedAt === undefined)
       .map((task) => String(task._id)),
   );
-  const progressions: ProgressionView[] = progressionDocs
+  const progressions: ProgressionView[] = inGroup(progressionDocs)
     .filter((row) => row.deletedAt === undefined)
     .map((row) => {
       let current = row.current;
@@ -327,25 +429,35 @@ export async function boardSlice(
 
   const [quests, alertDocs, questionDocs] = await Promise.all([
     questViews(db, ownerId),
-    db
-      .query("alerts")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect(),
-    db
-      .query("questions")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect(),
+    listAlertHistory(db, ownerId),
+    readableDocs(db, ownerId, "questions"),
   ]);
 
-  const alerts: AlertView[] = alertDocs
-    .filter((row) => row.deletedAt === undefined && row.seenAt === undefined)
-    .map((row) => ({
-      id: String(row._id),
-      title: row.title,
-      body: row.body ?? "",
-    }));
+  const viewer = await db.get(ownerId);
+  const activityOnTasks = viewer?.activityOnTasks ?? "others";
+  const boardAlerts = inGroup(alertDocs).filter((row) => {
+    if (row.deletedAt !== undefined) return false;
+    if (row.kind === "activity") {
+      if (activityOnTasks === "none") return false;
+      if (activityOnTasks === "others") return row.authorOrigin !== "self";
+      return true;
+    }
+    // Notes keep the existing NEW contract: unseen, authored by an agent/member.
+    return (
+      row.seenAt === undefined &&
+      (row.authorOrigin === "agent" || row.authorOrigin === "member")
+    );
+  });
+  const alerts: AlertView[] = boardAlerts.map((row) => ({
+    id: String(row._id),
+    title: row.title,
+    body: row.body ?? "",
+    kind: row.kind,
+    authorOrigin: row.authorOrigin,
+    seenAt: row.seenAt,
+  }));
 
-  const questions: QuestionView[] = questionDocs
+  const questions: QuestionView[] = inGroup(questionDocs)
     .filter((row) => row.deletedAt === undefined && row.answeredAt === undefined)
     .map((row) => ({
       id: String(row._id),
@@ -360,8 +472,10 @@ export async function boardSlice(
     rail,
     activeViewId: String(activeView._id),
     tab: input.tab,
+    activeEventId: activeEvent ? String(activeEvent._id) : null,
+    unseen,
     tasks: boardTasks,
-    resources,
+    resources: inGroup(resources),
     progressions,
     quests,
     alerts,

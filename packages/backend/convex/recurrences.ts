@@ -24,6 +24,7 @@ export const create = mutation({
       v.object({ resourceId: v.id("resources"), delta: v.number() }),
     ),
     anchorOn: v.optional(v.number()),
+    groupId: v.optional(v.id("spaces")),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);

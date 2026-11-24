@@ -65,6 +65,16 @@ const KNOWN_TOOL_ERRORS = [
   "Invalid gate",
   "Invalid quest status",
   "Recurrence not found",
+  "Default group not found",
+  "Group not found",
+  "Group write denied",
+  "Invite permission required",
+  "Invalid email",
+  "Invite not found",
+  "Invite already answered",
+  "Name is required",
+  "Invalid cadence",
+  "Invalid anchorOn",
 ] as const;
 
 function misconfigured(message: string): Response {
@@ -90,6 +100,71 @@ function knownError(error: unknown, fallback: string): string {
     if (message.includes(known)) return known;
   }
   return fallback;
+}
+
+const routingTriggerSchema = z.union([
+  z.object({
+    type: z.literal("cron"),
+    cadence: z.enum(["daily", "weekly", "monthly"]),
+    timezone: z.string(),
+    anchorOn: z.number(),
+  }),
+  z.object({
+    type: z.literal("state"),
+    subjectType: z.enum(["task", "resource", "questStep"]),
+    event: z.enum(["completed", "reopened", "deleted", "low"]),
+  }),
+]);
+
+const routingExecutionSchema = z.union([
+  z.object({
+    type: z.literal("createTask"),
+    title: z.string(),
+    notes: z.string().optional(),
+    plannedOn: z.number().optional(),
+  }),
+  z.object({
+    type: z.literal("logProgress"),
+    progressionId: z.string(),
+    amount: z.number(),
+  }),
+  z.object({
+    type: z.literal("createMessage"),
+    title: z.string(),
+    body: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal("resourceDelta"),
+    resourceId: z.string(),
+    delta: z.number(),
+  }),
+  z.object({
+    type: z.literal("addQuestStep"),
+    questId: z.string(),
+    title: z.string(),
+    gate: z.string().optional(),
+  }),
+]);
+
+type RoutingExecution = z.infer<typeof routingExecutionSchema>;
+
+function routingExecutionBody(execution: RoutingExecution) {
+  if (execution.type === "logProgress") {
+    return {
+      ...execution,
+      progressionId: execution.progressionId as Id<"progressions">,
+    };
+  }
+  if (execution.type === "resourceDelta") {
+    return {
+      ...execution,
+      resourceId: execution.resourceId as Id<"resources">,
+    };
+  }
+  if (execution.type === "addQuestStep") {
+    return { ...execution, questId: execution.questId as Id<"quests"> };
+  }
+  return execution;
 }
 
 function convexClient(): ConvexHttpClient {
@@ -397,9 +472,11 @@ function mcpHandler(resourceUrl: string) {
           description:
             "Returns the Home rail, the current tab's tasks, progressions, quests, alerts and questions for a timezone.",
           inputSchema: z.object({
-            tab: z.enum(["tasks", "daily", "weekly", "monthly"]),
+            tab: z.enum(["tasks", "daily", "weekly", "monthly", "events"]),
             viewId: z.string().optional(),
             timezone: z.string(),
+            groupId: z.string().optional(),
+            eventId: z.string().optional(),
           }),
         },
         async (args, ctx) => {
@@ -412,6 +489,8 @@ function mcpHandler(resourceUrl: string) {
                 tab: args.tab,
                 viewId: args.viewId as Id<"views"> | undefined,
                 timezone: args.timezone,
+                groupId: args.groupId as Id<"spaces"> | undefined,
+                eventId: args.eventId as Id<"events"> | undefined,
               }),
             );
           } catch (error) {
@@ -878,11 +957,124 @@ function mcpHandler(resourceUrl: string) {
           }
         },
       );
+
+      server.registerTool(
+        "create_group",
+        {
+          title: "Create group",
+          description:
+            "Creates a group for the signed-in user. The default Personal group already exists and stays the fallback for new items.",
+          inputSchema: z.object({
+            name: z.string(),
+            icon: z.string().optional(),
+            color: z.string().optional(),
+          }),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.createGroupTool, {
+                ...signed.proof,
+                ...args,
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not create group"));
+          }
+        },
+      );
+
+      server.registerTool(
+        "invite",
+        {
+          title: "Invite to group",
+          description:
+            "Sends an invite to an email for a group. Only an owner, admin, or member with canInvite may invite.",
+          inputSchema: z.object({
+            groupId: z.string().optional(),
+            email: z.string(),
+            origin: z.enum(["self", "agent", "member"]).optional(),
+          }),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.inviteTool, {
+                ...signed.proof,
+                groupId: args.groupId as Id<"spaces"> | undefined,
+                email: args.email,
+                origin: args.origin,
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not invite"));
+          }
+        },
+      );
+
+      server.registerTool(
+        "create_routing",
+        {
+          title: "Create routing",
+          description:
+            "Creates a cron or state-change routing with a typed execution. Cron keys are idempotent per period; state keys use the caller's revision.",
+          inputSchema: z.object({
+            name: z.string(),
+            groupId: z.string().optional(),
+            trigger: routingTriggerSchema,
+            execution: routingExecutionSchema,
+          }),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.createRoutingTool, {
+                ...signed.proof,
+                name: args.name,
+                groupId: args.groupId as Id<"spaces"> | undefined,
+                trigger: args.trigger,
+                execution: routingExecutionBody(args.execution),
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not create routing"));
+          }
+        },
+      );
+
+      server.registerTool(
+        "list_routings",
+        {
+          title: "List routings",
+          description: "Lists the signed-in user's live cron and state routings.",
+          inputSchema: z.object({}),
+        },
+        async (_args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(
+                api.mcpBoard.listRoutingsTool,
+                signed.proof,
+              ),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not list routings"));
+          }
+        },
+      );
     },
     {
       serverInfo: { name: "manager", version: "0.1.0" },
       instructions:
-        "Manager user MCP. Sign in once with Clerk OAuth; the client refreshes the access token. whoami reads users.role in Convex. create_task, update_task, list_tasks, complete_task, reopen_task, and delete_task use the tasks table; a task may render as check, row or card. create_recurrence is real: choose replace for dishes (one open occurrence, older ones superseded) or stack for a journal (every period stays open), with daily, weekly, biweekly (14 days) or monthly cadence; behavior is required. Resources track stock: create_resource and list_resources read it, set_task_resource_effect attaches an effect to a task, and completing that task applies the delta once while reopening reverses it. Low stock becomes an alert, never a task. Views, attachments, pins, include/exclude, progressions, quests, questions and alerts are available through get_slice and the matching create tools. Never copy a planned day into a deadline, never copy a deadline into a planned day, and do not create a task for a summary: write an alert instead.",
+        "Manager user MCP. Sign in once with Clerk OAuth; the client refreshes the access token. whoami reads users.role in Convex. create_task, update_task, list_tasks, complete_task, reopen_task, and delete_task use the tasks table; a task may render as check, row or card. create_recurrence is real: choose replace for dishes (one open occurrence, older ones superseded) or stack for a journal (every period stays open), with daily, weekly, biweekly (14 days) or monthly cadence; behavior is required. Resources track stock: create_resource and list_resources read it, set_task_resource_effect attaches an effect to a task, and completing that task applies the delta once while reopening reverses it. Low stock becomes an alert, never a task. Views, attachments, pins, include/exclude, progressions, quests, questions and alerts are available through get_slice and the matching create tools. Groups and invites use create_group and invite; automations use create_routing and list_routings. Never copy a planned day into a deadline, never copy a deadline into a planned day, and do not create a task for a summary: write an alert instead.",
       maxSubscriptions: 0,
     },
   );

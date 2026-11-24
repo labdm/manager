@@ -8,6 +8,13 @@ import {
   type ResourceEffect,
 } from "./resourceService";
 import {
+  assertCanWriteGroup,
+  readableDocs,
+  readableGroupIds,
+  resolveGroupId,
+} from "./groupService";
+import { fireStateRoutings, stateRevision } from "./routingService";
+import {
   assertEpoch,
   assertOrigin,
   assertPlannedTime,
@@ -25,6 +32,7 @@ export type TaskView = {
   done: boolean;
   dueAt: number | null;
   ownerId: Id<"users">;
+  groupId: Id<"spaces">;
   deletedAt?: number;
   completedAt?: number;
   notes?: string;
@@ -77,6 +85,7 @@ export function taskView(task: Doc<"tasks">, now = Date.now()): TaskView {
     done: task.done,
     dueAt: task.dueAt ?? null,
     ownerId: task.ownerId,
+    groupId: task.groupId,
     deletedAt: task.deletedAt,
     completedAt: task.completedAt,
     notes: task.notes,
@@ -109,10 +118,7 @@ export async function listTasks(
   ownerId: Id<"users">,
   now = Date.now(),
 ): Promise<TaskView[]> {
-  const tasks = await db
-    .query("tasks")
-    .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-    .collect();
+  const tasks = await readableDocs(db, ownerId, "tasks");
 
   // Superseded and missed rows stay in storage, but not on the open board.
   const active = tasks.filter(
@@ -125,6 +131,28 @@ export async function listTasks(
   });
 
   return active.map((task) => taskView(task, now));
+}
+
+async function liveTaskForRead(
+  db: DatabaseReader,
+  userId: Id<"users">,
+  taskId: Id<"tasks">,
+): Promise<Doc<"tasks">> {
+  const task = await db.get(taskId);
+  if (!task || task.deletedAt !== undefined) throw new Error("Task not found");
+  const groups = await readableGroupIds(db, userId);
+  if (!groups.has(String(task.groupId))) throw new Error("Task not found");
+  return task;
+}
+
+async function liveTaskForWrite(
+  db: DatabaseWriter,
+  userId: Id<"users">,
+  taskId: Id<"tasks">,
+): Promise<Doc<"tasks">> {
+  const task = await liveTaskForRead(db, userId, taskId);
+  await assertCanWriteGroup(db, userId, task.groupId);
+  return task;
 }
 
 export type CreateTaskInput = {
@@ -140,6 +168,7 @@ export type CreateTaskInput = {
   priorityRank?: number;
   overduePolicy?: string;
   origin?: "self" | "agent" | "member";
+  groupId?: Id<"spaces">;
   presentationHint?: string;
   presentation?: string;
   resourceEffect?: ResourceEffect;
@@ -172,6 +201,8 @@ export async function createTask(
   const origin = input.origin ?? "self";
   const seenAt = origin === "self" ? Date.now() : undefined;
   const presentation = normalizePresentation(input.presentation);
+  const groupId = await resolveGroupId(db, ownerId, input.groupId);
+  await assertCanWriteGroup(db, ownerId, groupId);
 
   const id = await db.insert("tasks", {
     title,
@@ -189,6 +220,7 @@ export async function createTask(
     origin,
     seenAt,
     ownerId,
+    groupId,
     presentationHint: input.presentationHint,
     presentation,
     recurrenceId: input.recurrenceId,
@@ -225,6 +257,7 @@ export type UpdateTaskInput = {
   overduePolicy?: string;
   presentation?: string;
   done?: boolean;
+  groupId?: Id<"spaces">;
 };
 
 /** Partially updates a task owned by the specified user. */
@@ -235,11 +268,19 @@ export async function updateTask(
   input: UpdateTaskInput,
 ): Promise<TaskView> {
   const task = await db.get(taskId);
-  if (!task || task.ownerId !== ownerId || task.deletedAt !== undefined) {
+  if (!task || task.deletedAt !== undefined) {
     throw new Error("Task not found");
+  }
+  const groups = await readableGroupIds(db, ownerId);
+  if (!groups.has(String(task.groupId))) throw new Error("Task not found");
+  const targetGroupId = await resolveGroupId(db, ownerId, input.groupId);
+  await assertCanWriteGroup(db, ownerId, task.groupId);
+  if (targetGroupId !== task.groupId) {
+    await assertCanWriteGroup(db, ownerId, targetGroupId);
   }
 
   const patch: Partial<Doc<"tasks">> = {};
+  if (input.groupId !== undefined) patch.groupId = targetGroupId;
 
   if (input.title !== undefined) {
     patch.title = normalizeTitle(input.title);
@@ -312,6 +353,15 @@ export async function updateTask(
   if (input.done === true && !wasDone) {
     await unlockNextQuestStep(db, task._id, ownerId);
   }
+  if (input.done !== undefined && input.done !== wasDone) {
+    const event = input.done ? "completed" : "reopened";
+    await fireStateRoutings(db, task.groupId, {
+      subjectType: "task",
+      subjectId: String(task._id),
+      event,
+      revision: stateRevision(`${String(task._id)}:${event}`),
+    });
+  }
   const updated = await db.get(taskId);
   if (!updated) throw new Error("Task not found");
   return taskView(updated);
@@ -324,10 +374,7 @@ export async function setTaskDone(
   taskId: Id<"tasks">,
   done: boolean,
 ): Promise<TaskView> {
-  const task = await db.get(taskId);
-  if (!task || task.ownerId !== ownerId || task.deletedAt !== undefined) {
-    throw new Error("Task not found");
-  }
+  const task = await liveTaskForWrite(db, ownerId, taskId);
 
   let completedAt = task.completedAt;
   if (done && !task.done) {
@@ -340,6 +387,15 @@ export async function setTaskDone(
   await db.patch(task._id, { done, completedAt });
   await applyTaskResourceEffects(db, ownerId, taskId, done);
   if (done && !wasDone) await unlockNextQuestStep(db, task._id, ownerId);
+  if (done !== wasDone) {
+    const event = done ? "completed" : "reopened";
+    await fireStateRoutings(db, task.groupId, {
+      subjectType: "task",
+      subjectId: String(task._id),
+      event,
+      revision: stateRevision(`${String(task._id)}:${event}`),
+    });
+  }
   return taskView({ ...task, done, completedAt });
 }
 
@@ -349,10 +405,7 @@ export async function toggleTask(
   ownerId: Id<"users">,
   taskId: Id<"tasks">,
 ): Promise<TaskView> {
-  const task = await db.get(taskId);
-  if (!task || task.ownerId !== ownerId || task.deletedAt !== undefined) {
-    throw new Error("Task not found");
-  }
+  const task = await liveTaskForWrite(db, ownerId, taskId);
 
   const wasDone = task.done;
   const done = !wasDone;
@@ -361,6 +414,13 @@ export async function toggleTask(
   await db.patch(task._id, { done, completedAt });
   await applyTaskResourceEffects(db, ownerId, taskId, done);
   if (done && !wasDone) await unlockNextQuestStep(db, task._id, ownerId);
+  const event = done ? "completed" : "reopened";
+  await fireStateRoutings(db, task.groupId, {
+    subjectType: "task",
+    subjectId: String(task._id),
+    event,
+    revision: stateRevision(`${String(task._id)}:${event}`),
+  });
   return taskView({ ...task, done, completedAt });
 }
 
@@ -370,10 +430,7 @@ export async function markTaskSeen(
   ownerId: Id<"users">,
   taskId: Id<"tasks">,
 ): Promise<TaskView> {
-  const task = await db.get(taskId);
-  if (!task || task.ownerId !== ownerId || task.deletedAt !== undefined) {
-    throw new Error("Task not found");
-  }
+  const task = await liveTaskForRead(db, ownerId, taskId);
 
   if (task.seenAt === undefined) {
     const seenAt = Date.now();
@@ -390,13 +447,16 @@ export async function deleteTask(
   ownerId: Id<"users">,
   taskId: Id<"tasks">,
 ): Promise<{ success: true; id: Id<"tasks"> }> {
-  const task = await db.get(taskId);
-  if (!task || task.ownerId !== ownerId || task.deletedAt !== undefined) {
-    throw new Error("Task not found");
-  }
+  const task = await liveTaskForWrite(db, ownerId, taskId);
 
   const deletedAt = Date.now();
   await reverseAppliedTaskEffects(db, ownerId, taskId, deletedAt);
   await db.patch(task._id, { deletedAt });
+  await fireStateRoutings(db, task.groupId, {
+    subjectType: "task",
+    subjectId: String(task._id),
+    event: "deleted",
+    revision: stateRevision(`${String(task._id)}:deleted`),
+  });
   return { success: true, id: taskId };
 }

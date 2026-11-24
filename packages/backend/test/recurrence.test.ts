@@ -7,7 +7,7 @@ import {
   reconcileRecurrence,
 } from "../convex/lib/recurrenceService";
 import { createTask, deleteTask, listTasks } from "../convex/lib/taskService";
-import { fakeDb } from "./fakeDb";
+import { fakeDb, seedUser } from "./fakeDb";
 
 const OWNER = "user_1" as Id<"users">;
 const TZ = "UTC";
@@ -28,6 +28,7 @@ function openTasks(db: ReturnType<typeof fakeDb>): Doc<"tasks">[] {
 describe("recurrence", () => {
   it("dishes: replace daily leaves one open row and supersedes the older one", async () => {
     const db = fakeDb();
+    await seedUser(db, OWNER);
     const writer = db.asWriter();
     const recurrence = await createRecurrence(
       writer,
@@ -64,6 +65,7 @@ describe("recurrence", () => {
 
   it("journal: stack daily keeps all three periods open", async () => {
     const db = fakeDb();
+    await seedUser(db, OWNER);
     const writer = db.asWriter();
     const recurrence = await createRecurrence(
       writer,
@@ -94,6 +96,7 @@ describe("recurrence", () => {
 
   it("a second reconcile mints nothing and changes nothing", async () => {
     const db = fakeDb();
+    await seedUser(db, OWNER);
     const writer = db.asWriter();
     const recurrence = await createRecurrence(
       writer,
@@ -118,6 +121,7 @@ describe("recurrence", () => {
 
   it("weekly periods start on Monday in the series timezone", async () => {
     const db = fakeDb();
+    await seedUser(db, OWNER);
     const writer = db.asWriter();
     const midweek = civilDayStart(Date.UTC(2026, 0, 8, 9, 0), TZ);
     const recurrence = await createRecurrence(
@@ -142,6 +146,7 @@ describe("recurrence", () => {
 
   it("behavior is required", async () => {
     const db = fakeDb();
+    await seedUser(db, OWNER);
     await expect(
       createRecurrence(db.asWriter(), OWNER, {
         behavior: "" as "replace",
@@ -157,6 +162,7 @@ describe("recurrence", () => {
 describe("task invariants with the new tables", () => {
   it("a dueAt-only create leaves deadlineAt unset", async () => {
     const db = fakeDb();
+    await seedUser(db, OWNER);
     const created = await createTask(db.asWriter(), OWNER, {
       title: "Water the plants",
       dueAt: TWO_DAYS_AGO,
@@ -169,6 +175,7 @@ describe("task invariants with the new tables", () => {
 
   it("soft delete keeps the row", async () => {
     const db = fakeDb();
+    await seedUser(db, OWNER);
     const writer = db.asWriter();
     const created = await createTask(writer, OWNER, { title: "Old" });
     await deleteTask(writer, OWNER, created.id);
@@ -180,6 +187,7 @@ describe("task invariants with the new tables", () => {
 
   it("retire becomes missed, not trash; escalate bumps once", async () => {
     const db = fakeDb();
+    await seedUser(db, OWNER);
     const writer = db.asWriter();
     const past = NOW - 86_400_000;
     const retired = await createTask(writer, OWNER, {

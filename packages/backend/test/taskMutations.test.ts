@@ -20,6 +20,7 @@ type Task = {
   done: boolean;
   dueAt?: number;
   ownerId: Id<"users">;
+  groupId: Id<"spaces">;
   deletedAt?: number;
   completedAt?: number;
   notes?: string;
@@ -36,49 +37,121 @@ type Task = {
   origin?: string;
 };
 
+type Row = { _id: string; _creationTime: number; [key: string]: unknown };
+
 const OWNER = "user_own" as Id<"users">;
 const OTHER = "user_other" as Id<"users">;
+const OWNER_GROUP = "spaces/owner" as Id<"spaces">;
+const OTHER_GROUP = "spaces/other" as Id<"spaces">;
 
+/** A minimal Convex fake with users and their default groups already in place. */
 function fakeDb(tasks: Task[] = []) {
   let counter = 1;
-  const rows = new Map(tasks.map((task) => [task._id, { ...task }]));
+  const taskRows = new Map<string, Task>(
+    tasks.map((row) => [String(row._id), { ...row }]),
+  );
+  const rowsByTable = new Map<string, Map<string, Row>>([
+    ["tasks", taskRows as Map<string, Row>],
+    ["users", new Map<string, Row>()],
+    ["spaces", new Map<string, Row>()],
+    ["spaceMembers", new Map<string, Row>()],
+  ]);
+
+  for (const [id, groupId] of [
+    [OWNER, OWNER_GROUP],
+    [OTHER, OTHER_GROUP],
+  ] as const) {
+    rowsByTable.get("users")!.set(String(id), {
+      _id: String(id),
+      _creationTime: 1,
+      tokenIdentifier: `test|${String(id)}`,
+      role: "user",
+      activityOnTasks: "others",
+    });
+    rowsByTable.get("spaces")!.set(String(groupId), {
+      _id: String(groupId),
+      _creationTime: 1,
+      ownerId: id,
+      name: "Personal",
+      isDefault: true,
+      createdAt: 1,
+    });
+    rowsByTable.get("spaceMembers")!.set(`member-${String(id)}`, {
+      _id: `member-${String(id)}`,
+      _creationTime: 1,
+      spaceId: groupId,
+      userId: id,
+      role: "owner",
+      canInvite: true,
+      createdAt: 1,
+    });
+  }
+
+  const tableRows = (table: string): Map<string, Row> => {
+    let map = rowsByTable.get(table);
+    if (!map) {
+      map = new Map<string, Row>();
+      rowsByTable.set(table, map);
+    }
+    return map;
+  };
+  const findRow = (id: string): { table: string; row: Row } | undefined => {
+    for (const [table, map] of rowsByTable) {
+      const row = map.get(id);
+      if (row) return { table, row };
+    }
+    return undefined;
+  };
+
   const db = {
-    get: async (id: Id<"tasks">) => rows.get(id) ?? null,
-    patch: async (id: Id<"tasks">, patch: Partial<Task>) => {
-      const task = rows.get(id);
-      if (!task) throw new Error("missing task");
-      rows.set(id, { ...task, ...patch });
+    get: async (id: string) => findRow(String(id))?.row ?? null,
+    patch: async (id: string, patch: Record<string, unknown>) => {
+      const found = findRow(String(id));
+      if (!found) throw new Error("missing row");
+      const next = { ...found.row };
+      for (const [key, value] of Object.entries(patch)) {
+        if (value === undefined) delete next[key];
+        else next[key] = value;
+      }
+      if (found) rowsByTable.get(found.table)!.set(String(id), next);
     },
-    delete: async (id: Id<"tasks">) => {
-      rows.delete(id);
+    delete: async (id: string) => {
+      const found = findRow(String(id));
+      if (found) rowsByTable.get(found.table)!.delete(String(id));
     },
-    insert: async (_table: string, doc: Omit<Task, "_id" | "_creationTime">) => {
-      const id = `tasks/gen_${counter++}` as Id<"tasks">;
-      const full: Task = { ...doc, _id: id, _creationTime: counter };
-      rows.set(id, full);
+    insert: async (table: string, doc: Record<string, unknown>) => {
+      counter += 1;
+      const id = `${table}/gen_${counter}`;
+      tableRows(table).set(id, { ...doc, _id: id, _creationTime: counter });
       return id;
     },
-    query: (_table: string) => {
-      let filterOwner: Id<"users"> | undefined;
-      return {
-        withIndex: (_indexName: string, predicate: (q: { eq: (field: string, val: unknown) => void }) => void) => {
-          predicate({
-            eq: (field: string, val: unknown) => {
-              if (field === "ownerId") filterOwner = val as Id<"users">;
-            },
-          });
-          return {
-            collect: async () => {
-              const all = Array.from(rows.values());
-              if (filterOwner) return all.filter((r) => r.ownerId === filterOwner);
-              return all;
-            },
-          };
+    query: (table: string) => {
+      const filters: Record<string, unknown> = {};
+      const rows = tableRows(table);
+      type Collector = { eq: (field: string, val: unknown) => Collector };
+      const collector: Collector = {
+        eq(field, val) {
+          filters[field] = val;
+          return collector;
         },
       };
+      const stub = {
+        withIndex: (
+          _indexName: string,
+          predicate: (q: Collector) => void,
+        ) => {
+          predicate(collector);
+          return stub;
+        },
+        collect: async () =>
+          Array.from(rows.values()).filter((row) =>
+            Object.entries(filters).every(([field, value]) => row[field] === value),
+          ),
+      };
+      return stub;
     },
   };
-  return { db: db as unknown as DatabaseWriter, rows };
+  return { db: db as unknown as DatabaseWriter, rows: taskRows };
 }
 
 function task(id: string, ownerId: Id<"users"> = OWNER, done = false, extra: Partial<Task> = {}): Task {
@@ -88,6 +161,7 @@ function task(id: string, ownerId: Id<"users"> = OWNER, done = false, extra: Par
     title: "Buy milk",
     done,
     ownerId,
+    groupId: ownerId === OWNER ? OWNER_GROUP : OTHER_GROUP,
     ...extra,
   };
 }

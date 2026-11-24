@@ -10,4 +10,7 @@ crons.interval(
   internal.recurrences.reconcileAll,
 );
 
+// Routings share the same tick. Each cron routing is idempotent per period.
+crons.interval("run due routings", { minutes: 5 }, internal.routings.runDue);
+
 export default crons;

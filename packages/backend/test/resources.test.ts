@@ -15,7 +15,7 @@ import {
   setTaskDone,
   updateTask,
 } from "../convex/lib/taskService";
-import { fakeDb } from "./fakeDb";
+import { fakeDb, seedUser } from "./fakeDb";
 
 const OWNER = "user_1" as Id<"users">;
 const TZ = "UTC";
@@ -32,6 +32,7 @@ function alertRows(db: ReturnType<typeof fakeDb>): Doc<"alerts">[] {
 describe("task resource effects", () => {
   it("completion applies -1 once and reopening puts stock back", async () => {
     const db = fakeDb();
+    await seedUser(db, OWNER);
     const writer = db.asWriter();
     const resource = await createResource(
       writer,
@@ -63,6 +64,7 @@ describe("task resource effects", () => {
 
   it("low stock raises one unread resource alert and no task", async () => {
     const db = fakeDb();
+    await seedUser(db, OWNER);
     const writer = db.asWriter();
     const resource = await createResource(
       writer,
@@ -96,6 +98,7 @@ describe("task resource effects", () => {
 describe("biweekly cadence", () => {
   it("a stack series mints on the 14th day from anchorOn", async () => {
     const db = fakeDb();
+    await seedUser(db, OWNER);
     const writer = db.asWriter();
     const recurrence = await createRecurrence(
       writer,
@@ -130,6 +133,7 @@ describe("biweekly cadence", () => {
 describe("presentation", () => {
   it("round-trips through create and update without clearing on a blank string", async () => {
     const db = fakeDb();
+    await seedUser(db, OWNER);
     const writer = db.asWriter();
     const card = await createTask(writer, OWNER, {
       title: "Card task",
@@ -150,6 +154,7 @@ describe("presentation", () => {
 
   it("copies presentation and one resource effect from a recurrence template", async () => {
     const db = fakeDb();
+    await seedUser(db, OWNER);
     const writer = db.asWriter();
     const resource = await createResource(
       writer,
