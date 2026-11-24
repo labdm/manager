@@ -75,6 +75,7 @@ export interface FeedRow {
   inviteId?: string;
   progressionId?: string;
   done?: boolean;
+  origin?: string | null;
 }
 
 export interface GroupItem {

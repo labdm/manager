@@ -807,25 +807,6 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
           </div>
         </header>
 
-        <nav className="destination-row flex gap-1 overflow-x-auto border-b px-3 py-2 lg:hidden" aria-label="Destinations">
-          {DESTINATIONS.map((item) => {
-            const Icon = DESTINATION_ICONS[item.id];
-            return (
-              <Button
-                key={item.id}
-                type="button"
-                size="sm"
-                variant={destination === item.id ? "secondary" : "ghost"}
-                aria-current={destination === item.id ? "page" : undefined}
-                onClick={() => chooseDestination(item.id)}
-              >
-                <Icon aria-hidden="true" />
-                {item.label}
-              </Button>
-            );
-          })}
-        </nav>
-
         {destination === "tasks" ? (
           <div className="chip-row border-b px-3 py-2">
             <Tabs value={chip} onValueChange={(value) => chooseChip(value as Chip)}>

@@ -30,6 +30,8 @@ import {
   createTaskRef,
 } from "../src/homeApi";
 import type { BoardSlice } from "../src/homeTypes";
+import { activityVisible } from "../src/shellFacts";
+import type { FeedRow } from "../src/shellTypes";
 import { Shell } from "../src/Shell";
 
 const taskId = "task-1" as Id<"tasks">;
@@ -72,6 +74,24 @@ beforeEach(() => {
 });
 
 afterEach(() => cleanup());
+
+describe("activity on Tasks", () => {
+  const message = (origin: string): FeedRow => ({
+    id: origin,
+    type: "message",
+    title: origin,
+    origin,
+  });
+
+  it("keeps other people's messages and hides your own by default", () => {
+    expect(activityVisible(message("member"), "others")).toBe(true);
+    expect(activityVisible(message("agent"), "others")).toBe(true);
+    expect(activityVisible(message("self"), "others")).toBe(false);
+    expect(activityVisible({ id: "task", type: "task", title: "Mine", origin: "self" }, "others")).toBe(
+      true
+    );
+  });
+});
 
 describe("signed-in shell", () => {
   it("shows Tasks, no selection, detail after opening a row, and clears on a chip change", async () => {

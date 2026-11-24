@@ -97,6 +97,7 @@ export function alertToRow(alert: AlertItem): FeedRow {
     action: "Mark as read",
     groupMark: Boolean(alert.groupId),
     alertId: alert.id,
+    origin: alert.origin ?? null,
   };
 }
 
@@ -152,12 +153,12 @@ export function progressionToRow(progression: {
   };
 }
 
-/** Activity rows follow the Tasks-page setting; your own tasks never do. */
+/** Activity rows follow the Tasks-page setting. Your own tasks always stay. */
 export function activityVisible(row: FeedRow, activity: ActivityValue): boolean {
   if (row.type !== "message") return true;
   if (activity === "none") return false;
   if (activity === "all") return true;
-  return row.isNew === true;
+  return row.origin !== "self";
 }
 
 export function chipTab(chip: Chip): "tasks" | "daily" | "weekly" | "monthly" | "events" {
