@@ -1,5 +1,16 @@
 export const TITLE_MAX = 200;
 
+export type Presentation = "check" | "row" | "card";
+
+/** Blank presentation means "no override"; absent tasks render as check rows. */
+export function normalizePresentation(value: string | undefined): Presentation | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return undefined;
+  if (trimmed === "check" || trimmed === "row" || trimmed === "card") return trimmed;
+  throw new Error("Invalid presentation");
+}
+
 export function normalizeTitle(input: string): string {
   const title = input.trim();
   if (!title || title.length > TITLE_MAX) throw new Error("Title is required");

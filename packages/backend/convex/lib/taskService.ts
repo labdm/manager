@@ -2,11 +2,18 @@ import type { DatabaseReader, DatabaseWriter } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { unlockNextQuestStep } from "./questService";
 import {
+  applyTaskResourceEffects,
+  reverseAppliedTaskEffects,
+  setTaskResourceEffect,
+  type ResourceEffect,
+} from "./resourceService";
+import {
   assertEpoch,
   assertOrigin,
   assertPlannedTime,
   isSeedPriority,
   normalizeOverduePolicy,
+  normalizePresentation,
   normalizeTitle,
   resolvePlannedDates,
   resolvePriorityAndRank,
@@ -37,6 +44,8 @@ export type TaskView = {
   recurrenceId?: Id<"recurrences">;
   periodStart?: number;
   presentationHint?: string;
+  presentation: "check" | "row" | "card";
+  resourceEffect: ResourceEffect | null;
   open?: boolean;
   escalatedAt?: number;
 };
@@ -87,6 +96,8 @@ export function taskView(task: Doc<"tasks">, now = Date.now()): TaskView {
     recurrenceId: task.recurrenceId,
     periodStart: task.periodStart,
     presentationHint: task.presentationHint,
+    presentation: normalizePresentation(task.presentation) ?? "check",
+    resourceEffect: task.resourceEffect ?? null,
     open: task.open,
     escalatedAt: task.escalatedAt,
   };
@@ -130,6 +141,8 @@ export type CreateTaskInput = {
   overduePolicy?: string;
   origin?: "self" | "agent" | "member";
   presentationHint?: string;
+  presentation?: string;
+  resourceEffect?: ResourceEffect;
   recurrenceId?: Id<"recurrences">;
   periodStart?: number;
 };
@@ -158,6 +171,7 @@ export async function createTask(
 
   const origin = input.origin ?? "self";
   const seenAt = origin === "self" ? Date.now() : undefined;
+  const presentation = normalizePresentation(input.presentation);
 
   const id = await db.insert("tasks", {
     title,
@@ -176,10 +190,21 @@ export async function createTask(
     seenAt,
     ownerId,
     presentationHint: input.presentationHint,
+    presentation,
     recurrenceId: input.recurrenceId,
     periodStart: input.periodStart,
     open: true,
   });
+
+  if (input.resourceEffect !== undefined) {
+    await setTaskResourceEffect(
+      db,
+      ownerId,
+      id,
+      input.resourceEffect.resourceId,
+      input.resourceEffect.delta,
+    );
+  }
 
   const task = await db.get(id);
   if (!task) throw new Error("Task not found");
@@ -198,6 +223,7 @@ export type UpdateTaskInput = {
   priority?: string;
   priorityRank?: number;
   overduePolicy?: string;
+  presentation?: string;
   done?: boolean;
 };
 
@@ -264,6 +290,11 @@ export async function updateTask(
     patch.overduePolicy = normalizeOverduePolicy(input.overduePolicy);
   }
 
+  if (input.presentation !== undefined) {
+    const presentation = normalizePresentation(input.presentation);
+    if (presentation !== undefined) patch.presentation = presentation;
+  }
+
   if (input.done !== undefined) {
     patch.done = input.done;
     if (input.done && !task.done) {
@@ -275,6 +306,9 @@ export async function updateTask(
 
   const wasDone = task.done;
   await db.patch(task._id, patch);
+  if (input.done !== undefined) {
+    await applyTaskResourceEffects(db, ownerId, taskId, input.done);
+  }
   if (input.done === true && !wasDone) {
     await unlockNextQuestStep(db, task._id, ownerId);
   }
@@ -304,6 +338,7 @@ export async function setTaskDone(
 
   const wasDone = task.done;
   await db.patch(task._id, { done, completedAt });
+  await applyTaskResourceEffects(db, ownerId, taskId, done);
   if (done && !wasDone) await unlockNextQuestStep(db, task._id, ownerId);
   return taskView({ ...task, done, completedAt });
 }
@@ -324,6 +359,7 @@ export async function toggleTask(
   const completedAt = done ? Date.now() : undefined;
 
   await db.patch(task._id, { done, completedAt });
+  await applyTaskResourceEffects(db, ownerId, taskId, done);
   if (done && !wasDone) await unlockNextQuestStep(db, task._id, ownerId);
   return taskView({ ...task, done, completedAt });
 }
@@ -360,6 +396,7 @@ export async function deleteTask(
   }
 
   const deletedAt = Date.now();
+  await reverseAppliedTaskEffects(db, ownerId, taskId, deletedAt);
   await db.patch(task._id, { deletedAt });
   return { success: true, id: taskId };
 }

@@ -4,12 +4,15 @@ import {
   assertTimezone,
   addPeriods,
   isCadence,
+  normalizeCadence,
   periodsBetween,
   periodStartFor,
 } from "./civilDates";
+import type { ResourceEffect } from "./resourceService";
 import {
   assertEpoch,
   assertPlannedTime,
+  normalizePresentation,
   normalizeTitle,
   normalizeOverduePolicy,
   resolvePriorityAndRank,
@@ -27,6 +30,8 @@ export type RecurrenceInput = {
   priority?: string;
   overduePolicy?: string;
   presentationHint?: string;
+  presentation?: string;
+  resourceEffect?: ResourceEffect;
   anchorOn?: number;
 };
 
@@ -44,7 +49,8 @@ export async function createRecurrence(
   now = Date.now(),
 ): Promise<Doc<"recurrences">> {
   const behavior = normalizeBehavior(input.behavior);
-  if (!isCadence(input.cadence)) throw new Error("Unsupported cadence");
+  const cadence = normalizeCadence(input.cadence);
+  if (!isCadence(cadence)) throw new Error("Unsupported cadence");
   assertTimezone(input.timezone);
   const title = normalizeTitle(input.title);
   assertPlannedTime(input.plannedTime);
@@ -54,13 +60,31 @@ export async function createRecurrence(
     undefined,
   );
   const overduePolicy = normalizeOverduePolicy(input.overduePolicy);
-  const anchorOn =
-    input.anchorOn ?? periodStartFor(input.cadence, now, input.timezone);
+  const presentation = normalizePresentation(input.presentation);
+
+  let resourceEffect: ResourceEffect | undefined;
+  if (input.resourceEffect !== undefined) {
+    const { resourceId, delta } = input.resourceEffect;
+    if (!Number.isFinite(delta)) throw new Error("Invalid delta");
+    const resource = await db.get(resourceId);
+    if (
+      !resource ||
+      resource.ownerId !== ownerId ||
+      resource.deletedAt !== undefined
+    ) {
+      throw new Error("Resource not found");
+    }
+    resourceEffect = { resourceId, delta };
+  }
+
+  const initialAnchor =
+    input.anchorOn ?? periodStartFor(cadence, now, input.timezone);
+  const anchorOn = periodStartFor(cadence, initialAnchor, input.timezone, initialAnchor);
 
   const id = await db.insert("recurrences", {
     ownerId,
     behavior,
-    cadence: input.cadence,
+    cadence,
     timezone: input.timezone,
     title,
     notes: input.notes,
@@ -70,7 +94,9 @@ export async function createRecurrence(
     priorityRank,
     overduePolicy,
     presentationHint: input.presentationHint,
-    anchorOn: periodStartFor(input.cadence, anchorOn, input.timezone),
+    presentation,
+    resourceEffect,
+    anchorOn,
     deletedAt: undefined,
     createdAt: now,
   });
@@ -122,6 +148,8 @@ async function mint(
       priorityRank: recurrence.priorityRank,
       overduePolicy: recurrence.overduePolicy,
       presentationHint: recurrence.presentationHint,
+      presentation: recurrence.presentation,
+      resourceEffect: recurrence.resourceEffect,
       recurrenceId: recurrence._id,
       periodStart,
       origin: "self",
@@ -138,11 +166,17 @@ export async function reconcileRecurrence(
   if (recurrence.deletedAt !== undefined) return;
   if (!isCadence(recurrence.cadence)) return;
 
-  const current = periodStartFor(recurrence.cadence, now, recurrence.timezone);
+  const current = periodStartFor(
+    recurrence.cadence,
+    now,
+    recurrence.timezone,
+    recurrence.anchorOn,
+  );
   const anchor = periodStartFor(
     recurrence.cadence,
     recurrence.anchorOn,
     recurrence.timezone,
+    recurrence.anchorOn,
   );
   if (current < anchor) return;
 

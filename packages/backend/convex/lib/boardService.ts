@@ -7,6 +7,7 @@ import {
   periodStartFor,
 } from "./civilDates";
 import { listTasks, taskView, type TaskView } from "./taskService";
+import { listResources, type ResourceView } from "./resourceService";
 import { questViews, type QuestView } from "./questService";
 import { ensureHome, ownerViews, viewSummary } from "./viewService";
 import { reconcileOwner } from "./recurrenceService";
@@ -90,6 +91,7 @@ export type BoardSlice = {
   activeViewId: string;
   tab: SliceTab;
   tasks: Array<TaskView & { pinned: boolean }>;
+  resources: ResourceView[];
   progressions: ProgressionView[];
   quests: QuestView[];
   alerts: AlertView[];
@@ -284,7 +286,7 @@ export async function boardSlice(
     }))
     .sort((a, b) => Number(b.pinned) - Number(a.pinned));
 
-  const [progressionDocs, ownerTasks] = await Promise.all([
+  const [progressionDocs, ownerTasks, resources] = await Promise.all([
     db
       .query("progressions")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
@@ -293,6 +295,7 @@ export async function boardSlice(
       .query("tasks")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
       .collect(),
+    listResources(db, ownerId),
   ]);
   const doneTaskIds = new Set(
     ownerTasks
@@ -358,6 +361,7 @@ export async function boardSlice(
     activeViewId: String(activeView._id),
     tab: input.tab,
     tasks: boardTasks,
+    resources,
     progressions,
     quests,
     alerts,

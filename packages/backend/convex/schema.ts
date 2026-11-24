@@ -22,6 +22,10 @@ export default defineSchema({
     priorityRank: v.optional(v.number()),
     overduePolicy: v.optional(v.string()),
     presentationHint: v.optional(v.string()),
+    presentation: v.optional(v.string()),
+    resourceEffect: v.optional(
+      v.object({ resourceId: v.id("resources"), delta: v.number() }),
+    ),
     anchorOn: v.number(),
     deletedAt: v.optional(v.number()),
     createdAt: v.number(),
@@ -47,6 +51,10 @@ export default defineSchema({
     seenAt: v.optional(v.number()),
     origin: v.optional(v.string()),
     presentationHint: v.optional(v.string()),
+    presentation: v.optional(v.string()),
+    resourceEffect: v.optional(
+      v.object({ resourceId: v.id("resources"), delta: v.number() }),
+    ),
     recurrenceId: v.optional(v.id("recurrences")),
     periodStart: v.optional(v.number()),
     open: v.optional(v.boolean()),
@@ -54,6 +62,30 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_recurrence_period", ["recurrenceId", "periodStart"]),
+
+  resources: defineTable({
+    ownerId: v.id("users"),
+    title: v.string(),
+    unit: v.optional(v.string()),
+    quantity: v.number(),
+    lowAt: v.optional(v.number()),
+    icon: v.optional(v.string()),
+    color: v.optional(v.string()),
+    deletedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index("by_owner", ["ownerId"]),
+
+  taskResourceEffects: defineTable({
+    ownerId: v.id("users"),
+    taskId: v.id("tasks"),
+    resourceId: v.id("resources"),
+    delta: v.number(),
+    applied: v.optional(v.boolean()),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_task", ["ownerId", "taskId"])
+    .index("by_resource", ["ownerId", "resourceId"]),
 
   categories: defineTable({
     ownerId: v.id("users"),
@@ -156,6 +188,7 @@ export default defineSchema({
     title: v.string(),
     body: v.optional(v.string()),
     source: v.string(),
+    resourceId: v.optional(v.id("resources")),
     seenAt: v.optional(v.number()),
     deletedAt: v.optional(v.number()),
   }).index("by_owner", ["ownerId"]),

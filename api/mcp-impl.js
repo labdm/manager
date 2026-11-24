@@ -53377,6 +53377,11 @@ var KNOWN_TOOL_ERRORS = [
   "Invalid priorityRank",
   "Invalid overduePolicy",
   "Invalid origin",
+  "Invalid presentation",
+  "Invalid quantity",
+  "Invalid lowAt",
+  "Invalid delta",
+  "Resource not found",
   "Invalid behavior",
   "Unsupported cadence",
   "Invalid timezone",
@@ -53492,7 +53497,8 @@ function mcpHandler(resourceUrl) {
             remindAt: external_exports.number().optional(),
             priority: external_exports.string().optional(),
             priorityRank: external_exports.number().optional(),
-            overduePolicy: external_exports.string().optional()
+            overduePolicy: external_exports.string().optional(),
+            presentation: external_exports.enum(["check", "row", "card"]).optional()
           })
         },
         async (args, ctx) => {
@@ -53512,7 +53518,8 @@ function mcpHandler(resourceUrl) {
                 remindAt: args.remindAt,
                 priority: args.priority,
                 priorityRank: args.priorityRank,
-                overduePolicy: args.overduePolicy
+                overduePolicy: args.overduePolicy,
+                presentation: args.presentation
               })
             );
           } catch (error62) {
@@ -53538,6 +53545,7 @@ function mcpHandler(resourceUrl) {
             priority: external_exports.string().optional(),
             priorityRank: external_exports.number().optional(),
             overduePolicy: external_exports.string().optional(),
+            presentation: external_exports.enum(["check", "row", "card"]).optional(),
             done: external_exports.boolean().optional()
           })
         },
@@ -53560,6 +53568,7 @@ function mcpHandler(resourceUrl) {
                 priority: args.priority,
                 priorityRank: args.priorityRank,
                 overduePolicy: args.overduePolicy,
+                presentation: args.presentation,
                 done: args.done
               })
             );
@@ -53655,6 +53664,8 @@ function mcpHandler(resourceUrl) {
             location: external_exports.string().optional(),
             priority: external_exports.string().optional(),
             overduePolicy: external_exports.string().optional(),
+            presentation: external_exports.enum(["check", "row", "card"]).optional(),
+            resourceEffect: external_exports.object({ resourceId: external_exports.string(), delta: external_exports.number() }).optional(),
             anchorOn: external_exports.number().optional()
           })
         },
@@ -53665,7 +53676,11 @@ function mcpHandler(resourceUrl) {
             return toolJson(
               await convexClient().mutation(api.mcpBoard.createRecurrenceTool, {
                 ...signed.proof,
-                ...args
+                ...args,
+                resourceEffect: args.resourceEffect ? {
+                  resourceId: args.resourceEffect.resourceId,
+                  delta: args.resourceEffect.delta
+                } : void 0
               })
             );
           } catch (error62) {
@@ -54069,10 +54084,86 @@ function mcpHandler(resourceUrl) {
           }
         }
       );
+      server.registerTool(
+        "create_resource",
+        {
+          title: "Create resource",
+          description: "Tracks stock for a resource. A negative delta on a completed task uses stock; a low quantity raises an alert, never a task.",
+          inputSchema: external_exports.object({
+            title: external_exports.string(),
+            unit: external_exports.string().optional(),
+            quantity: external_exports.number(),
+            lowAt: external_exports.number().optional(),
+            icon: external_exports.string().optional(),
+            color: external_exports.string().optional()
+          })
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.createResourceTool, {
+                ...signed.proof,
+                ...args
+              })
+            );
+          } catch (error62) {
+            return toolError(knownError(error62, "Could not create resource"));
+          }
+        }
+      );
+      server.registerTool(
+        "list_resources",
+        {
+          title: "List resources",
+          description: "Lists the signed-in user's live resources with quantity, unit and low-at threshold.",
+          inputSchema: external_exports.object({})
+        },
+        async (_args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.listResourcesTool, signed.proof)
+            );
+          } catch (error62) {
+            return toolError(knownError(error62, "Could not list resources"));
+          }
+        }
+      );
+      server.registerTool(
+        "set_task_resource_effect",
+        {
+          title: "Set task resource effect",
+          description: "Attaches one stock effect to a task. Use a negative delta to consume stock on completion and a positive delta to add it. Reopening reverses the effect once.",
+          inputSchema: external_exports.object({
+            taskId: external_exports.string(),
+            resourceId: external_exports.string(),
+            delta: external_exports.number()
+          })
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.setTaskResourceEffectTool, {
+                ...signed.proof,
+                taskId: args.taskId,
+                resourceId: args.resourceId,
+                delta: args.delta
+              })
+            );
+          } catch (error62) {
+            return toolError(knownError(error62, "Could not set task resource effect"));
+          }
+        }
+      );
     },
     {
       serverInfo: { name: "manager", version: "0.1.0" },
-      instructions: "Manager user MCP. Sign in once with Clerk OAuth; the client refreshes the access token. whoami reads users.role in Convex. create_task, update_task, list_tasks, complete_task, reopen_task, and delete_task use the tasks table. create_recurrence is real: choose replace for dishes (one open occurrence, older ones superseded) or stack for a journal (every period stays open); behavior is required. Views, attachments, pins, include/exclude, progressions, quests, questions and alerts are available through get_slice and the matching create tools. Never copy a planned day into a deadline, never copy a deadline into a planned day, and do not create a task for a summary: write an alert instead.",
+      instructions: "Manager user MCP. Sign in once with Clerk OAuth; the client refreshes the access token. whoami reads users.role in Convex. create_task, update_task, list_tasks, complete_task, reopen_task, and delete_task use the tasks table; a task may render as check, row or card. create_recurrence is real: choose replace for dishes (one open occurrence, older ones superseded) or stack for a journal (every period stays open), with daily, weekly, biweekly (14 days) or monthly cadence; behavior is required. Resources track stock: create_resource and list_resources read it, set_task_resource_effect attaches an effect to a task, and completing that task applies the delta once while reopening reverses it. Low stock becomes an alert, never a task. Views, attachments, pins, include/exclude, progressions, quests, questions and alerts are available through get_slice and the matching create tools. Never copy a planned day into a deadline, never copy a deadline into a planned day, and do not create a task for a summary: write an alert instead.",
       maxSubscriptions: 0
     }
   );

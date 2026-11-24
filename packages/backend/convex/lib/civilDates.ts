@@ -117,21 +117,58 @@ export function monthStart(epochMs: number, timezone: string): number {
   return utcFromCivil(parts.year, parts.month, 1, timezone);
 }
 
-export type Cadence = "daily" | "weekly" | "monthly";
+export type Cadence = "daily" | "weekly" | "biweekly" | "monthly";
 
 export function isCadence(value: string): value is Cadence {
-  return value === "daily" || value === "weekly" || value === "monthly";
+  return (
+    value === "daily" ||
+    value === "weekly" ||
+    value === "biweekly" ||
+    value === "monthly"
+  );
 }
 
-/** Start of the period containing `epochMs` for the given seed cadence. */
+/** Accepts the UI label for the 14-day cadence as well as the stored id. */
+export function normalizeCadence(value: string): string {
+  const trimmed = value.trim().toLowerCase();
+  if (trimmed === "every 14 days" || trimmed === "fortnightly") return "biweekly";
+  return trimmed;
+}
+
+/** Start of the period containing `epochMs` for the given cadence. */
 export function periodStartFor(
   cadence: string,
   epochMs: number,
   timezone: string,
+  anchorOn?: number,
 ): number {
   if (!isCadence(cadence)) throw new Error("Unsupported cadence");
   if (cadence === "daily") return civilDayStart(epochMs, timezone);
   if (cadence === "weekly") return weekStart(epochMs, timezone);
+  if (cadence === "biweekly") {
+    // A biweekly period is 14 civil days measured from the series anchor.
+    // Without an anchor, the instant itself establishes one.
+    const anchorParts = partsAt(civilDayStart(anchorOn ?? epochMs, timezone), timezone);
+    const startedParts = partsAt(civilDayStart(epochMs, timezone), timezone);
+    const anchorUtc = Date.UTC(
+      anchorParts.year,
+      anchorParts.month - 1,
+      anchorParts.day,
+    );
+    const startedUtc = Date.UTC(
+      startedParts.year,
+      startedParts.month - 1,
+      startedParts.day,
+    );
+    const days = Math.floor((startedUtc - anchorUtc) / 86_400_000);
+    const periods = Math.floor(days / 14);
+    return utcFromCivil(
+      anchorParts.year,
+      anchorParts.month,
+      anchorParts.day + periods * 14,
+      timezone,
+    );
+  }
   return monthStart(epochMs, timezone);
 }
 
@@ -151,6 +188,9 @@ export function addPeriods(
   if (cadence === "weekly") {
     return utcFromCivil(parts.year, parts.month, parts.day + count * 7, timezone);
   }
+  if (cadence === "biweekly") {
+    return utcFromCivil(parts.year, parts.month, parts.day + count * 14, timezone);
+  }
   return utcFromCivil(parts.year, parts.month + count, 1, timezone);
 }
 
@@ -169,7 +209,7 @@ export function periodsBetween(
       (toParts.year - fromParts.year) * 12 + (toParts.month - fromParts.month)
     );
   }
-  const step = cadence === "weekly" ? 7 : 1;
+  const step = cadence === "weekly" ? 7 : cadence === "biweekly" ? 14 : 1;
   const fromUtc = Date.UTC(fromParts.year, fromParts.month - 1, fromParts.day);
   const toUtc = Date.UTC(toParts.year, toParts.month - 1, toParts.day);
   return Math.floor((toUtc - fromUtc) / (step * 86_400_000));

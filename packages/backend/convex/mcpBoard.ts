@@ -14,6 +14,7 @@ import {
   logProgress,
 } from "./lib/phase2Service";
 import { createRecurrence, listRecurrences, reconcileOwner } from "./lib/recurrenceService";
+import * as resourceService from "./lib/resourceService";
 import {
   createCustomView,
   enableComputedView,
@@ -32,6 +33,10 @@ export const createRecurrenceTool = mutation({
     location: v.optional(v.string()),
     priority: v.optional(v.string()),
     overduePolicy: v.optional(v.string()),
+    presentation: v.optional(v.string()),
+    resourceEffect: v.optional(
+      v.object({ resourceId: v.id("resources"), delta: v.number() }),
+    ),
     anchorOn: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -46,6 +51,8 @@ export const createRecurrenceTool = mutation({
       location: args.location,
       priority: args.priority,
       overduePolicy: args.overduePolicy,
+      presentation: args.presentation,
+      resourceEffect: args.resourceEffect,
       anchorOn: args.anchorOn,
     });
   },
@@ -316,6 +323,56 @@ export const createAlertTool = mutation({
       body: args.body,
       source: args.source,
     });
+  },
+});
+
+export const createResourceTool = mutation({
+  args: {
+    ...proofArgs,
+    title: v.string(),
+    unit: v.optional(v.string()),
+    quantity: v.number(),
+    lowAt: v.optional(v.number()),
+    icon: v.optional(v.string()),
+    color: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireMcpUser(ctx, args);
+    return await resourceService.createResource(ctx.db, user._id, {
+      title: args.title,
+      unit: args.unit,
+      quantity: args.quantity,
+      lowAt: args.lowAt,
+      icon: args.icon,
+      color: args.color,
+    });
+  },
+});
+
+export const listResourcesTool = mutation({
+  args: proofArgs,
+  handler: async (ctx, args) => {
+    const user = await requireMcpUser(ctx, args);
+    return await resourceService.listResources(ctx.db, user._id);
+  },
+});
+
+export const setTaskResourceEffectTool = mutation({
+  args: {
+    ...proofArgs,
+    taskId: v.id("tasks"),
+    resourceId: v.id("resources"),
+    delta: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireMcpUser(ctx, args);
+    return await resourceService.setTaskResourceEffect(
+      ctx.db,
+      user._id,
+      args.taskId,
+      args.resourceId,
+      args.delta,
+    );
   },
 });
 
