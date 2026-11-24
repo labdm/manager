@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { findCurrentUser, requireUser } from "./users";
 import * as taskService from "./lib/taskService";
+import * as resourceService from "./lib/resourceService";
 import { reconcileOwner } from "./lib/recurrenceService";
 
 /** Tasks owned by the signed-in user. Signed-out callers get an empty list. */
@@ -41,6 +42,7 @@ export const create = mutation({
     priority: v.optional(v.string()),
     priorityRank: v.optional(v.number()),
     overduePolicy: v.optional(v.string()),
+    presentation: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
@@ -65,6 +67,7 @@ export const update = mutation({
     priority: v.optional(v.string()),
     priorityRank: v.optional(v.number()),
     overduePolicy: v.optional(v.string()),
+    presentation: v.optional(v.string()),
     done: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
@@ -93,6 +96,37 @@ export const setDone = mutation({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     return await taskService.setTaskDone(ctx.db, user._id, args.id, args.done);
+  },
+});
+
+/** Attaches the task's single stock effect. A negative delta uses stock. */
+export const setResourceEffect = mutation({
+  args: {
+    taskId: v.id("tasks"),
+    resourceId: v.id("resources"),
+    delta: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    return await resourceService.setTaskResourceEffect(
+      ctx.db,
+      user._id,
+      args.taskId,
+      args.resourceId,
+      args.delta,
+    );
+  },
+});
+
+export const clearResourceEffect = mutation({
+  args: { taskId: v.id("tasks") },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    return await resourceService.clearTaskResourceEffect(
+      ctx.db,
+      user._id,
+      args.taskId,
+    );
   },
 });
 

@@ -74,6 +74,7 @@ export const create = mutation({
     priority: v.optional(v.string()),
     priorityRank: v.optional(v.number()),
     overduePolicy: v.optional(v.string()),
+    presentation: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireMcpUser(ctx, args);
@@ -89,6 +90,7 @@ export const create = mutation({
       priority: args.priority,
       priorityRank: args.priorityRank,
       overduePolicy: args.overduePolicy,
+      presentation: args.presentation,
       origin: "agent",
     });
   },
@@ -109,6 +111,7 @@ export const update = mutation({
     priority: v.optional(v.string()),
     priorityRank: v.optional(v.number()),
     overduePolicy: v.optional(v.string()),
+    presentation: v.optional(v.string()),
     done: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
@@ -125,6 +128,7 @@ export const update = mutation({
       priority: args.priority,
       priorityRank: args.priorityRank,
       overduePolicy: args.overduePolicy,
+      presentation: args.presentation,
       done: args.done,
     });
   },

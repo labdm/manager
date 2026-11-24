@@ -35,7 +35,7 @@ When `deadlineAt` passes and the task remains open and not trashed, an overdue p
 
 ## 3. Recurrence: Replace vs. Stack
 
-Recurrence is shipped. Use `create_recurrence` with a **required** `behavior` (`replace` or `stack`), a `cadence` (`daily`, `weekly`, `monthly`), and an IANA `timezone`. Minting is lazy and idempotent on `(recurrenceId, periodStart)`, where a period starts at local midnight in that timezone (weeks start Monday). `list_recurrences`, `get_slice`, and a reconcile cron all move a series forward, including when the app has been closed.
+Recurrence is shipped. Use `create_recurrence` with a **required** `behavior` (`replace` or `stack`), a `cadence` (`daily`, `weekly`, `biweekly` / every 14 days, `monthly`), and an IANA `timezone`. Minting is lazy and idempotent on `(recurrenceId, periodStart)`, where a period starts at local midnight in that timezone (weeks start Monday; a biweekly period starts on the 14-day cycle from `anchorOn`). `list_recurrences`, `get_slice`, and a reconcile cron all move a series forward, including when the app has been closed.
 
 - **`replace`**:
   - At most one open occurrence exists on the board.
@@ -53,3 +53,7 @@ New series default their anchor to the current period, so creation mints one row
 - **Do not create tasks for agent summaries, meeting recaps, status updates, or context notes.**
 - A task is an atomic unit of work that a human can complete and check off. If there is no specific action required from the user, do not write a task.
 - Informational notes, travel notifications ("Flight is Thursday"), and background summaries belong in **alerts**: use `create_alert`. They appear in a dedicated notification band without checkboxes, stay in the log after being read, and are never written to the `tasks` table.
+
+## 5. Resources and Stock
+
+A resource is a stock level, not a task. `create_resource` and `list_resources` work with its title, unit, quantity and low-at threshold. Attach one effect with `set_task_resource_effect`: completing the task applies the delta once (negative uses stock, positive adds it) and reopening reverses it once. When a quantity falls to low-at or below, the core raises one unread alert sourced from that resource; it does not create a task. An agent may read that alert and create a buy-task for the user, but the core never invents one.

@@ -19,6 +19,10 @@ export const create = mutation({
     location: v.optional(v.string()),
     priority: v.optional(v.string()),
     overduePolicy: v.optional(v.string()),
+    presentation: v.optional(v.string()),
+    resourceEffect: v.optional(
+      v.object({ resourceId: v.id("resources"), delta: v.number() }),
+    ),
     anchorOn: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
