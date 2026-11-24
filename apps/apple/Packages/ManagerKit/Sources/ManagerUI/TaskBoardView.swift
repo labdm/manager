@@ -1,17 +1,16 @@
 import ManagerCore
 import SwiftUI
 
-/// The task detail pane: brand header, composer, banners and grouped rows.
-///
-/// One scrolling `List` keeps swipe actions, keyboard navigation and VoiceOver
-/// order native on every platform, including the unfolded iPhone Duo where the
-/// window is wide enough for two columns.
+/// The detail pane: brand header, always-on tabs, composer, banners and the
+/// mixed board column. The left rail lives in `TaskSidebar`; both the rail and
+/// these tabs are owned by the shell so neither disappears when the list is
+/// empty or still loading.
 public struct TaskBoardView: View {
   @Bindable var model: TaskBoardModel
   private let showsListPicker: Bool
 
-  @State private var collapsedSections: Set<TaskSection> = [.completed]
   @State private var editorTarget: EditorTarget?
+  @State private var showFindMore = false
 
   public init(model: TaskBoardModel, showsListPicker: Bool = false) {
     self.model = model
@@ -22,8 +21,10 @@ public struct TaskBoardView: View {
     TimelineView(.everyMinute) { context in
       List {
         headerRow(now: context.date)
+        tabsRow
 
         if showsListPicker {
+          compactRailRow
           listPickerRow
         }
 
@@ -49,6 +50,9 @@ public struct TaskBoardView: View {
     .sheet(item: $editorTarget) { target in
       TaskEditorView(taskID: target.id, model: model)
     }
+    .sheet(isPresented: $showFindMore) {
+      FindMoreView(model: model)
+    }
     #if os(macOS)
       .navigationTitle("Manager")
     #endif
@@ -60,7 +64,7 @@ public struct TaskBoardView: View {
     CenteredRow {
       VStack(alignment: .leading, spacing: 4) {
         Text("Manager").managerMark()
-        Text(model.selectedList.title)
+        Text(model.selectedView.title)
           .font(ManagerFont.display)
           .foregroundStyle(Color.managerInk)
         Text(subtitle(now: now))
@@ -72,6 +76,109 @@ public struct TaskBoardView: View {
       .padding(.horizontal, 14)
     }
     .plainRow(top: 0, bottom: 8)
+  }
+
+  /// Tasks · Daily · Weekly · Monthly and `+`, which starts a row in the
+  /// selected slice. Always rendered, independent of the board's phase.
+  private var tabsRow: some View {
+    CenteredRow {
+      HStack(spacing: 4) {
+        ForEach(BoardSlice.allCases) { slice in
+          Button {
+            model.selectedSlice = slice
+          } label: {
+            Text(slice.title)
+              .font(.system(.caption, weight: .semibold))
+              .foregroundStyle(
+                model.selectedSlice == slice ? Color.managerAccentInk : Color.managerMuted
+              )
+              .padding(.horizontal, 10)
+              .padding(.vertical, 6)
+              .background(
+                Capsule(style: .continuous)
+                  .fill(
+                    model.selectedSlice == slice
+                      ? Color.managerAccent
+                      : Color.clear
+                  )
+              )
+          }
+          .buttonStyle(.plain)
+          .accessibilityLabel(slice.title)
+        }
+
+        Spacer(minLength: 4)
+
+        Button {
+          model.beginTask()
+        } label: {
+          Image(systemName: "plus")
+            .font(.system(size: 12, weight: .bold))
+            .foregroundStyle(Color.managerAccent)
+            .frame(width: 26, height: 26)
+            .background(
+              Circle().strokeBorder(Color.managerAccent.opacity(0.6), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Add a task to this slice")
+      }
+      .padding(.horizontal, 14)
+    }
+    .plainRow(bottom: 6)
+  }
+
+  /// Compact width has no split-view sidebar, so the rail becomes a horizontal
+  /// strip of view chips. It is always present, like the tabs above it.
+  private var compactRailRow: some View {
+    CenteredRow {
+      ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: 8) {
+          ForEach(model.boardSnapshot.views) { view in
+            Button {
+              model.selectedViewID = view.id
+            } label: {
+              HStack(spacing: 5) {
+                Image(systemName: view.resolvedIcon)
+                Text(view.title)
+                  .font(ManagerFont.meta)
+              }
+              .foregroundStyle(
+                model.selectedViewID == view.id ? Color.managerAccentInk : Color.managerInk
+              )
+              .padding(.horizontal, 10)
+              .padding(.vertical, 6)
+              .background(
+                Capsule(style: .continuous)
+                  .fill(
+                    model.selectedViewID == view.id
+                      ? Color.boardColor(view.resolvedColor)
+                      : Color.managerRaised
+                  )
+              )
+            }
+            .buttonStyle(.plain)
+          }
+
+          Button {
+            showFindMore = true
+          } label: {
+            HStack(spacing: 5) {
+              Image(systemName: "plus.magnifyingglass")
+              Text("Find more")
+                .font(ManagerFont.meta)
+            }
+            .foregroundStyle(Color.managerAccent)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Capsule(style: .continuous).strokeBorder(Color.managerBorder))
+          }
+          .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+      }
+    }
+    .plainRow(bottom: 4)
   }
 
   private var listPickerRow: some View {
@@ -119,46 +226,73 @@ public struct TaskBoardView: View {
         )
       )
     case .ready:
-      let groups = model.groups(now: now)
-      if groups.isEmpty {
+      let sections = model.boardSections(now: now)
+      if sections.isEmpty {
         noticeRow(
           BoardNoticeView(
-            systemImage: model.selectedList.systemImage,
+            systemImage: model.selectedView.resolvedIcon,
             title: model.selectedList.emptyTitle,
             message: model.selectedList.emptyMessage
           )
         )
       } else {
-        ForEach(groups) { group in
-          section(for: group, now: now)
+        ForEach(sections) { section in
+          boardSection(section, now: now)
         }
       }
     }
   }
 
-  private func section(for group: TaskSectionGroup, now: Date) -> some View {
-    let isCollapsed = collapsedSections.contains(group.section)
-    let collapseHandler: (() -> Void)? = group.section.startsCollapsed
-      ? { toggleCollapse(group.section) }
-      : nil
-
-    return Section {
-      if !isCollapsed {
-        ForEach(group.tasks) { task in
-          taskRow(task, now: now)
-        }
+  private func boardSection(_ section: BoardSection, now: Date) -> some View {
+    Section {
+      ForEach(section.rows) { row in
+        boardRow(row, now: now)
       }
     } header: {
       CenteredRow {
-        TaskSectionHeader(
-          group: group,
-          isCollapsed: isCollapsed,
-          onToggleCollapse: collapseHandler
-        )
-        .padding(.horizontal, 14)
-        .padding(.top, 10)
+        Text(section.title)
+          .font(.system(.caption2).weight(.semibold))
+          .tracking(1.4)
+          .textCase(.uppercase)
+          .foregroundStyle(Color.managerMuted)
+          .padding(.horizontal, 14)
+          .padding(.top, 10)
       }
       .plainRow(top: 0, bottom: 2)
+    }
+  }
+
+  @ViewBuilder
+  private func boardRow(_ row: BoardRow, now: Date) -> some View {
+    switch row {
+    case let .task(task):
+      taskRow(task, now: now)
+    case let .alert(alert):
+      CenteredRow {
+        AlertBandView(alert: alert, onDismiss: { model.dismissAlert(alert) })
+          .padding(.horizontal, 14)
+      }
+      .plainRow()
+    case let .question(question):
+      CenteredRow {
+        QuestionView(question: question, onAnswer: { optionID in
+          model.answerQuestion(question, optionID: optionID)
+        })
+        .padding(.horizontal, 14)
+      }
+      .plainRow()
+    case let .progression(progression):
+      CenteredRow {
+        ProgressionView(progression: progression)
+          .padding(.horizontal, 14)
+      }
+      .plainRow()
+    case let .quest(quest):
+      CenteredRow {
+        QuestView(quest: quest)
+          .padding(.horizontal, 14)
+      }
+      .plainRow()
     }
   }
 
@@ -216,16 +350,6 @@ public struct TaskBoardView: View {
     guard open > 0 else { return "All clear." }
     let today = model.openTodayCount(now: now)
     return today > 0 ? "\(today) due today · \(open) open" : "\(open) open"
-  }
-
-  private func toggleCollapse(_ section: TaskSection) {
-    withAnimation(.snappy(duration: 0.2)) {
-      if collapsedSections.contains(section) {
-        collapsedSections.remove(section)
-      } else {
-        collapsedSections.insert(section)
-      }
-    }
   }
 }
 

@@ -13,6 +13,10 @@ enum ConvexFunction {
   static let setDone = "tasks:setDone"
   static let remove = "tasks:remove"
   static let markSeen = "tasks:markSeen"
+  static let recurrencesCreate = "recurrences:create"
+  static let viewsInstallTemplate = "views:installTemplate"
+  static let viewsCreateCustom = "views:createCustom"
+  static let boardSlice = "board:slice"
 }
 
 /// Wire shape of `TaskView` from `packages/backend/convex/lib/taskService.ts`.
@@ -111,7 +115,15 @@ struct RemovalRecord: Decodable {
 /// the web app or an MCP bot therefore lands here without polling.
 @MainActor
 public final class ConvexTaskBackend: TaskBackend {
-  private let client: ConvexClientWithAuth<String>
+  // Internal so the BoardSource extension in ConvexBoardSource.swift can call
+  // the same client helpers as the task calls.
+  let client: ConvexClientWithAuth<String>
+
+  /// Last `board:slice` payload, or the starter shell before it answers. The
+  /// task list from `tasks:list` remains authoritative for task rows.
+  // Internal setter so the BoardSource extension in ConvexBoardSource.swift can
+  // cache incoming payloads and local alert/question transitions.
+  public var boardSnapshot: BoardSnapshot = .starter
 
   public init(client: ConvexClientWithAuth<String>) {
     self.client = client
@@ -232,7 +244,7 @@ public final class ConvexTaskBackend: TaskBackend {
     return args
   }
 
-  private func dayMilliseconds(_ date: Date?) -> Double? {
+  func dayMilliseconds(_ date: Date?) -> Double? {
     guard let date else { return nil }
     return Double(DueDateMath.millisecondsForDay(date))
   }
@@ -247,7 +259,7 @@ public final class ConvexTaskBackend: TaskBackend {
 
   // MARK: - Error translation
 
-  private func perform<T>(_ operation: () async throws -> T) async throws -> T {
+  func perform<T>(_ operation: () async throws -> T) async throws -> T {
     do {
       return try await operation()
     } catch {
@@ -255,7 +267,7 @@ public final class ConvexTaskBackend: TaskBackend {
     }
   }
 
-  private static func userFacing(_ error: Error) -> Error {
+  static func userFacing(_ error: Error) -> Error {
     guard let clientError = error as? ClientError else {
       return TaskBackendError(error.localizedDescription)
     }
@@ -285,6 +297,6 @@ public final class ConvexTaskBackend: TaskBackend {
 ///
 /// `AsyncStream`'s termination handler is `@Sendable`, so the cancellable needs
 /// to cross that boundary; Combine's `AnyCancellable` is thread-safe.
-private final class CancellableBox: @unchecked Sendable {
+final class CancellableBox: @unchecked Sendable {
   var cancellable: AnyCancellable?
 }
