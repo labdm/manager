@@ -76,7 +76,7 @@ Replace: at most one open occurrence. On a new period, the previous open row bec
 
 **Attachment.** `subjectType`, `subjectId`, `targetType`, `targetId`, `role` `primary` or `extra`. Subjects: task, progression, quest, event, category. Targets: category, event, quest, progression, space. This is the only link. No `primaryCategoryId` column beside it. Life-sized lists do not need a second source of truth. If a slice profile is slow, a denormalized hint can be added later as a cache, not as the write path.
 
-**Shared space.** `name`, `icon?`, `color?`, members (`owner`, `editor`, `viewer`), attachments. Personal tasks do not require one. `canRead` starts as "owner matches" in M1. Every later query uses that helper, so sharing extends the helper instead of rewriting each list.
+**Shared space.** The screen says group. `name`, `icon?`, `color?`, members (`owner`, `admin`, `editor`, `viewer`), `canInvite` on the membership. Admin includes `canInvite`. Owner is an admin. Every person has one default group, created with the user, same rules as any other group. Every item has exactly one `groupId`. `canRead` starts as "owner matches" in M1, before the column exists. From groups on, every query uses the same helper and the same group path. There is no group-less item.
 
 **View.** A saved slice. `title`, `icon?`, `color?`, `kind` (`home`, `template`, `computed`, `custom`), optional `filter` document, `deletedAt?`. Home is the Tasks feed and cannot be deleted. A template view is backed by a category and opens from the Categories tab. A computed view is a saved query and stores no task copies. Seeds: New (`sparkles`), High priority (`flame`), Today (`sun`), shown as Tasks filters. A custom view is a filter you fill by hand. The layout evolution section is where these sit on screen.
 
@@ -242,7 +242,7 @@ There is no public REST API. There is no new backend.
 
 **M6 — Alerts.** The product word is message. The record stays the shipped `alerts` table. Reading clears the Tasks-page row and keeps History. No checkbox. On screen this is layout milestone R5.
 
-**M7 — Shared spaces.** The product word is group. An item belongs to at most one. Create, invite, attach, detach, icon and color. `canInvite` is the invite permission, and admin has it. One-hop visibility. A test that Money does not leak through a season. NEW applies to rows another member creates. `canRead` grows here. On screen this is layout milestone R4. No required personal group and no M1 backfill.
+**M7 — Shared spaces.** The product word is group. Every person has a default group, and every item has exactly one. Create, invite, attach, detach, icon and color. `canInvite` is the invite permission, and admin has it. One-hop visibility. A test that Money does not leak through a season. NEW applies to rows another member creates. `canRead` grows here. On screen this is layout milestone R4. Shipping it creates the default group for existing users and sets `groupId` on existing items.
 
 **M8 — Longer events, Winter, seeds.** Month, quarter, year, custom. Winter installed as a season with its own icon, color, and one frame. A new account can enable the catalog. The harness notes grow with each milestone. Seasons stay events and show up through the Events chip and the Events menu page.
 
@@ -264,7 +264,7 @@ The menu is a button on every width. It is not a tab. Nothing in the menu is als
 |---|---|
 | Tasks | Default mixed feed. Open tasks, unseen messages, unanswered questions, and pending invites. Activity rows on this page follow a setting. The default shows activity from other people and from agents, and hides your own. Your own tasks still show. Filters: All, Daily, Weekly, Monthly, Events, plus saved filters New, High priority, and Today. |
 | Messages | Composer, people, agents, and History. History lists every activity record, including your own. The Tasks-page setting does not apply here. |
-| Groups | One organization: members, invites, and the items that belong to it. Hidden until groups ship. The header switcher says Personal until then. |
+| Groups | One organization: members, invites, and the items that belong to it. Hidden until groups ship. The switcher then lists the person's groups, with the default group selected. |
 | Categories | Life slices, topics, icons, colors, templates, and custom views. Find more lives here. |
 | Resources | The resource ledger and effects. |
 
@@ -290,7 +290,7 @@ Achievements stays in the menu. It is a query over completions, tracks, and ques
 
 Messages is a destination because a read alert already leaves the board and stays in a log. The shipped record is `alerts`. The Tasks page shows the rows that still need attention, including the activity subset from Settings. History, inside Messages, shows every activity record. A summary is a message. It is never a task.
 
-Groups is a destination because members and invites need a home. A group is an organization. An item belongs to at most one group, the way a resource belongs to one organization. The header switcher selects that organization, or All. All is a view across organizations you can read. It does not attach an item to two groups. A personal item may have no group. There is no required personal organization and no M1 backfill.
+Groups is a destination because members and invites need a home. A group is an organization. The relationship is group, then items. An item belongs to exactly one group. The default group is an ordinary group created with the person. It can be renamed. It cannot be deleted, because a person always has one. The header switcher selects one group, or All. All reads across groups the person belongs to. It does not attach an item to two groups. Creating an item writes it into the selected group, which starts as the default group. Joining another group adds membership. It does not move existing items and does not remove the default group.
 
 Categories stays a destination because the sketch put it on the bar and a category is a slice of life. Icons, colors, and templates are edited there.
 
@@ -355,11 +355,11 @@ Medium and large screens start with an empty detail pane for this reason. A pres
 
 | Product word | Record | What changes |
 |---|---|---|
-| Task | `tasks` | `ownerId` stays. `dueAt` stays the one-release alias of `plannedOn`. Optional `groupId` arrives with groups. At most one group. |
+| Task | `tasks` | `ownerId` stays. `dueAt` stays the one-release alias of `plannedOn`. `groupId` is required once groups ship. Exactly one group. |
 | Message | shipped `alerts` | The screen says Message. The table stays `alerts`. R5 adds a kind, an author, and links to a task, quest, progression, or event. Low-stock notes stay rows in this table. There is no second table and no `done`. |
 | Question | shipped `questions` | Reuse. `seenAt` is already there. Answer effect can append a quest step or create a task. |
 | Invite | new `invites` | Group id, invitee, status, origin, `seenAt`, `deletedAt`. Accept creates membership. No due, progression, quest, or resource fields. |
-| Group | planned `spaces` / `spaceMembers` | The screen says Group. The schema name stays space. A member has a role and a `canInvite` flag. `admin` includes `canInvite`. Owner is an admin. Not an M1 requirement. No required `groupId` and no backfill. Visibility stays one hop. |
+| Group | planned `spaces` / `spaceMembers` | The screen says Group. The schema name stays space. A member has a role and a `canInvite` flag. `admin` includes `canInvite`. Owner is an admin. M1 shipped without the column. R4 creates each person's default group and backfills `groupId` on existing items, then the column is required. Visibility stays one hop. |
 | Event | `events` | Unchanged. Day, week, month, season, and limited roles stay one table. |
 | Category | `categories` | Unchanged. Icon, color, and template-driven styles. |
 | Progression, quest | `progressions`, `quests`, `questSteps` | Unchanged mechanics. They supply the bar and the quest exclamation. A task can be both. State-change effects run through a routing once R2 exists. |
@@ -393,7 +393,7 @@ These sit on top of M1–M8. Implementation waits until this revision is accepte
 | R1 — Row-first shell | [LAB-152](https://linear.app/labdm/issue/LAB-152) | Tailwind and shadcn in `packages/ui`, then the destinations, menu, chips, one row, and platform navigation above. Any chip can badge. Empty detail on medium and large. No preselection. Messages lists existing alerts. Categories and Resources list existing records. Remove the grid dashboard and the card look. | Schema changes, groups, invites, the routing table, achievements |
 | R2 — Routings | [LAB-157](https://linear.app/labdm/issue/LAB-157) | `routings` with cron and state-change triggers, the executions listed above, and the idempotency key. Menu page can list them. Existing recurrence reconcile and once-only resource effects keep working. | Rewriting replace and stack. New trigger types. Achievements |
 | R3 — Categories, views, and event filters | [LAB-151](https://linear.app/labdm/issue/LAB-151) | Categories tab with icons, colors, and templates. New, High priority, and Today as Tasks filters. Pins and include/exclude. Events chip. Replaces the data half of M3 ([LAB-146](https://linear.app/labdm/issue/LAB-146)). | Groups, the message composer, invites, quests |
-| R4 — Groups and invites | [LAB-154](https://linear.app/labdm/issue/LAB-154) | `spaces`, at most one group on an item, `canInvite`, admin includes that permission, `invites`, accept and decline, the group switcher, one-hop visibility, NEW on member-created rows. The Groups destination appears. Replaces M7 ([LAB-142](https://linear.app/labdm/issue/LAB-142)). | A required personal group, an M1 backfill, multi-group membership, achievements |
+| R4 — Groups and invites | [LAB-154](https://linear.app/labdm/issue/LAB-154) | `spaces`, a default group for every person, required `groupId` on every item after backfill, `canInvite`, admin includes that permission, `invites`, accept and decline, the group switcher, one-hop visibility, NEW on member-created rows. The Groups destination appears. Same code path for the default group and any later group. Replaces M7 ([LAB-142](https://linear.app/labdm/issue/LAB-142)). | A second group on one item, a group-less item, a special personal code path, achievements |
 | R5 — Messages and history | [LAB-156](https://linear.app/labdm/issue/LAB-156) | Kind, author, and links on `alerts`. Composer. History shows every activity record. Tasks shows the settings subset, defaulting to other people and agents. Replaces M6 ([LAB-143](https://linear.app/labdm/issue/LAB-143)). | Turning a summary into a task. A second table |
 | R6 — Progressions, quests, and questions in the row | [LAB-153](https://linear.app/labdm/issue/LAB-153) | Bars, quest exclamation, question options, answer effects, a task that is both a quest step and a progression, Mark as read beside Done. State-change effects go through a routing. Replaces M4 ([LAB-148](https://linear.app/labdm/issue/LAB-148)) and M5 ([LAB-147](https://linear.app/labdm/issue/LAB-147)). | New task facts, achievement queries |
 | R7 — Achievements | [LAB-155](https://linear.app/labdm/issue/LAB-155) | The Achievements page with the counts listed above. | Streaks, levels, ranks, social play beyond groups, paid inference, native fan-out |
@@ -402,13 +402,11 @@ Index: [LAB-150](https://linear.app/labdm/issue/LAB-150). M1 stays [LAB-145](htt
 
 ### Settled, and one assumption
 
-Settled with this revision: History shows every activity record. The Tasks page shows a subset, defaulting to other people and agents, not your own actions. An item belongs to at most one group. `canInvite` is the invite permission, and the admin role has it. Chip badges can appear on any chip. Routings are the automation engine and land in R2. Achievements shows the five counts above and nothing gamified beyond that.
-
-Assumption: a personal item may have zero groups. New items are created in the group selected in the switcher, and Personal means no group until groups ship. Accepting an invite creates membership only, with no starter rows. Say if every new item must belong to an organization instead.
+Settled: History shows every activity record. The Tasks page shows a subset, defaulting to other people and agents, not your own actions. Every person has a default group. Every item belongs to exactly one group. There is no group-less item and no separate personal behavior. `canInvite` is the invite permission, and the admin role has it. Accepting an invite creates membership only, with no starter rows. Chip badges can appear on any chip. Routings are the automation engine and land in R2. Achievements shows the five counts above and nothing gamified beyond that.
 
 ## What we deliberately did not take
 
-- A required personal space and a backfill in M1.
+- Putting `groupId` on tasks during M1. Groups ship later. When they ship, every person gets a default group and existing items are backfilled. That backfill is R4, not an M1 rewrite.
 - `carry_forward` as a third overdue policy. Doing nothing is `none`.
 - Gacha tier names (SSR, crimson pulse) on the task row. Packs may paint `urgent` that way.
 - A batch tool as the only way to create a plan.
