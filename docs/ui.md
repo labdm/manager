@@ -1,6 +1,8 @@
 # Web UI: sheets, bottom tabs, and the category dashboard
 
-This is the layout contract for the shared React UI in `packages/ui`, used by the web app and the desktop client. The mechanics it exposes are described in [plan.md](plan.md); this file is about where they are drawn and which mutation a sheet calls.
+This is the **shipped** layout contract for the shared React UI in `packages/ui`, used by the web app and the desktop client. The mechanics it exposes are described in [plan.md](plan.md); this file is about where they are drawn and which mutation a sheet calls.
+
+The next shell is the Layout evolution section of [plan.md](plan.md). It replaces this bottom bar, the grid dashboard, and the card look. Do not extend this chrome. Implement that section only after it is accepted. Until that work is merged, the checks below still apply to this build.
 
 ## Chrome
 
@@ -74,4 +76,6 @@ The dashboard is not a place to invent a new kind of record. Category, event, vi
 
 An interface change is not done until it has been looked at in screenshots, and the author has written what is wrong with the picture.
 
-Take screenshots of the signed-in board, the create sheet, the bottom bar at a phone width (about 390px), and the category dashboard. Cover a wide window and a narrow one when the change touches chrome, sheets, or the dashboard. A green test run does not replace that pass. If the picture still shows an inline form, a side menu, a typed icon name, a sheet that pushes the board, or a bar that cannot be used on a phone, fix it before calling the change done.
+For this shipped shell, take screenshots of the signed-in board, the create sheet, the bottom bar at a phone width (about 390px), and the category dashboard. Cover a wide window and a narrow one when the change touches chrome, sheets, or the dashboard. A green test run does not replace that pass. If the picture still shows an inline form, a typed icon name, a sheet that pushes the board, or a bar that cannot be used on a phone, fix it before calling the change done.
+
+For a change that implements the layout evolution, screenshot the phone inbox (chips, menu, create), a pushed detail screen, the empty "Select an item" pane at medium width, and the icon rail at a wide width. Write the same critique. The grid dashboard is not the target of that pass.

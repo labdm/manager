@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Manager is Dmytro Afonin's ADHD-first, gamified life manager — not just another checkbox list. Architecture: [docs/architecture.md](docs/architecture.md). Web and desktop UI layout: [docs/ui.md](docs/ui.md).
+Manager is Dmytro Afonin's ADHD-first, gamified life manager — not just another checkbox list. Architecture: [docs/architecture.md](docs/architecture.md). Shipped web and desktop chrome: [docs/ui.md](docs/ui.md). The next shell, after owner review: the Layout evolution section of [docs/plan.md](docs/plan.md).
 
 This tree is the Convex backend, the shared React UI, the static web app, the Tauri desktop client, the MCP server, and the native Apple and Android clients.
 
@@ -30,9 +30,9 @@ Use these terms consistently in code, schema, docs and UI. The Convex schema cur
 | progression | A known-size track: N steps, or a meter such as pages. |
 | quest | A chain of tasks. Steps may be known up front or appended when the current step ends. |
 | category | A slice of life. Household, health, work, and whatever the user adds. |
-| space | People plus the entities attached to it. Attach and detach. Not a required parent. Has a Lucide icon and a color. |
-| view | A left-rail slice. Home, an installed template, a computed query (New, high priority, today), or a custom list. Not a shared space. |
-| alert | A note from an agent or another person. No checkbox and no done state. Reading it clears it from the band. |
+| space | People plus the entities attached to it. The screen says **group**. Attach and detach. Not a required parent. Has a Lucide icon and a color. Schema name stays `spaces`. |
+| view | A saved slice. Inbox filters (New, high priority, today) or a category in the Categories tab. Not a side rail and not a shared space. |
+| alert | A message from an agent, another person, or a low-stock note. The screen says **message**. The table stays `alerts`. No checkbox and no done state. Reading it clears it from the Inbox and keeps it in the Messages log. |
 | question | A prompt with options. Answering can create the next task. Not a task itself. |
 | pin | A sort override on a view. Does not change priority or date. Include and exclude are membership overrides on a computed view. |
 | appearance | `icon` is a Lucide name. `color` is a palette token. Both are strings. Unknown values fall back. Used on views, events, categories, and spaces. |
