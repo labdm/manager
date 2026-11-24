@@ -145,6 +145,9 @@ public struct TaskDraft: Equatable, Sendable {
   public var priority: TaskPriority
   public var priorityRank: Int
   public var overduePolicy: OverduePolicy
+  public var look: TaskLook
+  public var series: SeriesBehavior
+  public var cadence: SeriesCadence
 
   public init(
     title: String,
@@ -156,7 +159,10 @@ public struct TaskDraft: Equatable, Sendable {
     remindAt: Date? = nil,
     priority: TaskPriority = .normal,
     priorityRank: Int? = nil,
-    overduePolicy: OverduePolicy = .none
+    overduePolicy: OverduePolicy = .none,
+    look: TaskLook = .check,
+    series: SeriesBehavior = .none,
+    cadence: SeriesCadence = .daily
   ) {
     self.title = title
     self.notes = notes
@@ -168,6 +174,9 @@ public struct TaskDraft: Equatable, Sendable {
     self.priority = priority
     self.priorityRank = priorityRank ?? priority.seedRank
     self.overduePolicy = overduePolicy
+    self.look = look
+    self.series = series
+    self.cadence = cadence
   }
 
   public init(task: TaskItem) {
@@ -181,7 +190,10 @@ public struct TaskDraft: Equatable, Sendable {
       remindAt: task.remindAt,
       priority: task.priority,
       priorityRank: task.priorityRank,
-      overduePolicy: task.overduePolicy
+      overduePolicy: task.overduePolicy,
+      look: task.look,
+      series: task.series,
+      cadence: task.cadence
     )
   }
 }

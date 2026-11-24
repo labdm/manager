@@ -1,34 +1,21 @@
 import ManagerCore
 import SwiftUI
 
-/// The detail pane: brand header, always-on tabs, composer, banners and the
-/// mixed board column. The left rail lives in `TaskSidebar`; both the rail and
-/// these tabs are owned by the shell so neither disappears when the list is
-/// empty or still loading.
+/// The board column: header, list filter, banners and the mixed rows. Chrome
+/// lives outside this view — `TaskBoardScreen` owns the bottom tabs, the grid
+/// dashboard and the sheet. No form is ever inserted into this column.
 public struct TaskBoardView: View {
-  @Bindable var model: TaskBoardModel
-  private let showsListPicker: Bool
+  @Bindable public var model: TaskBoardModel
 
-  @State private var editorTarget: EditorTarget?
-  @State private var showFindMore = false
-
-  public init(model: TaskBoardModel, showsListPicker: Bool = false) {
+  public init(model: TaskBoardModel) {
     self.model = model
-    self.showsListPicker = showsListPicker
   }
 
   public var body: some View {
     TimelineView(.everyMinute) { context in
       List {
         headerRow(now: context.date)
-        tabsRow
-
-        if showsListPicker {
-          compactRailRow
-          listPickerRow
-        }
-
-        composerRow
+        listPickerRow
 
         if let notice = model.connectionNotice {
           bannerRow(InlineBanner(text: notice, style: .warning))
@@ -47,12 +34,6 @@ public struct TaskBoardView: View {
       .environment(\.defaultMinListRowHeight, 1)
     }
     .managerBackground()
-    .sheet(item: $editorTarget) { target in
-      TaskEditorView(taskID: target.id, model: model)
-    }
-    .sheet(isPresented: $showFindMore) {
-      FindMoreView(model: model)
-    }
     #if os(macOS)
       .navigationTitle("Manager")
     #endif
@@ -78,109 +59,7 @@ public struct TaskBoardView: View {
     .plainRow(top: 0, bottom: 8)
   }
 
-  /// Tasks · Daily · Weekly · Monthly and `+`, which starts a row in the
-  /// selected slice. Always rendered, independent of the board's phase.
-  private var tabsRow: some View {
-    CenteredRow {
-      HStack(spacing: 4) {
-        ForEach(BoardSlice.allCases) { slice in
-          Button {
-            model.selectedSlice = slice
-          } label: {
-            Text(slice.title)
-              .font(.system(.caption, weight: .semibold))
-              .foregroundStyle(
-                model.selectedSlice == slice ? Color.managerAccentInk : Color.managerMuted
-              )
-              .padding(.horizontal, 10)
-              .padding(.vertical, 6)
-              .background(
-                Capsule(style: .continuous)
-                  .fill(
-                    model.selectedSlice == slice
-                      ? Color.managerAccent
-                      : Color.clear
-                  )
-              )
-          }
-          .buttonStyle(.plain)
-          .accessibilityLabel(slice.title)
-        }
-
-        Spacer(minLength: 4)
-
-        Button {
-          model.beginTask()
-        } label: {
-          Image(systemName: "plus")
-            .font(.system(size: 12, weight: .bold))
-            .foregroundStyle(Color.managerAccent)
-            .frame(width: 26, height: 26)
-            .background(
-              Circle().strokeBorder(Color.managerAccent.opacity(0.6), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Add a task to this slice")
-      }
-      .padding(.horizontal, 14)
-    }
-    .plainRow(bottom: 6)
-  }
-
-  /// Compact width has no split-view sidebar, so the rail becomes a horizontal
-  /// strip of view chips. It is always present, like the tabs above it.
-  private var compactRailRow: some View {
-    CenteredRow {
-      ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: 8) {
-          ForEach(model.boardSnapshot.views) { view in
-            Button {
-              model.selectedViewID = view.id
-            } label: {
-              HStack(spacing: 5) {
-                Image(systemName: view.resolvedIcon)
-                Text(view.title)
-                  .font(ManagerFont.meta)
-              }
-              .foregroundStyle(
-                model.selectedViewID == view.id ? Color.managerAccentInk : Color.managerInk
-              )
-              .padding(.horizontal, 10)
-              .padding(.vertical, 6)
-              .background(
-                Capsule(style: .continuous)
-                  .fill(
-                    model.selectedViewID == view.id
-                      ? Color.boardColor(view.resolvedColor)
-                      : Color.managerRaised
-                  )
-              )
-            }
-            .buttonStyle(.plain)
-          }
-
-          Button {
-            showFindMore = true
-          } label: {
-            HStack(spacing: 5) {
-              Image(systemName: "plus.magnifyingglass")
-              Text("Find more")
-                .font(ManagerFont.meta)
-            }
-            .foregroundStyle(Color.managerAccent)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Capsule(style: .continuous).strokeBorder(Color.managerBorder))
-          }
-          .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 14)
-      }
-    }
-    .plainRow(bottom: 4)
-  }
-
+  /// The smart list filter is a control in the column, not a navigation rail.
   private var listPickerRow: some View {
     CenteredRow {
       Picker("List", selection: $model.selectedList) {
@@ -191,14 +70,6 @@ public struct TaskBoardView: View {
       .pickerStyle(.segmented)
       .labelsHidden()
       .padding(.horizontal, 14)
-    }
-    .plainRow()
-  }
-
-  private var composerRow: some View {
-    CenteredRow {
-      TaskComposerView(model: model)
-        .padding(.horizontal, 14)
     }
     .plainRow()
   }
@@ -303,8 +174,7 @@ public struct TaskBoardView: View {
         now: now,
         isWorking: model.isWorking(on: task.id),
         onOpen: {
-          editorTarget = EditorTarget(id: task.id)
-          Task { await model.open(task) }
+          Task { await model.openTask(task) }
         },
         onToggle: { Task { await model.toggle(task) } },
         onDelete: { Task { await model.delete(task) } }
@@ -351,10 +221,6 @@ public struct TaskBoardView: View {
     let today = model.openTodayCount(now: now)
     return today > 0 ? "\(today) due today · \(open) open" : "\(open) open"
   }
-}
-
-private struct EditorTarget: Identifiable {
-  let id: String
 }
 
 private extension View {

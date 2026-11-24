@@ -227,11 +227,16 @@ extension ConvexTaskBackend {
 
   /// Creates the first occurrence of a recurring series. `periodStart` is a
   /// civil-day start and is never copied into a deadline.
-  public func createRecurrence(title: String, behavior: String, periodStart: Date) async throws {
+  public func createRecurrence(
+    title: String,
+    behavior: String,
+    cadence: String = SeriesCadence.daily.rawValue,
+    periodStart: Date
+  ) async throws {
     let args: [String: ConvexEncodable?] = [
       "title": title,
       "behavior": behavior,
-      "cadence": "daily",
+      "cadence": cadence,
       "timezone": TimeZone.current.identifier,
       "anchorOn": dayMilliseconds(periodStart),
     ]

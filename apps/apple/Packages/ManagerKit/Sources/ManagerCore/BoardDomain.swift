@@ -6,20 +6,27 @@ import Foundation
 /// of trapping, so a template built by a newer client or a typo in a custom
 /// view cannot crash an older one.
 public enum Appearance {
-  /// SF Symbols the rail knows how to draw. Anything else becomes a neutral tile.
-  public static let knownIcons: Set<String> = [
-    "house", "square.grid.2x2", "heart", "figure.walk", "person.2",
-    "briefcase", "folder", "dollarsign.circle", "gearshape", "book",
-    "bubble.left.and.bubble.right", "paintbrush", "sun.max", "calendar",
-    "checkmark.circle", "tray.full", "star", "bolt", "square.dashed",
-  ]
+  /// Lucide names the client knows how to draw. Anything else becomes a
+  /// neutral tile instead of trapping on an `Image`.
+  public static let knownIcons: Set<String> = Set(IconChoice.all.map(\.id))
+
   public static let fallbackIcon = "square.dashed"
 
-  public static let knownColors: Set<String> = [
+  public static let knownColors: Set<String> = Set(colorTokens)
+
+  /// The swatch order used by every appearance picker.
+  public static let colorTokens: [String] = [
     "sky", "mint", "green", "amber", "orange", "rose", "violet", "blue",
     "slate", "teal", "red", "yellow", "purple", "pink", "indigo", "gray",
   ]
   public static let fallbackColor = "sky"
+
+  /// Maps a stored Lucide name to the SF Symbol drawn on Apple platforms.
+  /// Unknown values already went through `icon(_:)`, so this never traps.
+  public static func symbol(for raw: String?) -> String {
+    let resolved = icon(raw)
+    return IconChoice.all.first { $0.id == resolved }?.symbol ?? fallbackIcon
+  }
 
   public static func icon(_ raw: String?) -> String {
     guard let raw, knownIcons.contains(raw) else { return fallbackIcon }

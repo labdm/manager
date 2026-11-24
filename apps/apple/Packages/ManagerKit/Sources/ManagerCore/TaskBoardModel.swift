@@ -3,9 +3,10 @@ import Observation
 
 /// Presentation state for the task board.
 ///
-/// Owns the live task list, the composer draft, smart-list selection and
-/// optimistic mutations. It has no SwiftUI and no networking of its own, so the
-/// whole state machine is unit tested against an in-memory `TaskBackend`.
+/// Owns the live task list, the quick-add and sheet drafts, smart-list
+/// selection, modal presentation and optimistic mutations. It has no SwiftUI
+/// and no networking of its own, so the whole state machine is unit tested
+/// against an in-memory `TaskBackend`.
 @MainActor
 @Observable
 public final class TaskBoardModel {
@@ -24,11 +25,24 @@ public final class TaskBoardModel {
   public private(set) var errorMessage: String?
   public private(set) var isSaving = false
 
-  /// Shell state: the left rail, the selected view and the active time tab.
+  /// Shell state: the category tiles, the selected view and the active time tab.
   public private(set) var boardSnapshot: BoardSnapshot = .starter
   public var selectedViewID: String = BoardViewItem.home.id
   public var selectedSlice: BoardSlice = .tasks
-  /// Incremented when `+` is tapped so the composer can focus its title field.
+
+  /// The bottom `+` presents a sheet; it never inserts a form into the board.
+  /// Every create and edit target is owned here so it can be tested without
+  /// SwiftUI.
+  public private(set) var presentedSheet: BoardSheet?
+  /// The grid button presents the category dashboard full screen, not as a
+  /// sidebar column.
+  public private(set) var showsDashboard = false
+
+  /// Locally authored entities for mechanics whose backend mutations are still
+  /// planned. Tasks, categories and views still go through `TaskBackend`.
+  public private(set) var localEntities: [BoardEntity] = []
+
+  /// Incremented when `+` is tapped. Kept for the title focus inside the sheet.
   public private(set) var composerFocusRequest = 0
 
   /// Sidebar selection. Persisted by the app layer, not by this model.
@@ -88,7 +102,7 @@ public final class TaskBoardModel {
           self.boardSnapshot = snapshot
         }
       } catch {
-        // Keep the last snapshot. A board failure must not blank the rail.
+        // Keep the last snapshot. A board failure must not blank the dashboard.
       }
     }
   }
@@ -114,10 +128,13 @@ public final class TaskBoardModel {
     boardSnapshot = .starter
     selectedViewID = BoardViewItem.home.id
     selectedSlice = .tasks
+    presentedSheet = nil
+    showsDashboard = false
+    localEntities = []
     composerFocusRequest = 0
   }
 
-  /// Restarts after a failure without losing the composer draft.
+  /// Restarts after a failure without losing the draft.
   public func retry() {
     updatesTask?.cancel()
     updatesTask = nil
@@ -161,9 +178,35 @@ public final class TaskBoardModel {
 
   // MARK: - Shell
 
-  /// The selected rail view, falling back to Home if the payload removed it.
+  /// The selected category, falling back to Home if the payload removed it.
   public var selectedView: BoardViewItem {
     boardSnapshot.views.first { $0.id == selectedViewID } ?? .home
+  }
+
+  /// Tiles on the full-screen dashboard: one per category plus the add tile.
+  /// A source of truth separate from navigation means the dashboard can never
+  /// accidentally become a sidebar column.
+  public var dashboardTiles: [DashboardTile] {
+    var tiles = boardSnapshot.views.map { view in
+      DashboardTile(
+        id: view.id,
+        title: view.title,
+        icon: view.icon,
+        color: view.color
+      )
+    }
+    if !tiles.contains(where: { $0.title == "Add category" }) {
+      tiles.append(
+        DashboardTile(
+          id: "dashboard-add-category",
+          title: "Add category",
+          icon: "square-dashed",
+          color: Appearance.fallbackColor,
+          isAddTile: true
+        )
+      )
+    }
+    return tiles
   }
 
   /// Mixed rows for the active tab. Empty sections are dropped by the domain.
@@ -171,11 +214,77 @@ public final class TaskBoardModel {
     boardSnapshot.sections(tasks: tasks, slice: selectedSlice, now: now, calendar: calendar)
   }
 
-  /// `+` starts a row in the current slice: the composer is focused and, for a
-  /// time slice, its planned day is prefilled with that period's first day.
+  /// The bottom `+` presents the task sheet. For a time slice the planned day
+  /// is prefilled with that period's first day, as it was for the old quick add.
   public func beginTask(now: Date = .now, calendar: Calendar = .current) {
     draftDueDate = selectedSlice == .tasks ? nil : selectedSlice.anchor(now: now, calendar: calendar)
     composerFocusRequest += 1
+    presentedSheet = .createTask
+  }
+
+  // MARK: - Modals
+
+  public func present(_ sheet: BoardSheet) {
+    presentedSheet = sheet
+  }
+
+  public func dismissSheet() {
+    presentedSheet = nil
+  }
+
+  public func openDashboard() {
+    showsDashboard = true
+    presentedSheet = nil
+  }
+
+  public func closeDashboard() {
+    showsDashboard = false
+  }
+
+  /// Picking a category tile selects it and closes the dashboard. It never
+  /// adds a sidebar column to the navigation stack.
+  public func selectDashboardTile(_ tile: DashboardTile) {
+    if tile.isAddTile {
+      showsDashboard = false
+      presentedSheet = .category(nil)
+      return
+    }
+    selectedViewID = tile.id
+    showsDashboard = false
+  }
+
+  /// Opening a task presents the editor and is the only place that marks it
+  /// seen. A failed `markSeen` leaves NEW on the row.
+  public func openTask(_ task: TaskItem) async {
+    presentedSheet = .editTask(task.id)
+    await open(task)
+  }
+
+  /// Saves a locally authored entity. Categories and views also appear as
+  /// dashboard tiles so the new sheet flow is visible end to end.
+  @discardableResult
+  public func saveEntity(
+    kind: BoardEntityKind,
+    title: String,
+    icon: String,
+    color: String
+  ) async -> Bool {
+    let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return false }
+
+    let entity = BoardEntity(
+      kind: kind,
+      title: trimmed,
+      icon: Appearance.icon(icon),
+      color: Appearance.color(color)
+    )
+    localEntities.append(entity)
+    defer { presentedSheet = nil }
+
+    if kind == .category || kind == .view {
+      await createCustomView(title: trimmed, icon: entity.icon, color: entity.color)
+    }
+    return true
   }
 
   /// Shown above the list when the socket drops.
@@ -206,7 +315,7 @@ public final class TaskBoardModel {
 
   // MARK: - Mutations
 
-  /// Creates a task from the composer. Returns true when the draft was cleared.
+  /// Creates a task from the quick-add draft. Returns true on success.
   @discardableResult
   public func addTask(calendar: Calendar = .current) async -> Bool {
     if let message = draftValidationMessage {
@@ -223,6 +332,63 @@ public final class TaskBoardModel {
       try await backend.createTask(title: title, dueAt: dueDate)
       draftTitle = ""
       draftDueDate = nil
+      errorMessage = nil
+      return true
+    } catch {
+      errorMessage = Self.message(for: error)
+      return false
+    }
+  }
+
+  /// Creates a task from the full sheet draft. Look, series and cadence are
+  /// presentation facts; only the M1 fields reach the `tasks:create` mutation.
+  @discardableResult
+  public func createTask(from draft: TaskDraft, calendar: Calendar = .current) async -> Bool {
+    let trimmed = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard TaskTitle.isValid(trimmed), !isSaving else { return false }
+
+    isSaving = true
+    defer { isSaving = false }
+
+    var resolved = draft
+    resolved.title = trimmed
+    resolved.plannedOn = resolved.plannedOn.map { calendar.startOfDay(for: $0) }
+    if !TaskPriority.seeds.contains(resolved.priority) {
+      resolved.priorityRank = resolved.priority.seedRank
+    }
+    do {
+      try await backend.createTask(resolved)
+      errorMessage = nil
+      return true
+    } catch {
+      errorMessage = Self.message(for: error)
+      return false
+    }
+  }
+
+  /// Creates the first occurrence of a series from the sheet. The behavior and
+  /// cadence are explicit choices, never guessed from "daily".
+  @discardableResult
+  public func createSeriesTask(
+    from draft: TaskDraft,
+    now: Date = .now,
+    calendar: Calendar = .current
+  ) async -> Bool {
+    let trimmed = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard TaskTitle.isValid(trimmed), draft.series != .none, !isSaving else { return false }
+
+    isSaving = true
+    defer { isSaving = false }
+
+    let day = draft.plannedOn.map { calendar.startOfDay(for: $0) }
+      ?? selectedSlice.anchor(now: now, calendar: calendar)
+    do {
+      try await backend.createRecurrence(
+        title: trimmed,
+        behavior: draft.series.rawValue,
+        cadence: draft.cadence.rawValue,
+        periodStart: day
+      )
       errorMessage = nil
       return true
     } catch {
@@ -354,10 +520,21 @@ public final class TaskBoardModel {
     }
   }
 
-  public func createRecurrence(title: String, behavior: String, now: Date = .now, calendar: Calendar = .current) async {
+  public func createRecurrence(
+    title: String,
+    behavior: String,
+    cadence: SeriesCadence = .daily,
+    now: Date = .now,
+    calendar: Calendar = .current
+  ) async {
     let day = selectedSlice.anchor(now: now, calendar: calendar)
     do {
-      try await backend.createRecurrence(title: title, behavior: behavior, periodStart: day)
+      try await backend.createRecurrence(
+        title: title,
+        behavior: behavior,
+        cadence: cadence.rawValue,
+        periodStart: day
+      )
       errorMessage = nil
     } catch {
       errorMessage = Self.message(for: error)

@@ -46,6 +46,11 @@ struct TaskRecord: Decodable {
   @OptionalConvexFloat var seenAt: Double?
   @OptionalConvexFloat var completedAt: Double?
   @OptionalConvexFloat var deletedAt: Double?
+  // Target vocabulary: not written by the M1 mutation, but decoded when a
+  // newer deployment starts sending it.
+  let look: String?
+  let series: String?
+  let cadence: String?
 
   var item: TaskItem {
     let priority = TaskPriority(decoded: self.priority)
@@ -87,7 +92,10 @@ struct TaskRecord: Decodable {
       origin: TaskOrigin(decoded: self.origin),
       seenAt: seenAt.map { DueDateMath.date(fromMilliseconds: $0) },
       completedAt: completedAt.map { DueDateMath.date(fromMilliseconds: $0) },
-      deletedAt: trashedAt
+      deletedAt: trashedAt,
+      look: TaskLook(decoded: look),
+      series: SeriesBehavior(decoded: series),
+      cadence: SeriesCadence(decoded: cadence)
     )
   }
 }

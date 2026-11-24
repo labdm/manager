@@ -25,7 +25,12 @@ public protocol BoardSource: AnyObject {
 
   func installTemplate(_ template: ViewTemplate) async throws
   func createCustomView(title: String, icon: String, color: String) async throws
-  func createRecurrence(title: String, behavior: String, periodStart: Date) async throws
+  func createRecurrence(
+    title: String,
+    behavior: String,
+    cadence: String,
+    periodStart: Date
+  ) async throws
 
   func dismissAlert(id: String)
   func answerQuestion(id: String, optionID: String)
