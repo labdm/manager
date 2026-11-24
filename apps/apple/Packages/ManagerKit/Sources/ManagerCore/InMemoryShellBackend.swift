@@ -51,6 +51,10 @@ extension InMemoryTaskBackend: ShellBackend {
     }
   }
 
+  public func invitesList() async throws -> [BoardInvite] {
+    boardSnapshot.invites
+  }
+
   public func routingsList() async throws -> [BoardRouting] {
     boardSnapshot.routings
   }

@@ -119,6 +119,18 @@ private struct RoutingRecord: Decodable {
   }
 }
 
+private struct GroupsEnvelope: Decodable {
+  let groups: [GroupRecord]
+}
+
+private struct InvitesEnvelope: Decodable {
+  let invites: [InviteRecord]
+}
+
+private struct RoutingsEnvelope: Decodable {
+  let routings: [RoutingRecord]
+}
+
 private struct CategoryRecord: Decodable {
   let id: String
   let title: String?
@@ -199,6 +211,22 @@ extension ConvexTaskBackend {
     }
   }
 
+  /// The shell contract is an envelope. A bare array is still accepted so a
+  /// list does not disappear if one side lands first.
+  private func fetchEither<Envelope: Decodable, Record: Decodable>(
+    _ name: String,
+    envelope: Envelope.Type,
+    extract: KeyPath<Envelope, [Record]>,
+    array: [Record].Type
+  ) async throws -> [Record] {
+    do {
+      let wrapped: Envelope = try await fetch(name, yielding: envelope)
+      return wrapped[keyPath: extract]
+    } catch {
+      return try await fetch(name, yielding: array)
+    }
+  }
+
   public func setActivityOnTasks(_ value: ActivityOnTasks) async throws {
     let args: [String: ConvexEncodable?] = ["value": value.value]
     try await perform {
@@ -207,9 +235,12 @@ extension ConvexTaskBackend {
   }
 
   public func groupsList() async throws -> [BoardGroup] {
-    let records: [GroupRecord] = try await perform {
-      try await self.fetch(ConvexFunction.groupsList, yielding: [GroupRecord].self)
-    }
+    let records = try await fetchEither(
+      ConvexFunction.groupsList,
+      envelope: GroupsEnvelope.self,
+      extract: \.groups,
+      array: [GroupRecord].self
+    )
     return records.map(\.group)
   }
 
@@ -241,10 +272,23 @@ extension ConvexTaskBackend {
     }
   }
 
+  public func invitesList() async throws -> [BoardInvite] {
+    let records = try await fetchEither(
+      ConvexFunction.invitesList,
+      envelope: InvitesEnvelope.self,
+      extract: \.invites,
+      array: [InviteRecord].self
+    )
+    return records.map(\.invite)
+  }
+
   public func routingsList() async throws -> [BoardRouting] {
-    let records: [RoutingRecord] = try await perform {
-      try await self.fetch(ConvexFunction.routingsList, yielding: [RoutingRecord].self)
-    }
+    let records = try await fetchEither(
+      ConvexFunction.routingsList,
+      envelope: RoutingsEnvelope.self,
+      extract: \.routings,
+      array: [RoutingRecord].self
+    )
     return records.map(\.routing)
   }
 

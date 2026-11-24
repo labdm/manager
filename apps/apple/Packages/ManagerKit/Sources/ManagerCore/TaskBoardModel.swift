@@ -110,7 +110,7 @@ public final class TaskBoardModel {
       do {
         for try await snapshot in self.backend.boardSliceUpdates() {
           guard !Task.isCancelled else { return }
-          self.boardSnapshot = snapshot
+          self.applyBoardSlice(snapshot)
         }
       } catch {
         // Keep the last snapshot. A board failure must not blank the shell.
@@ -125,24 +125,40 @@ public final class TaskBoardModel {
     }
   }
 
-  /// Best-effort reads for Groups, Routings, Categories and Resources. Each
-  /// call is independent so one missing deployment function cannot hide the
-  /// records that do exist.
+  /// Best-effort reads for Groups, Invites, Routings, Categories and Resources.
+  /// Each call is independent so one missing deployment function cannot hide
+  /// the records that do exist.
   private func loadShellRecords() async {
     async let groups = try? backend.groupsList()
+    async let invites = try? backend.invitesList()
     async let routings = try? backend.routingsList()
     async let categories = try? backend.categoriesList()
     async let resources = try? backend.resourcesList()
 
     let loadedGroups = await groups
+    let loadedInvites = await invites
     let loadedRoutings = await routings
     let loadedCategories = await categories
     let loadedResources = await resources
 
     if let loadedGroups { boardSnapshot.groups = loadedGroups }
+    if let loadedInvites { boardSnapshot.invites = loadedInvites }
     if let loadedRoutings { boardSnapshot.routings = loadedRoutings }
     if let loadedCategories { boardSnapshot.categories = loadedCategories }
     if let loadedResources { boardSnapshot.resources = loadedResources }
+  }
+
+  /// `board:slice` owns tasks, messages, questions, progressions, and quests.
+  /// Groups, invites, and the menu lists come from their own queries, so a
+  /// later slice must not wipe them.
+  private func applyBoardSlice(_ snapshot: BoardSnapshot) {
+    var merged = snapshot
+    merged.groups = boardSnapshot.groups
+    merged.invites = boardSnapshot.invites
+    merged.routings = boardSnapshot.routings
+    merged.categories = boardSnapshot.categories
+    merged.resources = boardSnapshot.resources
+    boardSnapshot = merged
   }
 
   /// Stops live updates and clears everything user-specific.

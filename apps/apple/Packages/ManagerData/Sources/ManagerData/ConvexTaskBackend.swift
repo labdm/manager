@@ -27,6 +27,7 @@ enum ConvexFunction {
   static let alertsRead = "alerts:read"
   static let groupsList = "groups:list"
   static let groupsCreate = "groups:create"
+  static let invitesList = "invites:list"
   static let invitesCreate = "invites:create"
   static let invitesAccept = "invites:accept"
   static let invitesDecline = "invites:decline"

@@ -47,6 +47,7 @@ public protocol ShellBackend: AnyObject {
   func createInvite(groupId: String, email: String) async throws
   func acceptInvite(id: String) async throws
   func declineInvite(id: String) async throws
+  func invitesList() async throws -> [BoardInvite]
   func routingsList() async throws -> [BoardRouting]
   func createRouting(name: String, cadence: String, title: String) async throws
   func categoriesList() async throws -> [BoardCategory]
