@@ -1,6 +1,7 @@
 package dev.labdm.manager.kit
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 
 /** Websocket state, mapped from Convex's `WebSocketState` by `managerdata`. */
 enum class ConnectionStatus {
@@ -51,4 +52,30 @@ interface TaskBackend {
     suspend fun updateTask(id: String, draft: TaskDraft)
 
     suspend fun deleteTask(id: String)
+
+    /**
+     * One shot of `board:slice`: the Tasks feed's views, messages, questions and
+     * tracks. It is a mutation on the wire because it mints recurrences, so a
+     * fresh call refreshes the snapshot.
+     */
+    fun boardSliceUpdates(): Flow<BoardSnapshot> = flowOf(BoardSnapshot())
+
+    fun groupUpdates(): Flow<List<GroupItem>> = flowOf(emptyList())
+
+    /** Invites arrive with `groups:list`; there is no separate list function. */
+    fun inviteUpdates(): Flow<List<InviteItem>> = flowOf(emptyList())
+
+    fun routingUpdates(): Flow<List<RoutingItem>> = flowOf(emptyList())
+
+    suspend fun createGroup(name: String, icon: String, color: String) = Unit
+
+    suspend fun createInvite(groupId: String, invitee: String) = Unit
+
+    suspend fun acceptInvite(id: String) = Unit
+
+    suspend fun declineInvite(id: String) = Unit
+
+    suspend fun createRouting(trigger: String, execution: String) = Unit
+
+    suspend fun setActivityOnTasks(value: ActivityOnTasks) = Unit
 }

@@ -2,18 +2,31 @@ package dev.labdm.manager.data
 
 import dev.convex.android.ConvexClientWithAuth
 import dev.convex.android.ConvexError
+import dev.convex.android.Float64ToDoubleDecoder
+import dev.convex.android.Float64ToFloatDecoder
+import dev.convex.android.Int64ToIntDecoder
+import dev.convex.android.Int64ToLongDecoder
 import dev.convex.android.InternalError
 import dev.convex.android.ServerError
 import dev.convex.android.WebSocketState
+import dev.labdm.manager.kit.ActivityOnTasks
+import dev.labdm.manager.kit.BoardSnapshot
 import dev.labdm.manager.kit.ConnectionStatus
+import dev.labdm.manager.kit.GroupItem
+import dev.labdm.manager.kit.InviteItem
+import dev.labdm.manager.kit.RoutingItem
 import dev.labdm.manager.kit.TaskBackend
 import dev.labdm.manager.kit.TaskDraft
 import dev.labdm.manager.kit.TaskItem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.modules.SerializersModule
+import kotlinx.serialization.modules.contextual
 
 /**
  * `TaskBackend` over Convex's websocket client with Clerk auth.
@@ -107,6 +120,106 @@ class ConvexTaskBackend(
     }
 
     /**
+     * One shot of the mixed Tasks feed. The wire function is a mutation because
+     * it mints recurrences, so a fresh call replaces the cached snapshot.
+     */
+    override fun boardSliceUpdates(): Flow<BoardSnapshot> = flow {
+        val payload = perform<JsonElement?> {
+            client.mutation<JsonElement?>(
+                ConvexFunction.BOARD_SLICE,
+                mapOf(
+                    "tab" to "tasks",
+                    "timezone" to java.util.TimeZone.getDefault().id,
+                ),
+            )
+        }
+        emit(
+            if (payload == null) {
+                BoardSnapshot()
+            } else {
+                wireJson.decodeFromString<BoardSliceRecord>(payload.toString()).toSnapshot()
+            },
+        )
+    }
+
+    /** Invites arrive in the same payload as groups; there is no separate list call. */
+    override fun groupUpdates(): Flow<List<GroupItem>> = flow {
+        emit(groupsPayload().allGroups.map(GroupWireRecord::toGroup))
+    }
+
+    override fun inviteUpdates(): Flow<List<InviteItem>> = flow {
+        emit(groupsPayload().invites.orEmpty().map(InviteWireRecord::toInvite))
+    }
+
+    override fun routingUpdates(): Flow<List<RoutingItem>> = flow {
+        val payload = perform<JsonElement?> { client.mutation<JsonElement?>(ConvexFunction.ROUTINGS_LIST) }
+        val routings =
+            when (payload) {
+                null -> emptyList()
+                is JsonArray -> wireJson.decodeFromString<List<RoutingWireRecord>>(payload.toString())
+                else -> wireJson.decodeFromString<RoutingsRecord>(payload.toString()).routings.orEmpty()
+            }
+        emit(routings.map(RoutingWireRecord::toRouting))
+    }
+
+    override suspend fun createGroup(name: String, icon: String, color: String) {
+        perform<JsonElement?> {
+            client.mutation<JsonElement?>(
+                ConvexFunction.GROUPS_CREATE,
+                mapOf("name" to name, "icon" to icon, "color" to color),
+            )
+        }
+    }
+
+    override suspend fun createInvite(groupId: String, invitee: String) {
+        perform<JsonElement?> {
+            client.mutation<JsonElement?>(
+                ConvexFunction.INVITES_CREATE,
+                mapOf("groupId" to groupId, "invitee" to invitee),
+            )
+        }
+    }
+
+    override suspend fun acceptInvite(id: String) {
+        perform<JsonElement?> {
+            client.mutation<JsonElement?>(ConvexFunction.INVITES_ACCEPT, mapOf("id" to id))
+        }
+    }
+
+    override suspend fun declineInvite(id: String) {
+        perform<JsonElement?> {
+            client.mutation<JsonElement?>(ConvexFunction.INVITES_DECLINE, mapOf("id" to id))
+        }
+    }
+
+    override suspend fun createRouting(trigger: String, execution: String) {
+        perform<JsonElement?> {
+            client.mutation<JsonElement?>(
+                ConvexFunction.ROUTINGS_CREATE,
+                mapOf("trigger" to trigger, "execution" to execution),
+            )
+        }
+    }
+
+    override suspend fun setActivityOnTasks(value: ActivityOnTasks) {
+        perform<JsonElement?> {
+            client.mutation<JsonElement?>(
+                ConvexFunction.SET_ACTIVITY_ON_TASKS,
+                mapOf("value" to value.wire),
+            )
+        }
+    }
+
+    private suspend fun groupsPayload(): GroupsRecord =
+        when (val payload = perform<JsonElement?> { client.mutation<JsonElement?>(ConvexFunction.GROUPS_LIST) }) {
+            null -> GroupsRecord()
+            is JsonArray -> GroupsRecord(
+                groups = wireJson.decodeFromString<List<GroupWireRecord>>(payload.toString()),
+            )
+            else -> wireJson.decodeFromString<GroupsRecord>(payload.toString())
+        }
+
+    /**
      * The planned day is written to both `plannedOn` and its legacy alias
      * `dueAt`, because they are one fact. `deadlineAt` is sent on its own and
      * never writes either of them.
@@ -156,4 +269,18 @@ class ConvexTaskBackend(
 
     @kotlinx.serialization.Serializable
     private data class ErrorEnvelope(val message: String)
+
+    private companion object {
+        /** Same number decoders ConvexClient uses for tagged `$float` and `$integer`. */
+        val wireJson = Json {
+            ignoreUnknownKeys = true
+            allowSpecialFloatingPointValues = true
+            serializersModule = SerializersModule {
+                contextual(Int64ToIntDecoder)
+                contextual(Int64ToLongDecoder)
+                contextual(Float64ToFloatDecoder)
+                contextual(Float64ToDoubleDecoder)
+            }
+        }
+    }
 }

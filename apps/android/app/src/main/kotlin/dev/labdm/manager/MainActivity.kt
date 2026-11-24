@@ -19,9 +19,9 @@ import com.clerk.api.Clerk
 import com.clerk.ui.auth.AuthView
 import com.clerk.ui.userbutton.UserButton
 import dev.labdm.manager.kit.SessionStatus
+import dev.labdm.manager.kit.ui.ManagerShellScreen
 import dev.labdm.manager.kit.ui.ManagerTheme
 import dev.labdm.manager.kit.ui.SetupRequiredScreen
-import dev.labdm.manager.kit.ui.TaskBoardScreen
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -64,7 +64,7 @@ class MainActivity : ComponentActivity() {
                         preferGoogleOneTap = false,
                     )
 
-                    SessionStatus.SIGNED_IN -> TaskBoardScreen(
+                    SessionStatus.SIGNED_IN -> ManagerShellScreen(
                         model = viewModel.board,
                         account = { UserButton() },
                         onSignOut = { viewModel.signOut() },

@@ -16,12 +16,12 @@ import org.junit.Test
 import java.util.TimeZone
 
 /**
- * The in-memory contract for the sheets-and-bottom-tabs shell. Every rule is
- * checked without Compose: presentation state, the dashboard tiles, the three
- * looks, the explicit series choices, the mark-seen rule and the two clocks.
+ * Shell-independent board rules: explicit series behavior and cadence, the
+ * appearance catalog, and the two clocks. The row-first UI is covered by
+ * `ManagerShellTest`; these checks stay Compose-free.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class SheetShellTest {
+class BoardRulesTest {
 
     private val now = 1_767_321_600_000L
     private val day = 86_400_000L
@@ -61,106 +61,24 @@ class SheetShellTest {
         }
 
     @Test
-    fun `the dashboard is a grid of category tiles and not a side rail`() {
-        val (model, _) = makeBoard()
-
-        assertFalse(model.state.value.showsDashboard)
-        assertEquals(TaskView.HOME.id, model.state.value.selectedViewId)
-
-        model.openDashboard()
-
-        assertTrue(model.state.value.showsDashboard)
-        // Opening the dashboard changes no navigation selection: it is a cover.
-        assertEquals(TaskView.HOME.id, model.state.value.selectedViewId)
-        assertEquals("Home", model.state.value.dashboardTiles.first().title)
-        assertTrue(model.state.value.dashboardTiles.last().isAddTile)
-
-        val household = TaskCatalog.lifeTemplates.first()
-        model.installTemplate(household)
-        assertEquals(3, model.state.value.dashboardTiles.size)
-
-        val tile = model.state.value.dashboardTiles[1]
-        model.selectDashboardTile(tile)
-        assertFalse(model.state.value.showsDashboard)
-        assertEquals("view-${household.slug}", model.state.value.selectedViewId)
-
-        model.openDashboard()
-        model.selectDashboardTile(model.state.value.dashboardTiles.last())
-        assertFalse(model.state.value.showsDashboard)
-        assertEquals(BoardSheet.Category(null), model.state.value.presentedSheet)
-    }
-
-    @Test
-    fun `create presents a sheet and inserts no form in the column`() {
-        val (model, backend) = makeBoard()
-
-        model.beginTask()
-        assertEquals(BoardSheet.CreateTask, model.state.value.presentedSheet)
-        assertNull(model.state.value.draft.plannedOn)
-        assertTrue(backend.createdDrafts.isEmpty())
-        assertEquals(1, model.state.value.composerFocusRequest)
-
-        model.selectSlice(TaskSlice.DAILY)
-        model.beginTask()
-        assertEquals(today, model.state.value.draft.plannedOn)
-        assertEquals(BoardSheet.CreateTask, model.state.value.presentedSheet)
-
-        for (target in listOf<BoardSheet>(
-            BoardSheet.Category(null),
-            BoardSheet.Event(null),
-            BoardSheet.View(null),
-            BoardSheet.Progression(null),
-            BoardSheet.Resource(null),
-        )) {
-            model.present(target)
-            assertEquals(target, model.state.value.presentedSheet)
-        }
-        model.dismissSheet()
-        assertNull(model.state.value.presentedSheet)
-    }
-
-    @Test
-    fun `a failed open keeps NEW and the editor sheet stays open`() = runTest {
-        val task = TaskItem("agent", "Install Omarchy", done = false, origin = TaskOrigin.AGENT)
-        val backend = FailingSeenBackend(InMemoryTaskBackend(listOf(task), now = { now }))
-        val model = TaskBoardModel(backend, now = { now })
-        model.start()
-        assertTrue(model.state.value.tasks.single().isNew)
-
-        model.openTask(task)
-
-        assertEquals(BoardSheet.EditTask("agent"), model.state.value.presentedSheet)
-        assertTrue(model.state.value.tasks.single().isNew)
-        assertNull(model.state.value.tasks.single().seenAt)
-        org.junit.Assert.assertNotNull(model.state.value.errorMessage)
-    }
-
-    @Test
-    fun `task look series and cadence are explicit sheet choices`() = runTest {
+    fun `series and cadence are explicit form choices`() = runTest {
         val (model, backend) = makeBoard()
         val draft =
             TaskDraft(
                 title = "  Read the report  ",
-                look = TaskLook.CARD,
                 series = SeriesBehavior.STACK,
                 cadence = SeriesCadence.WEEKLY,
             )
 
         assertTrue(model.createTaskFromSheet(draft))
 
-        assertEquals(listOf(TaskLook.CARD), backend.createdLooks)
         assertEquals(listOf(SeriesBehavior.STACK), backend.createdSeries)
         assertEquals(listOf(SeriesCadence.WEEKLY), backend.createdCadences)
         val created = backend.storedTasks.first()
-        assertEquals(TaskLook.CARD, created.look)
         assertEquals(SeriesBehavior.STACK, created.series)
         assertEquals(SeriesCadence.WEEKLY, created.cadence)
         assertFalse(created.isNew)
 
-        assertEquals(
-            listOf("check", "row", "card"),
-            TaskLook.entries.map { it.wire },
-        )
         assertEquals(
             listOf("none", "replace", "stack"),
             SeriesBehavior.entries.map { it.wire },
@@ -169,7 +87,6 @@ class SheetShellTest {
             listOf("daily", "weekly", "monthly", "every14days"),
             SeriesCadence.entries.map { it.wire },
         )
-        assertEquals(TaskLook.CHECK, TaskLook.fromWire("nonsense"))
         assertEquals(SeriesBehavior.NONE, SeriesBehavior.fromWire(null))
         assertEquals(SeriesCadence.DAILY, SeriesCadence.fromWire(null))
     }
@@ -258,43 +175,4 @@ class SheetShellTest {
         assertEquals("house", Appearance.icon("house"))
     }
 
-    @Test
-    fun `a blank deadline in the sheet leaves the stored deadline and day in place`() = runTest {
-        val deadline = today + 5 * day
-        val plannedOn = today - 2 * day
-        val (model, _) =
-            makeBoard(
-                listOf(
-                    TaskItem(
-                        "1",
-                        "File taxes",
-                        done = false,
-                        seenAt = 1L,
-                        plannedOn = plannedOn,
-                        plannedTime = 90,
-                        deadlineAt = deadline,
-                    ),
-                ),
-            )
-
-        model.openTask(model.state.value.tasks.single())
-        model.updateEditDraft {
-            it.copy(plannedOn = null, plannedTime = null, deadlineAt = null)
-        }
-        assertTrue(model.saveEdit())
-
-        val saved = model.state.value.tasks.single()
-        assertEquals(deadline, saved.deadlineAt)
-        assertEquals(plannedOn, saved.plannedOn)
-        assertEquals(90, saved.plannedTime)
-    }
-
-    /** Delegates everything but markSeen, which fails as a dropped write would. */
-    private class FailingSeenBackend(
-        private val delegate: InMemoryTaskBackend,
-    ) : TaskBackend by delegate {
-        override suspend fun markSeen(id: String) {
-            error("Could not mark the task as seen")
-        }
-    }
 }

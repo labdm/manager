@@ -150,6 +150,7 @@ data class ProgressionState(
     val current: Int,
     val target: Int,
     val unit: String? = null,
+    val id: String = "progression",
 ) {
     val isComplete: Boolean get() = target > 0 && current >= target
 }

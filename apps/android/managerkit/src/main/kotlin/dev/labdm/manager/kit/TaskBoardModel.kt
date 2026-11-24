@@ -50,6 +50,22 @@ data class BoardState(
     val progression: ProgressionState? = null,
     val quest: QuestState? = null,
     val pinnedTaskIds: Set<String> = emptySet(),
+    /** The row-first shell: one primary destination, one Tasks chip, one selection. */
+    val destination: ShellDestination = ShellDestination.TASKS,
+    val chip: BoardChip = BoardChip.ALL,
+    val selectedRow: ShellSelection? = null,
+    val drawerOpen: Boolean = false,
+    /** A modal menu page such as Settings or Routings, pushed over the shell. */
+    val openMenuPage: String? = null,
+    val showsCreate: Boolean = false,
+    val activityOnTasks: ActivityOnTasks = ActivityOnTasks.OTHERS,
+    val board: BoardSnapshot = BoardSnapshot(),
+    val groups: List<GroupItem> = emptyList(),
+    /** Null means All across the person's groups. New items start in default. */
+    val selectedGroupId: String? = null,
+    val invites: List<InviteItem> = emptyList(),
+    val routings: List<RoutingItem> = emptyList(),
+    val boardError: String? = null,
 ) {
     val draftTitle: String get() = draft.title
     val draftDueAt: Long? get() = draft.plannedOn
@@ -97,19 +113,49 @@ data class BoardState(
 class TaskBoardModel(
     private val backend: TaskBackend,
     private val now: () -> Long = System::currentTimeMillis,
+    initialState: BoardState = BoardState(),
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(BoardState())
+    private val _state = MutableStateFlow(initialState)
     val state: StateFlow<BoardState> = _state.asStateFlow()
 
     private var updatesJob: Job? = null
     private var connectionJob: Job? = null
+    private var boardJob: Job? = null
+    private var groupsJob: Job? = null
+    private var invitesJob: Job? = null
+    private var routingsJob: Job? = null
 
     /** Starts live updates. Idempotent, so auth changes can call it repeatedly. */
     fun start() {
         if (updatesJob?.isActive == true) return
         _state.update { it.copy(phase = BoardPhase.Loading, connection = ConnectionStatus.CONNECTING) }
         startConnectionMonitor()
+
+        boardJob = viewModelScope.launch {
+            backend.boardSliceUpdates()
+                .catch { error ->
+                    _state.update { it.copy(boardError = message(error)) }
+                }
+                .collect { snapshot ->
+                    _state.update { it.copy(board = snapshot, boardError = null) }
+                }
+        }
+        groupsJob = viewModelScope.launch {
+            backend.groupUpdates().collect { groups ->
+                _state.update { it.copy(groups = groups) }
+            }
+        }
+        invitesJob = viewModelScope.launch {
+            backend.inviteUpdates().collect { invites ->
+                _state.update { it.copy(invites = invites) }
+            }
+        }
+        routingsJob = viewModelScope.launch {
+            backend.routingUpdates().collect { routings ->
+                _state.update { it.copy(routings = routings) }
+            }
+        }
 
         updatesJob = viewModelScope.launch {
             // Not fatal: a not-yet-provisioned identity surfaces as a query error.
@@ -137,6 +183,14 @@ class TaskBoardModel(
         updatesJob = null
         connectionJob?.cancel()
         connectionJob = null
+        boardJob?.cancel()
+        boardJob = null
+        groupsJob?.cancel()
+        groupsJob = null
+        invitesJob?.cancel()
+        invitesJob = null
+        routingsJob?.cancel()
+        routingsJob = null
         _state.value = BoardState()
     }
 
@@ -575,6 +629,380 @@ class TaskBoardModel(
     }
 
     private var entitySequence = 0
+
+    // MARK: - Row-first shell
+
+    /** Primary destinations are exclusive: changing one clears the detail pane. */
+    fun selectDestination(destination: ShellDestination) {
+        _state.update {
+            it.copy(
+                destination = destination,
+                chip = BoardChip.ALL,
+                selectedRow = null,
+                drawerOpen = false,
+                openMenuPage = null,
+                showsCreate = false,
+            )
+        }
+    }
+
+    /** A chip is a query change, never a reason to open a row. */
+    fun selectChip(chip: BoardChip) {
+        _state.update { it.copy(chip = chip, selectedRow = null) }
+    }
+
+    fun selectGroup(groupId: String?) = _state.update { it.copy(selectedGroupId = groupId) }
+
+    fun openDrawer() = _state.update { it.copy(drawerOpen = true) }
+
+    fun closeDrawer() = _state.update { it.copy(drawerOpen = false) }
+
+    fun openMenuPage(page: String) = _state.update {
+        it.copy(openMenuPage = page, drawerOpen = false, selectedRow = null, showsCreate = false)
+    }
+
+    fun closeMenuPage() = _state.update { it.copy(openMenuPage = null) }
+
+    /** A new route starts from a blank form; a cancelled draft is not reused. */
+    fun openCreate() = _state.update {
+        it.copy(draft = TaskDraft(), showsCreate = true, selectedRow = null)
+    }
+
+    fun closeCreate() = _state.update { it.copy(showsCreate = false) }
+
+    /** Persists the Tasks-page activity rule. History in Messages ignores it. */
+    fun setActivityOnTasks(value: ActivityOnTasks) {
+        _state.update { it.copy(activityOnTasks = value) }
+        viewModelScope.launch {
+            try {
+                backend.setActivityOnTasks(value)
+            } catch (error: Exception) {
+                _state.update { it.copy(errorMessage = message(error)) }
+            }
+        }
+    }
+
+    /** Every list uses this one row model. There is no card presentation. */
+    fun rowsFor(
+        destination: ShellDestination = _state.value.destination,
+        chip: BoardChip = _state.value.chip,
+    ): List<ShellRow> =
+        when (destination) {
+            ShellDestination.TASKS -> tasksFeed(chip)
+            ShellDestination.MESSAGES -> messageRows()
+            ShellDestination.GROUPS -> groupRows()
+            ShellDestination.CATEGORIES -> categoryRows()
+            ShellDestination.RESOURCES -> resourceRows()
+        }
+
+    fun currentRows(): List<ShellRow> = rowsFor()
+
+    /** Any chip can wear an unseen badge, not just Daily and Events. */
+    fun unseenCount(chip: BoardChip): Int = rowsFor(ShellDestination.TASKS, chip).count { it.unseen }
+
+    /**
+     * Opening a row is the only thing that marks it seen. Painting the list or
+     * preselecting a row on a wide screen never calls a mutation.
+     */
+    suspend fun selectRow(row: ShellRow) {
+        _state.update {
+            it.copy(
+                selectedRow = ShellSelection(row.id, row.title, row.kind),
+                drawerOpen = false,
+            )
+        }
+        if (row.unseen) {
+            try {
+                when (row.kind) {
+                    ShellRowKind.TASK -> {
+                        val id = row.id.removePrefix("task-")
+                        backend.markSeen(id)
+                        val stamp = now()
+                        _state.update { current ->
+                            current.copy(
+                                tasks = current.tasks.map {
+                                    if (it.id == id) it.withSeen(stamp) else it
+                                },
+                            )
+                        }
+                    }
+
+                    ShellRowKind.MESSAGE -> {
+                        val id = row.id.removePrefix("message-")
+                        markAlertRead(id)
+                    }
+
+                    ShellRowKind.INVITE -> {
+                        val id = row.id.removePrefix("invite-")
+                        val stamp = now()
+                        _state.update { current ->
+                            current.copy(
+                                invites = current.invites.map {
+                                    if (it.id == id) it.copy(seenAt = stamp) else it
+                                },
+                            )
+                        }
+                    }
+
+                    else -> Unit
+                }
+            } catch (error: Exception) {
+                _state.update { it.copy(errorMessage = message(error)) }
+            }
+        }
+    }
+
+    fun clearSelection() = _state.update { it.copy(selectedRow = null) }
+
+    /** Invite decisions stay on the row and carry an explicit mark-seen. */
+    suspend fun acceptInvite(id: String) = decideInvite(id, accepted = true)
+
+    suspend fun declineInvite(id: String) = decideInvite(id, accepted = false)
+
+    private suspend fun decideInvite(id: String, accepted: Boolean) {
+        val invite = _state.value.invites.firstOrNull { it.id == id } ?: return
+        if (isWorking("invite-$id")) return
+        _state.update {
+            it.copy(
+                inFlight = it.inFlight + "invite-$id",
+                invites = it.invites.filterNot { invite -> invite.id == id },
+                selectedRow = if (it.selectedRow?.id == "invite-$id") null else it.selectedRow,
+            )
+        }
+        try {
+            if (accepted) backend.acceptInvite(id) else backend.declineInvite(id)
+            _state.update { it.copy(errorMessage = null) }
+        } catch (error: Exception) {
+            _state.update {
+                it.copy(
+                    invites = listOf(invite.copy(seenAt = now())) + it.invites,
+                    errorMessage = message(error),
+                )
+            }
+        } finally {
+            _state.update { it.copy(inFlight = it.inFlight - "invite-$id") }
+        }
+    }
+
+    suspend fun createGroup(name: String, icon: String, color: String): Boolean {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return false
+        return try {
+            backend.createGroup(trimmed, Appearance.icon(icon), Appearance.color(color))
+            true
+        } catch (error: Exception) {
+            _state.update { it.copy(errorMessage = message(error)) }
+            false
+        }
+    }
+
+    suspend fun createInvite(groupId: String, invitee: String): Boolean {
+        if (groupId.isBlank() || invitee.isBlank()) return false
+        return try {
+            backend.createInvite(groupId, invitee.trim())
+            true
+        } catch (error: Exception) {
+            _state.update { it.copy(errorMessage = message(error)) }
+            false
+        }
+    }
+
+    suspend fun createRouting(trigger: String, execution: String): Boolean {
+        if (trigger.isBlank() || execution.isBlank()) return false
+        return try {
+            backend.createRouting(trigger.trim(), execution.trim())
+            true
+        } catch (error: Exception) {
+            _state.update { it.copy(errorMessage = message(error)) }
+            false
+        }
+    }
+
+    private fun tasksFeed(chip: BoardChip): List<ShellRow> {
+        val state = _state.value
+        val tasks =
+            TaskSlices.openTasks(state.tasks).filter { matchesChip(it, chip) }
+        val taskRows =
+            tasks.map { task ->
+                ShellRow(
+                    id = "task-${task.id}",
+                    title = task.title,
+                    kind = ShellRowKind.TASK,
+                    body = task.notes,
+                    isNew = task.isNew,
+                    unseen = task.isNew,
+                    due = dueLabel(task),
+                    progress = progressLabel(task),
+                    done = task.done,
+                )
+            }
+        if (chip != BoardChip.ALL && chip != BoardChip.EVENTS) return taskRows
+
+        val messages =
+            if (chip == BoardChip.ALL) {
+                state.board.alerts.filter { activityVisible(it, state.activityOnTasks) }
+                    .filter { it.isUnread }
+                    .map(::messageRow)
+            } else {
+                emptyList()
+            }
+        val questions =
+            if (chip == BoardChip.ALL) {
+                state.board.questions.filter { it.answeredAt == null }
+                    .map { question ->
+                        ShellRow(
+                            id = "question-${question.id}",
+                            title = question.prompt,
+                            kind = ShellRowKind.QUESTION,
+                            unseen = true,
+                        )
+                    }
+            } else {
+                emptyList()
+            }
+        val invites =
+            if (chip == BoardChip.ALL) inviteRows(state.invites.filter { it.isUnread })
+            else emptyList()
+        val progressions =
+            if (chip == BoardChip.ALL) state.board.progressions.map(::progressionRow)
+            else emptyList()
+        val quests =
+            if (chip == BoardChip.ALL) {
+                state.board.quests.mapNotNull { quest ->
+                    val step = quest.nextStep ?: return@mapNotNull null
+                    ShellRow(
+                        id = "quest-${quest.id}",
+                        title = step.title,
+                        kind = ShellRowKind.TASK,
+                        body = quest.title,
+                        unseen = false,
+                    )
+                }
+            } else {
+                emptyList()
+            }
+
+        return taskRows + messages + questions + invites + progressions + quests
+    }
+
+    private fun matchesChip(task: TaskItem, chip: BoardChip): Boolean =
+        when (chip) {
+            BoardChip.ALL -> true
+            BoardChip.DAILY -> task.plannedDay == DueDateMath.startOfDay(now())
+            BoardChip.WEEKLY -> {
+                val start = DueDateMath.weekStart(now())
+                val day = task.plannedDay
+                day != null && day >= start && day < TaskSlices.nextWeekStart(start)
+            }
+
+            BoardChip.MONTHLY -> {
+                val start = DueDateMath.monthStart(now())
+                val day = task.plannedDay
+                day != null && day >= start && day < TaskSlices.nextMonthStart(start)
+            }
+
+            // Events are the day, week, month and named-event slices. A recurring
+            // row already carries the event's period; the rest arrive with the
+            // board snapshot once the deployment exposes named events.
+            BoardChip.EVENTS -> task.recurrenceId != null || task.periodStart != null
+        }
+
+    private fun activityVisible(alert: BoardAlert, setting: ActivityOnTasks): Boolean =
+        when (setting) {
+            ActivityOnTasks.ALL -> true
+            ActivityOnTasks.NONE -> false
+            ActivityOnTasks.OTHERS -> alert.source != null && alert.source != TaskOrigin.SELF
+        }
+
+    private fun messageRow(alert: BoardAlert) =
+        ShellRow(
+            id = "message-${alert.id}",
+            title = alert.title.ifBlank { "Message" },
+            kind = ShellRowKind.MESSAGE,
+            body = alert.body,
+            unseen = alert.isUnread,
+            isNew = alert.isUnread,
+        )
+
+    private fun inviteRows(invites: List<InviteItem>): List<ShellRow> =
+        invites.map { invite ->
+            ShellRow(
+                id = "invite-${invite.id}",
+                title = invite.title,
+                kind = ShellRowKind.INVITE,
+                body = invite.body,
+                unseen = invite.isUnread,
+                isNew = invite.isUnread,
+                group = invite.groupName,
+            )
+        }
+
+    private fun progressionRow(progression: ProgressionState) =
+        ShellRow(
+            id = "progression-${progression.id}",
+            title = progression.title,
+            kind = ShellRowKind.PROGRESSION,
+            progress = "${progression.current}/${progression.target}" +
+                progression.unit?.let { " $it" }.orEmpty(),
+        )
+
+    private fun dueLabel(task: TaskItem): String? =
+        task.plannedDay?.let { "Due ${TaskDateLabels.planned(it, task.plannedTime)}" }
+
+    private fun progressLabel(task: TaskItem): String? =
+        if (task.recurrenceId != null && task.plannedDay != null) "1 / 1" else null
+
+    private fun messageRows(): List<ShellRow> = _state.value.board.alerts.map(::messageRow)
+
+    private fun groupRows(): List<ShellRow> {
+        val state = _state.value
+        val groups =
+            state.groups.map { group ->
+                ShellRow(
+                    id = "group-${group.id}",
+                    title = group.name,
+                    kind = ShellRowKind.GROUP,
+                    body = if (group.isDefault) "Default group" else null,
+                )
+            }
+        return groups + inviteRows(state.invites)
+    }
+
+    private fun categoryRows(): List<ShellRow> {
+        val views = _state.value.board.views.ifEmpty { defaultViews() }
+        return views.map { view ->
+            ShellRow(
+                id = "category-${view.id}",
+                title = view.title,
+                kind = ShellRowKind.CATEGORY,
+                body = view.kind.wire,
+            )
+        }
+    }
+
+    private fun defaultViews(): List<TaskView> =
+        listOf(TaskView.HOME) + TaskCatalog.lifeTemplates.map { template ->
+            TaskView(
+                id = "view-${template.slug}",
+                title = template.name,
+                icon = template.icon,
+                color = template.color,
+                kind = TaskViewKind.TEMPLATE,
+            )
+        }
+
+    private fun resourceRows(): List<ShellRow> {
+        val state = _state.value
+        return state.board.progressions.map(::progressionRow) +
+            state.routings.map { routing ->
+                ShellRow(
+                    id = "routing-${routing.id}",
+                    title = routing.title,
+                    kind = ShellRowKind.ROUTING,
+                    body = "${routing.trigger} → ${routing.execution}",
+                )
+            }
+    }
 
     // MARK: - Views
 
