@@ -13,6 +13,9 @@ enum ConvexFunction {
   static let setDone = "tasks:setDone"
   static let remove = "tasks:remove"
   static let markSeen = "tasks:markSeen"
+  static let recurrencesCreate = "recurrences:create"
+  static let viewsInstallTemplate = "views:installTemplate"
+  static let boardSlice = "board:slice"
 }
 
 /// Wire shape of `TaskView` from `packages/backend/convex/lib/taskService.ts`.

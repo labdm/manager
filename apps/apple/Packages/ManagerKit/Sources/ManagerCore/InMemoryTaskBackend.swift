@@ -18,6 +18,12 @@ public final class InMemoryTaskBackend: TaskBackend {
   public var updatedDrafts: [String: TaskDraft] = [:]
   public var markedSeenIDs: [String] = []
 
+  /// Recorder for reconcile calls, used by tests.
+  public var reconcileCallCount = 0
+  public var lastReconcileBehavior: String?
+  public var lastReconcileRecurrenceId: String?
+  public var lastReconcilePeriodStart: Date?
+
   /// What a server list would return: no tombstones.
   public var visibleTasks: [TaskItem] {
     storedTasks.filter { $0.deletedAt == nil }
@@ -137,5 +143,99 @@ public final class InMemoryTaskBackend: TaskBackend {
 
   public func emit(connection: ConnectionStatus) {
     connectionContinuation?.yield(connection)
+  }
+
+  /// Reconcile recurring tasks for the given calendar.
+  ///
+  /// - For `replace`: at most one open row per recurrence. The previous open
+  ///   row gets `outcome: "superseded"` and a new open row is inserted for
+  ///   `periodStart`.
+  /// - For `stack`: each missed period adds a new open row. Older rows stay
+  ///   open; no row is superseded.
+  /// - Idempotent: running twice produces the same result (no duplicate rows).
+  public func reconcile(now: Date, calendar: Calendar = .current) {
+    reconcileCallCount += 1
+    lastReconcileBehavior = nil
+    lastReconcileRecurrenceId = nil
+    lastReconcilePeriodStart = nil
+
+    // Group tasks by recurrenceId
+    let recurrenceGroups = Dictionary(
+      grouping: storedTasks) { $0.recurrenceId }
+    .filter { $0.key != nil }
+
+    for (recurrenceId, tasks) in recurrenceGroups {
+      let groupTasks = tasks
+      guard let behavior = groupTasks.first?.behavior else { continue }
+      lastReconcileBehavior = behavior
+      lastReconcileRecurrenceId = recurrenceId
+      lastReconcilePeriodStart = groupTasks.first?.periodStart
+
+      let openTasks = groupTasks.filter {
+        $0.done == false && $0.outcome == nil && $0.deletedAt == nil
+      }
+
+      let nowDay = calendar.startOfDay(for: now)
+
+      if behavior == "replace" {
+        // Replace: at most one open row per (recurrenceId, periodStart).
+        // Mark any open row whose periodStart is not the current period as superseded.
+        let currentPeriodStart = nowDay
+
+        for task in openTasks where task.periodStart != currentPeriodStart {
+          if let index = storedTasks.firstIndex(where: { $0.id == task.id }) {
+            storedTasks[index].outcome = "superseded"
+          }
+        }
+
+        // Ensure there is exactly one open row for the current period.
+        // If none exists, create one.
+        let hasCurrentOpen = openTasks.contains { task in
+          task.periodStart == currentPeriodStart
+        }
+
+        if !hasCurrentOpen {
+          let newTask = TaskItem(
+            id: "task-\(storedTasks.count + 1)",
+            title: groupTasks.first?.title ?? "Recurring task",
+            done: false,
+            dueAt: nowDay,
+            recurrenceId: recurrenceId,
+            behavior: "replace",
+            periodStart: nowDay
+          )
+          storedTasks.append(newTask)
+        }
+      } else if behavior == "stack" {
+        // Stack: each period since the anchor gets its own open row.
+        // Anchor is the periodStart of the first/oldest task in the group.
+        guard let anchorPeriodStart = groupTasks.min(
+          by: { ($0.periodStart ?? nowDay) < ($1.periodStart ?? nowDay) })?.periodStart else { continue }
+
+        // Generate all period starts from anchor to now (daily, inclusive).
+        var periodStart: Date = anchorPeriodStart
+        while periodStart <= nowDay {
+          // Check if an open row already exists for this period
+          let exists = openTasks.contains { task in
+            calendar.startOfDay(for: task.periodStart ?? nowDay) == calendar.startOfDay(for: periodStart)
+          }
+          if !exists {
+            let newTask = TaskItem(
+              id: "task-\(storedTasks.count + 1)",
+              title: groupTasks.first?.title ?? "Recurring task",
+              done: false,
+              dueAt: calendar.startOfDay(for: periodStart),
+              recurrenceId: recurrenceId,
+              behavior: "stack",
+              periodStart: calendar.startOfDay(for: periodStart)
+            )
+            storedTasks.append(newTask)
+          }
+          periodStart = calendar.date(byAdding: .day, value: 1, to: periodStart) ?? nowDay
+        }
+      }
+    }
+
+    continuation?.yield(visibleTasks)
   }
 }

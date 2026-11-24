@@ -27,6 +27,12 @@ public struct TaskItem: Identifiable, Hashable, Sendable, Codable {
   public var seenAt: Date?
   public var completedAt: Date?
   public var deletedAt: Date?
+  /// Recurrence identifier links this task to a recurring series.
+  public var recurrenceId: String?
+  /// Behavior of the recurrence: "replace" or "stack".
+  public var behavior: String?
+  /// Start of the civil day period for recurrence minting.
+  public var periodStart: Date?
 
   /// The planned day and `dueAt` are the same fact. Keeping one stored copy
   /// makes an old row with only `dueAt` and a new row with only `plannedOn`
@@ -58,7 +64,10 @@ public struct TaskItem: Identifiable, Hashable, Sendable, Codable {
     origin: TaskOrigin? = nil,
     seenAt: Date? = nil,
     completedAt: Date? = nil,
-    deletedAt: Date? = nil
+    deletedAt: Date? = nil,
+    recurrenceId: String? = nil,
+    behavior: String? = nil,
+    periodStart: Date? = nil
   ) {
     self.id = id
     self.title = title
@@ -79,6 +88,9 @@ public struct TaskItem: Identifiable, Hashable, Sendable, Codable {
     self.seenAt = seenAt
     self.completedAt = completedAt
     self.deletedAt = deletedAt
+    self.recurrenceId = recurrenceId
+    self.behavior = behavior
+    self.periodStart = periodStart
   }
 
   public func withDone(_ done: Bool, at date: Date = Date()) -> TaskItem {
