@@ -69,3 +69,9 @@ Stored values are strings. An unknown icon draws as `circle` and an unknown colo
 The grid button replaces the board with a full-screen page of tiles. Views open their slice; category, event, progression, and resource tiles open their edit sheet; add tiles open the corresponding create sheet. A "Find more" section lists computed views and templates. Closing the dashboard returns to the board, and the bottom bar stays reachable.
 
 The dashboard is not a place to invent a new kind of record. Category, event, view, progression, and resource are the five entity sheets; everything else stays a planned mechanic until its sheet and mutation exist.
+
+## Checking an interface change
+
+An interface change is not done until it has been looked at in screenshots, and the author has written what is wrong with the picture.
+
+Take screenshots of the signed-in board, the create sheet, the bottom bar at a phone width (about 390px), and the category dashboard. Cover a wide window and a narrow one when the change touches chrome, sheets, or the dashboard. A green test run does not replace that pass. If the picture still shows an inline form, a side menu, a typed icon name, a sheet that pushes the board, or a bar that cannot be used on a phone, fix it before calling the change done.

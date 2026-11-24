@@ -11,10 +11,10 @@ export function TasksPage({
 
   return (
     <main className="shell home-shell">
-      <header>
+      <header className={isSignedIn ? "signed-in" : undefined}>
         <div>
           <p className="mark">Manager</p>
-          <h1>Home</h1>
+          {isSignedIn ? null : <h1>Home</h1>}
         </div>
         <div className="top-actions">
           {showDownloadsLink ? (

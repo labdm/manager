@@ -767,7 +767,9 @@ export function HomeLayout({
                   ? "list-checks"
                   : slice.id === "daily"
                     ? "sun"
-                    : "calendar-days"
+                    : slice.id === "weekly"
+                      ? "calendar-days"
+                      : "calendar-range"
               }
               size={18}
             />

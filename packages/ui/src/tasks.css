@@ -6,12 +6,17 @@
   font-family: "Avenir Next", "Segoe UI", sans-serif;
 }
 
-.shell header {
+.shell > header {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1.75rem;
+}
+
+.shell > header.signed-in {
+  align-items: center;
+  margin-bottom: 0.35rem;
 }
 
 .top-actions {
@@ -253,6 +258,21 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 0.4rem;
+}
+
+@media (max-width: 640px) {
+  .task-row-main {
+    flex-wrap: wrap;
+  }
+
+  .task-summary {
+    flex: 1 1 calc(100% - 2.4rem);
+  }
+
+  .task-row-actions {
+    flex: 1 0 100%;
+    justify-content: flex-end;
+  }
 }
 
 .btn-row-open,

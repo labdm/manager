@@ -5,6 +5,7 @@
   left: 50%;
   bottom: max(0.75rem, env(safe-area-inset-bottom));
   transform: translateX(-50%);
+  box-sizing: border-box;
   width: min(46rem, calc(100% - 1rem));
   display: flex;
   align-items: stretch;
@@ -47,6 +48,25 @@
 .bottom-grid,
 .bottom-add {
   flex: 0 0 4rem;
+}
+
+.bottom-tab span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 420px) {
+  .bottom-grid,
+  .bottom-add {
+    flex-basis: 3.15rem;
+  }
+
+  .bottom-tab {
+    font-size: 0.68rem !important;
+    padding: 0.4rem 0.1rem !important;
+  }
 }
 
 .bottom-add {
@@ -256,6 +276,7 @@
 }
 
 .sheet {
+  box-sizing: border-box;
   background: #fffdf8;
   border: 1px solid #e4dccb;
   box-shadow: 0 24px 80px rgba(28, 25, 21, 0.24);
