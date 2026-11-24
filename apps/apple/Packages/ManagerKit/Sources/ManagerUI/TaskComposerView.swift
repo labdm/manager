@@ -71,6 +71,11 @@ public struct TaskComposerView: View {
         dueDatePicker
       }
     }
+    // The shell's + button starts a row in the active slice; focus the title
+    // so typing can begin immediately.
+    .onChange(of: model.composerFocusRequest) { _ in
+      isTitleFocused = true
+    }
     .padding(.horizontal, 14)
     .padding(.vertical, 12)
     .background {

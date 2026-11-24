@@ -24,6 +24,13 @@ public final class TaskBoardModel {
   public private(set) var errorMessage: String?
   public private(set) var isSaving = false
 
+  /// Shell state: the left rail, the selected view and the active time tab.
+  public private(set) var boardSnapshot: BoardSnapshot = .starter
+  public var selectedViewID: String = BoardViewItem.home.id
+  public var selectedSlice: BoardSlice = .tasks
+  /// Incremented when `+` is tapped so the composer can focus its title field.
+  public private(set) var composerFocusRequest = 0
+
   /// Sidebar selection. Persisted by the app layer, not by this model.
   public var selectedList: TaskList = .all
   public var draftTitle = ""
@@ -32,6 +39,7 @@ public final class TaskBoardModel {
   @ObservationIgnored private let backend: any TaskBackend
   @ObservationIgnored private var updatesTask: Task<Void, Never>?
   @ObservationIgnored private var connectionTask: Task<Void, Never>?
+  @ObservationIgnored private var boardTask: Task<Void, Never>?
 
   public init(backend: any TaskBackend) {
     self.backend = backend
@@ -68,6 +76,21 @@ public final class TaskBoardModel {
         self.phase = .failed(Self.message(for: error))
       }
     }
+
+    // Board content is a separate live query (`board:slice`). If the deployment
+    // has no such function yet, the starter snapshot keeps the shell rendered;
+    // the task list above stays authoritative.
+    boardTask = Task { [weak self] in
+      guard let self else { return }
+      do {
+        for try await snapshot in self.backend.boardSliceUpdates() {
+          guard !Task.isCancelled else { return }
+          self.boardSnapshot = snapshot
+        }
+      } catch {
+        // Keep the last snapshot. A board failure must not blank the rail.
+      }
+    }
   }
 
   /// Stops live updates and clears everything user-specific.
@@ -76,6 +99,8 @@ public final class TaskBoardModel {
     updatesTask = nil
     connectionTask?.cancel()
     connectionTask = nil
+    boardTask?.cancel()
+    boardTask = nil
 
     tasks = []
     phase = .idle
@@ -86,6 +111,10 @@ public final class TaskBoardModel {
     isSaving = false
     draftTitle = ""
     draftDueDate = nil
+    boardSnapshot = .starter
+    selectedViewID = BoardViewItem.home.id
+    selectedSlice = .tasks
+    composerFocusRequest = 0
   }
 
   /// Restarts after a failure without losing the composer draft.
@@ -94,6 +123,8 @@ public final class TaskBoardModel {
     updatesTask = nil
     connectionTask?.cancel()
     connectionTask = nil
+    boardTask?.cancel()
+    boardTask = nil
     start()
   }
 
@@ -126,6 +157,25 @@ public final class TaskBoardModel {
 
   public var openCount: Int {
     tasks.count { !$0.done }
+  }
+
+  // MARK: - Shell
+
+  /// The selected rail view, falling back to Home if the payload removed it.
+  public var selectedView: BoardViewItem {
+    boardSnapshot.views.first { $0.id == selectedViewID } ?? .home
+  }
+
+  /// Mixed rows for the active tab. Empty sections are dropped by the domain.
+  public func boardSections(now: Date = .now, calendar: Calendar = .current) -> [BoardSection] {
+    boardSnapshot.sections(tasks: tasks, slice: selectedSlice, now: now, calendar: calendar)
+  }
+
+  /// `+` starts a row in the current slice: the composer is focused and, for a
+  /// time slice, its planned day is prefilled with that period's first day.
+  public func beginTask(now: Date = .now, calendar: Calendar = .current) {
+    draftDueDate = selectedSlice == .tasks ? nil : selectedSlice.anchor(now: now, calendar: calendar)
+    composerFocusRequest += 1
   }
 
   /// Shown above the list when the socket drops.
@@ -266,6 +316,64 @@ public final class TaskBoardModel {
 
   public func dismissError() {
     errorMessage = nil
+  }
+
+  // MARK: - Shell mutations
+
+  public func installTemplate(_ template: ViewTemplate) async {
+    let view = template.view
+    if !boardSnapshot.views.contains(where: { $0.id == view.id }) {
+      boardSnapshot.views.append(view)
+    }
+    do {
+      try await backend.installTemplate(template)
+      errorMessage = nil
+    } catch {
+      boardSnapshot.views.removeAll { $0.id == view.id }
+      errorMessage = Self.message(for: error)
+    }
+  }
+
+  public func createCustomView(title: String, icon: String, color: String) async {
+    let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    let view = BoardViewItem(
+      id: "view-custom-preview",
+      title: trimmed,
+      icon: Appearance.icon(icon),
+      color: Appearance.color(color),
+      kind: .custom
+    )
+    boardSnapshot.views.append(view)
+    do {
+      try await backend.createCustomView(title: trimmed, icon: icon, color: color)
+      errorMessage = nil
+    } catch {
+      boardSnapshot.views.removeAll { $0.id == view.id }
+      errorMessage = Self.message(for: error)
+    }
+  }
+
+  public func createRecurrence(title: String, behavior: String, now: Date = .now, calendar: Calendar = .current) async {
+    let day = selectedSlice.anchor(now: now, calendar: calendar)
+    do {
+      try await backend.createRecurrence(title: title, behavior: behavior, periodStart: day)
+      errorMessage = nil
+    } catch {
+      errorMessage = Self.message(for: error)
+    }
+  }
+
+  public func dismissAlert(_ alert: BoardAlert) {
+    boardSnapshot.alerts.removeAll { $0.id == alert.id }
+    backend.dismissAlert(id: alert.id)
+  }
+
+  public func answerQuestion(_ question: BoardQuestion, optionID: String) {
+    if let index = boardSnapshot.questions.firstIndex(where: { $0.id == question.id }) {
+      boardSnapshot.questions[index].answeredAt = Date()
+    }
+    backend.answerQuestion(id: question.id, optionID: optionID)
   }
 
   private func replace(_ task: TaskItem) {

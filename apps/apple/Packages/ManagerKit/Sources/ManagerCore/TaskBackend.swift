@@ -11,12 +11,32 @@ public struct TaskBackendError: Error, Equatable, Sendable, LocalizedError {
   public var errorDescription: String? { message }
 }
 
+/// The shell's board content: rail, mixed rows and the mutations that change
+/// them. `ManagerCore` never imports Convex or Clerk; `ManagerData` implements
+/// this with string function names, and tests use the in-memory source.
+@MainActor
+public protocol BoardSource: AnyObject {
+  /// Last known board content. The in-memory source owns it; the Convex source
+  /// caches the latest `board:slice` payload here.
+  var boardSnapshot: BoardSnapshot { get }
+
+  /// Live board content, wired to `board:slice` on the client.
+  func boardSliceUpdates() -> AsyncThrowingStream<BoardSnapshot, Error>
+
+  func installTemplate(_ template: ViewTemplate) async throws
+  func createCustomView(title: String, icon: String, color: String) async throws
+  func createRecurrence(title: String, behavior: String, periodStart: Date) async throws
+
+  func dismissAlert(id: String)
+  func answerQuestion(id: String, optionID: String)
+}
+
 /// Everything the board needs from a backend.
 ///
 /// `ManagerCore` never imports Convex or Clerk: `ManagerData` implements this
 /// against `ConvexClientWithAuth`, and tests implement it in memory.
 @MainActor
-public protocol TaskBackend: AnyObject {
+public protocol TaskBackend: BoardSource {
   /// Provisions the signed-in user's row. Safe to call repeatedly.
   func ensureUser() async throws
 

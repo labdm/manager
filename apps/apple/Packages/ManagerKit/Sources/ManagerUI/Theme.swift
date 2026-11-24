@@ -28,6 +28,21 @@ public extension Color {
   /// Errors and overdue dates.
   static let managerDanger = Color(light: 0x8D2C1F, dark: 0xF09A8B)
 
+  /// Palette tokens from a view's `color` string. An unknown token falls back
+  /// to muted ink instead of trapping, so a newer client's template is safe.
+  static func boardColor(_ token: String) -> Color {
+    switch token {
+    case "sky": Color(light: 0x2D7FF9, dark: 0x7FB6FF)
+    case "mint", "teal", "green": managerAccent
+    case "amber", "yellow", "orange": .orange
+    case "rose", "red", "pink": managerDanger
+    case "violet", "purple", "indigo": .purple
+    case "blue": .blue
+    case "slate", "gray": managerMuted
+    default: managerMuted
+    }
+  }
+
   init(light: UInt32, dark: UInt32) {
     #if canImport(UIKit)
       self.init(
