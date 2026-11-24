@@ -1,31 +1,23 @@
 import type { TaskItem } from "./taskTypes";
 
-/** The four horizontal slices on Home. `tasks` has no date filter. */
-export type BoardTab = "tasks" | "daily" | "weekly" | "monthly";
+/** The four date slices from `board:slice`, plus the Events filter chip. */
+export type BoardTab = "tasks" | "daily" | "weekly" | "monthly" | "events";
 
-export const BOARD_TABS: ReadonlyArray<{ id: BoardTab; label: string }> = [
+export const BOARD_TABS: ReadonlyArray<{ id: Exclude<BoardTab, "events">; label: string }> = [
   { id: "tasks", label: "Tasks" },
   { id: "daily", label: "Daily" },
   { id: "weekly", label: "Weekly" },
   { id: "monthly", label: "Monthly" },
 ];
 
-export type ViewKind = "home" | "computed" | "template" | "custom" | string;
-
-export interface BoardView {
-  id: string;
-  title: string;
-  icon: string;
-  color: string;
-  kind: ViewKind;
-}
-
-/**
- * A task as it appears on the board. `board.slice` returns the same shape as
- * `tasks.list`, with `pinned` set when this view pins the row.
- */
+/** A task as it appears on the mixed board. */
 export interface BoardTask extends TaskItem {
   pinned?: boolean;
+  categoryIcon?: string | null;
+  categoryColor?: string | null;
+  questMark?: boolean;
+  progression?: { current: number; target: number; unit?: string } | null;
+  resourceDelta?: number | null;
 }
 
 export interface ProgressionItem {
@@ -35,6 +27,9 @@ export interface ProgressionItem {
   current: number;
   target: number;
   unit: string;
+  icon?: string | null;
+  color?: string | null;
+  questMark?: boolean;
 }
 
 export interface QuestStepItem {
@@ -55,7 +50,11 @@ export interface QuestItem {
 export interface AlertItem {
   id: string;
   title: string;
-  body: string;
+  body?: string | null;
+  seenAt?: number | null;
+  origin?: string | null;
+  source?: string | null;
+  groupId?: string | null;
 }
 
 export interface QuestionOption {
@@ -67,54 +66,39 @@ export interface QuestionItem {
   id: string;
   prompt: string;
   options: QuestionOption[];
+  seenAt?: number | null;
+  origin?: string | null;
+  groupId?: string | null;
+}
+
+/** Counts used by the Achievements menu page. Zeros are fine when absent. */
+export interface AchievementCounts {
+  completedTasks: number;
+  missedTasks: number;
+  supersededTasks: number;
+  progressionCurrent: number;
+  progressionTarget: number;
+  questsActive: number;
+  questsCompleted: number;
 }
 
 export interface BoardSlice {
-  rail: BoardView[];
-  activeViewId: string;
-  tab: BoardTab;
+  rail?: unknown[];
+  activeViewId?: string;
+  tab?: BoardTab;
   tasks: BoardTask[];
   progressions: ProgressionItem[];
   quests: QuestItem[];
   alerts: AlertItem[];
   questions: QuestionItem[];
-}
-
-export interface ViewTemplate {
-  slug: string;
-  title: string;
-  icon: string;
-  color: string;
-}
-
-export interface CustomViewInput {
-  title: string;
-  icon: string;
-  color: string;
+  achievements?: Partial<AchievementCounts> | null;
+  unseen?: Partial<Record<BoardTab | "all", number>> | null;
 }
 
 export interface BoardSliceArgs {
+  [key: string]: unknown;
   tab: BoardTab;
   viewId?: string;
   timezone: string;
-}
-
-export const HOME_VIEW: BoardView = {
-  id: "home",
-  title: "Home",
-  icon: "house",
-  color: "sky",
-  kind: "home",
-};
-
-/** A board without a server rail still has Home, and Home is always first. */
-export function withHomeView(rail: BoardView[] | null | undefined): BoardView[] {
-  const views = rail ?? [];
-  const homeIndex = views.findIndex(
-    (view) => view.kind === "home" || view.id === HOME_VIEW.id
-  );
-  if (homeIndex === -1) return [HOME_VIEW, ...views];
-  if (homeIndex === 0) return views;
-  const home = views[homeIndex];
-  return [home, ...views.filter((_, index) => index !== homeIndex)];
+  groupId?: string;
 }

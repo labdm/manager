@@ -1,11 +1,7 @@
 import type { Id } from "@manager/backend/convex/_generated/dataModel";
-import { normalizeTaskLook } from "./sheetFacts";
-import type { TaskLook } from "./sheetTypes";
 import type {
   OverduePolicy,
   TaskCreatePayload,
-  TaskDraft,
-  TaskItem,
   TaskUpdatePayload,
 } from "./taskTypes";
 
@@ -200,7 +196,6 @@ export function mapDraftToCreatePayload(draft: {
   remindAt?: string;
   priority?: string;
   overduePolicy?: OverduePolicy;
-  presentation?: TaskLook;
 }): TaskCreatePayload {
   const plannedOn = civilDayToTimestamp(draft.plannedDay);
   const deadlineAt = dateTimeLocalToTimestamp(draft.deadline);
@@ -221,7 +216,6 @@ export function mapDraftToCreatePayload(draft: {
     priority,
     priorityRank,
     overduePolicy: draft.overduePolicy || DEFAULT_OVERDUE_POLICY,
-    presentation: draft.presentation ?? "check",
   };
 }
 
@@ -242,7 +236,6 @@ export function mapDraftToUpdatePayload(
     remindAt?: string;
     priority?: string;
     overduePolicy?: OverduePolicy;
-    presentation?: TaskLook;
   }
 ): TaskUpdatePayload {
   const hasPlannedDay = Boolean(draft.plannedDay && draft.plannedDay.trim());
@@ -268,7 +261,6 @@ export function mapDraftToUpdatePayload(
     priority,
     priorityRank,
     overduePolicy: draft.overduePolicy || DEFAULT_OVERDUE_POLICY,
-    presentation: draft.presentation ?? "check",
   };
 
   // tasks.update uses optional (not nullable) args. Omit cleared dates so the
@@ -282,34 +274,6 @@ export function mapDraftToUpdatePayload(
   if (remindAt != null) payload.remindAt = remindAt;
 
   return payload;
-}
-
-/**
- * Builds a draft from an existing TaskItem for row editing.
- */
-export function buildDraftFromTask(task: TaskItem): TaskDraft {
-  const plannedDay = timestampToCivilDay(task.plannedOn ?? task.dueAt);
-  const plannedTime = minutesToTimeStr(task.plannedTime);
-  const deadline = timestampToDateTimeLocal(task.deadlineAt);
-  const remindAt = timestampToDateTimeLocal(task.remindAt);
-
-  return {
-    title: task.title,
-    notes: task.notes || "",
-    plannedDay,
-    plannedTime,
-    location: task.location || "",
-    deadline,
-    remindAt,
-    priority: task.priority || DEFAULT_PRIORITY,
-    overduePolicy: task.overduePolicy || DEFAULT_OVERDUE_POLICY,
-    look: normalizeTaskLook(task.presentation),
-    series: "none",
-    cadence: "daily",
-    resourceId: task.resourceEffect?.resourceId ?? "",
-    resourceDelta:
-      task.resourceEffect?.delta == null ? "1" : String(task.resourceEffect.delta),
-  };
 }
 
 /**
