@@ -37,8 +37,10 @@ struct GlassCoverageTests {
     let screen = try source("TaskBoardScreen.swift")
     #expect(!screen.contains("GlassEffectContainer"))
     #expect(!screen.contains("ManagerGlass.Container"))
-    #expect(screen.contains("NavigationSplitView"))
+    #expect(!screen.contains("NavigationSplitView"))
     #expect(screen.contains("NavigationStack"))
+    #expect(screen.contains("BottomTabBar"))
+    #expect(screen.contains("fullScreenCover"))
   }
 
   @Test("Text-heavy surfaces keep their opaque styling")
@@ -46,7 +48,7 @@ struct GlassCoverageTests {
     let files = [
       "TaskBoardView.swift",
       "TaskRowView.swift",
-      "TaskSidebar.swift",
+      "CategoryDashboardView.swift",
       "Components/Indicators.swift",
       "Components/Sections.swift",
     ]
@@ -59,9 +61,9 @@ struct GlassCoverageTests {
 
   @Test("Prominent actions still adopt glass")
   func prominentActionsAdoptGlass() throws {
-    let composer = try source("TaskComposerView.swift")
+    let tabBar = try source("BottomTabBar.swift")
     let onboarding = try source("OnboardingViews.swift")
-    #expect(composer.contains(".managerPrimaryButton()"))
+    #expect(tabBar.contains(".managerPrimaryButton()"))
     #expect(onboarding.contains(".managerPrimaryButton()"))
   }
 }

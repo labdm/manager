@@ -27,11 +27,12 @@ The generated plist and Xcode project are gitignored. The app reads configuratio
 
 ## Layout and navigation
 
-- Compact width (folded Duo, iPhone): one `NavigationStack` with a segmented smart-list picker.
-- Regular width (unfolded Duo, iPad, Mac): `NavigationSplitView` with a smart-list sidebar and the board as detail.
-- The board is a single `List` with grouped sections, so swipe actions, keyboard navigation and VoiceOver behave natively on every destination. Completed tasks start folded.
+- Every width uses one `NavigationStack` and one board column. There is no side rail: a bottom glass tab bar carries Tasks, Daily, Weekly and Monthly, a grid button opens a full-screen dashboard of category tiles, and `+` presents a sheet.
+- iPhone (and the folded Duo) presents the sheet from the bottom with detents. A wide iPad or Mac presents the same sheet as a centered dialog (`ManagerCenteredSheet`). Creating or editing a task, category, event, view, progression or resource never pushes the board.
+- Appearance is chosen in a searchable icon grid plus color swatches with a preview; no typed Lucide name is accepted. A task says its own look (`check`, `row`, `card`) and its own series (`none`, `replace`, `stack`) with a cadence (`daily`, `weekly`, `monthly`, `every 14 days`). Neither is inferred from a date.
+- The board is a single `List` with grouped sections, so swipe actions, keyboard navigation and VoiceOver behave natively on every destination.
 - The palette and typography mirror `packages/ui/src/tasks.css`: warm paper, surface, ink and green accent, with real dark mode.
-- Prominent actions use Liquid Glass (`.glassProminent` / `.glass`, via `ManagerGlass`) on iOS/macOS 26+ and the original button styles below that. Text-heavy rows, badges and checkboxes deliberately keep opaque paper surfaces: clear glass on every list row fuses into a washed-out layer that hides task titles. A `GlassEffectContainer` must never wrap `NavigationStack` / `NavigationSplitView` — it collapses the regular-width columns. Both rules are locked down by `ManagerUITests`.
+- Prominent actions use Liquid Glass (`.glassProminent` / `.glass`, via `ManagerGlass`) on iOS/macOS 26+ and the original button styles below that. Text-heavy rows, badges and checkboxes deliberately keep opaque paper surfaces: clear glass on every list row fuses into a washed-out layer that hides task titles. A `GlassEffectContainer` must never wrap the navigation root. `ManagerUITests` locks down both rules and the absence of a sidebar.
 
 ## Data flow
 
@@ -45,7 +46,7 @@ From the repo root:
 
 ```sh
 pnpm apple:project      # generate Config/Secrets.plist + Manager.xcodeproj
-pnpm apple:test         # 50 Swift tests: core logic, M1 facts, config, board and glass coverage
+pnpm apple:test         # Swift tests: core logic, M1 facts, config, board, sheets and glass coverage
 pnpm apple:build:mac
 pnpm apple:build:ios
 pnpm apple:install:ios  # install + launch on the booted simulator

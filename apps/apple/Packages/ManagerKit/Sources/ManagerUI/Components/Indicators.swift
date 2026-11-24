@@ -69,7 +69,7 @@ public struct NewBadge: View {
   }
 }
 
-/// A small count capsule used by the sidebar and section headers.
+/// A small count capsule used by section headers.
 public struct CountBadge: View {
   public let count: Int
   public let emphasized: Bool

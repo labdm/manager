@@ -1,7 +1,8 @@
 import ManagerCore
 import SwiftUI
 
-/// A task row: checkbox, title, fact badges, with open, tap, swipe and context actions.
+/// A task row with one of three explicit looks: check, row or card. Every look
+/// keeps the checkbox, the NEW mark and the same open/toggle/delete actions.
 public struct TaskRowView: View {
   public let task: TaskItem
   public let now: Date
@@ -39,43 +40,28 @@ public struct TaskRowView: View {
       .accessibilityLabel(task.done ? "Reopen" : "Complete")
       .accessibilityHint(task.title)
 
-      VStack(alignment: .leading, spacing: 3) {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-          Text(task.title)
-            .font(ManagerFont.rowTitle)
-            .foregroundStyle(task.done ? Color.managerMuted : Color.managerInk)
-            .strikethrough(task.done, color: Color.managerMuted)
-            .lineLimit(3)
-            .multilineTextAlignment(.leading)
-
-          if task.isNew {
-            NewBadge()
-          }
-        }
-
-        if let dueAt = task.dueAt {
-          DueBadge(description: DueDateLabel.describe(dueAt: dueAt, now: now))
-        }
-
-        if !factSummary.isEmpty {
-          Text(factSummary)
-            .font(ManagerFont.meta)
-            .foregroundStyle(Color.managerMuted)
-            .lineLimit(2)
-            .multilineTextAlignment(.leading)
-        }
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
+      lookContent
+        .frame(maxWidth: .infinity, alignment: .leading)
 
       Spacer(minLength: 0)
     }
-    .padding(.vertical, 4)
+    .padding(.vertical, task.look == .card ? 12 : 4)
     .padding(.horizontal, 14)
-    .frame(minHeight: 48)
-    .background(
+    .frame(minHeight: task.look == .card ? 96 : 48)
+    .background {
       RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .fill(isHovering && !task.done ? Color.managerRaised.opacity(0.7) : Color.clear)
-    )
+        .fill(
+          task.look == .card
+            ? Color.managerRaised
+            : (isHovering && !task.done ? Color.managerRaised.opacity(0.7) : Color.clear)
+        )
+    }
+    .overlay {
+      if task.look == .card {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+          .strokeBorder(Color.managerBorder)
+      }
+    }
     .contentShape(Rectangle())
     .onTapGesture(perform: onOpen)
     .accessibilityElement(children: .combine)
@@ -102,6 +88,75 @@ public struct TaskRowView: View {
     }
   }
 
+  @ViewBuilder
+  private var lookContent: some View {
+    switch task.look {
+    case .check:
+      VStack(alignment: .leading, spacing: 3) {
+        titleLine(lineLimit: 3)
+        if let dueAt = task.dueAt {
+          DueBadge(description: DueDateLabel.describe(dueAt: dueAt, now: now))
+        }
+        if !factSummary.isEmpty {
+          Text(factSummary)
+            .font(ManagerFont.meta)
+            .foregroundStyle(Color.managerMuted)
+            .lineLimit(2)
+            .multilineTextAlignment(.leading)
+        }
+      }
+    case .row:
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
+        titleLine(lineLimit: 1)
+        if let dueAt = task.dueAt {
+          DueBadge(description: DueDateLabel.describe(dueAt: dueAt, now: now))
+        }
+        if !factSummary.isEmpty {
+          Text(factSummary)
+            .font(ManagerFont.meta)
+            .foregroundStyle(Color.managerMuted)
+            .lineLimit(1)
+        }
+      }
+    case .card:
+      VStack(alignment: .leading, spacing: 6) {
+        titleLine(lineLimit: 2)
+        if let notes = task.notes, !notes.isEmpty {
+          Text(notes)
+            .font(ManagerFont.meta)
+            .foregroundStyle(Color.managerMuted)
+            .lineLimit(2)
+        }
+        HStack(spacing: 8) {
+          if let dueAt = task.dueAt {
+            DueBadge(description: DueDateLabel.describe(dueAt: dueAt, now: now))
+          }
+          if !factSummary.isEmpty {
+            Text(factSummary)
+              .font(ManagerFont.meta)
+              .foregroundStyle(Color.managerMuted)
+              .lineLimit(1)
+          }
+        }
+      }
+    }
+  }
+
+  private func titleLine(lineLimit: Int) -> some View {
+    HStack(alignment: .firstTextBaseline, spacing: 6) {
+      Text(task.title)
+        .font(task.look == .card ? ManagerFont.title : ManagerFont.rowTitle)
+        .foregroundStyle(task.done ? Color.managerMuted : Color.managerInk)
+        .strikethrough(task.done, color: Color.managerMuted)
+        .lineLimit(lineLimit)
+        .multilineTextAlignment(.leading)
+
+      if task.isNew {
+        NewBadge()
+      }
+    }
+  }
+
   private var factSummary: String {
     var pieces: [String] = []
     if let plannedTime = task.plannedTime {
@@ -121,6 +176,9 @@ public struct TaskRowView: View {
     }
     if let outcome = task.outcome {
       pieces.append(outcome.capitalized)
+    }
+    if task.look != .check && task.series != .none {
+      pieces.append("\(task.cadence.title) · \(task.series.title)")
     }
     return pieces.joined(separator: " · ")
   }

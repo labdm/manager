@@ -33,6 +33,12 @@ public struct TaskItem: Identifiable, Hashable, Sendable, Codable {
   public var behavior: String?
   /// Start of the civil day period for recurrence minting.
   public var periodStart: Date?
+  /// How the task is drawn: check, row or card.
+  public var look: TaskLook
+  /// The series machine: none, replace or stack. `behavior` is the wire mirror.
+  public var series: SeriesBehavior
+  /// How often a series mints its next occurrence.
+  public var cadence: SeriesCadence
 
   /// The planned day and `dueAt` are the same fact. Keeping one stored copy
   /// makes an old row with only `dueAt` and a new row with only `plannedOn`
@@ -67,7 +73,10 @@ public struct TaskItem: Identifiable, Hashable, Sendable, Codable {
     deletedAt: Date? = nil,
     recurrenceId: String? = nil,
     behavior: String? = nil,
-    periodStart: Date? = nil
+    periodStart: Date? = nil,
+    look: TaskLook = .check,
+    series: SeriesBehavior = .none,
+    cadence: SeriesCadence = .daily
   ) {
     self.id = id
     self.title = title
@@ -91,6 +100,9 @@ public struct TaskItem: Identifiable, Hashable, Sendable, Codable {
     self.recurrenceId = recurrenceId
     self.behavior = behavior
     self.periodStart = periodStart
+    self.look = look
+    self.series = series
+    self.cadence = cadence
   }
 
   public func withDone(_ done: Bool, at date: Date = Date()) -> TaskItem {
@@ -147,6 +159,9 @@ public struct TaskItem: Identifiable, Hashable, Sendable, Codable {
       policy: copy.overduePolicy,
       overdue: copy.overdue
     )
+    copy.look = draft.look
+    // Series and cadence are sheet facts for a planned mechanic: they are not
+    // written by the M1 task mutation, so an edit keeps the stored series.
     return copy
   }
 }

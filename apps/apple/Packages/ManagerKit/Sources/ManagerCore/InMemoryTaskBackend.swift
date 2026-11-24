@@ -15,6 +15,10 @@ public final class InMemoryTaskBackend: TaskBackend {
   public var createdTitles: [String] = []
   public var createdDueDates: [Date?] = []
   public var createdDrafts: [TaskDraft] = []
+  public var createdLooks: [TaskLook] = []
+  public var createdSeries: [SeriesBehavior] = []
+  public var createdCadences: [SeriesCadence] = []
+  public var recurrenceCadences: [String] = []
   public var updatedDrafts: [String: TaskDraft] = [:]
   public var markedSeenIDs: [String] = []
 
@@ -77,6 +81,9 @@ public final class InMemoryTaskBackend: TaskBackend {
     createdTitles.append(draft.title)
     createdDueDates.append(draft.plannedOn)
     createdDrafts.append(draft)
+    createdLooks.append(draft.look)
+    createdSeries.append(draft.series)
+    createdCadences.append(draft.cadence)
 
     let now = Date()
     let day = draft.plannedOn
@@ -109,7 +116,10 @@ public final class InMemoryTaskBackend: TaskBackend {
         overduePolicy: draft.overduePolicy,
         // A create in the app is seen by definition. It never wears NEW.
         origin: .selfCreated,
-        seenAt: now
+        seenAt: now,
+        look: draft.look,
+        series: draft.series,
+        cadence: draft.cadence
       )
     )
     continuation?.yield(visibleTasks)
@@ -200,11 +210,19 @@ public final class InMemoryTaskBackend: TaskBackend {
     emitBoard()
   }
 
-  public func createRecurrence(title: String, behavior: String, periodStart: Date) async throws {
+  public func createRecurrence(
+    title: String,
+    behavior: String,
+    cadence: String = SeriesCadence.daily.rawValue,
+    periodStart: Date
+  ) async throws {
     if failWrites { throw TaskBackendError("Could not create the recurrence") }
-    let day = Calendar.current.startOfDay(for: periodStart)
+    // The caller passes a civil-day anchor already; re-rounding it in a
+    // different calendar would shift it into the previous day near midnight.
+    let day = periodStart
     let recurrenceId = "rec-\(UUID().uuidString)"
     createdRecurrences.append((title, behavior, day))
+    recurrenceCadences.append(cadence)
     let now = Date()
     storedTasks.append(
       TaskItem(
@@ -216,7 +234,9 @@ public final class InMemoryTaskBackend: TaskBackend {
         seenAt: now,
         recurrenceId: recurrenceId,
         behavior: behavior,
-        periodStart: day
+        periodStart: day,
+        series: SeriesBehavior(decoded: behavior),
+        cadence: SeriesCadence(decoded: cadence)
       )
     )
     reconcile(now: day, calendar: .current)
@@ -286,6 +306,7 @@ public final class InMemoryTaskBackend: TaskBackend {
         group.compactMap { $0.periodStart.map { self.civilDay($0, calendar: calendar) } }
       )
       let title = group.first?.title ?? "Recurring task"
+      let cadence = group.first?.cadence ?? .daily
 
       func isOpen(_ task: TaskItem) -> Bool {
         !task.done && task.outcome == nil && task.deletedAt == nil
@@ -296,36 +317,55 @@ public final class InMemoryTaskBackend: TaskBackend {
         storedTasks[index].outcome = "superseded"
       }
 
+      func mintPeriod(_ day: Date) {
+        mint(
+          title: title,
+          recurrenceId: recurrenceId,
+          behavior: behavior,
+          cadence: cadence,
+          day: day,
+          now: now
+        )
+      }
+
       if behavior == "replace" {
+        let currentPeriod = self.currentPeriod(
+          cadence: cadence,
+          today: today,
+          anchor: existingDays.min(),
+          calendar: calendar
+        )
+
         // Older open periods lose their slot on the board.
         for task in group where isOpen(task) {
           guard let start = task.periodStart,
-                self.civilDay(start, calendar: calendar) < today
+                self.civilDay(start, calendar: calendar) < currentPeriod
           else { continue }
           supersede(task)
         }
 
-        // If several open rows already land on today, keep one and supersede
-        // the rest so the series can never show two dishes for one day.
-        let todayOpen = group.filter {
-          isOpen($0) && $0.periodStart.map { self.civilDay($0, calendar: calendar) } == today
+        // Several open rows on the current period cannot both stay: dishes
+        // leave exactly one.
+        let currentOpen = group.filter {
+          isOpen($0) && $0.periodStart.map { self.civilDay($0, calendar: calendar) } == currentPeriod
         }
-        for task in todayOpen.dropFirst() { supersede(task) }
+        for task in currentOpen.dropFirst() { supersede(task) }
 
-        // Mint today only when the series has no row for this civil day at all.
-        if !existingDays.contains(today) {
-          mint(title: title, recurrenceId: recurrenceId, behavior: behavior, day: today, now: now)
+        // Mint the current period only when the series has no row for it at all.
+        if !existingDays.contains(currentPeriod) {
+          mintPeriod(currentPeriod)
         }
       } else if behavior == "stack" {
-        guard let anchor = existingDays.min() else { continue }
+        guard var day = existingDays.min() else { continue }
 
-        var day = anchor
+        var guardCount = 0
         while day <= today {
-          if !existingDays.contains(day) {
-            mint(title: title, recurrenceId: recurrenceId, behavior: behavior, day: day, now: now)
-          }
-          guard let next = calendar.date(byAdding: .day, value: 1, to: day), next > day else { break }
+          if !existingDays.contains(day) { mintPeriod(day) }
+          guard let next = self.nextPeriod(day, cadence: cadence, calendar: calendar),
+                next > day, guardCount < 10_000
+          else { break }
           day = next
+          guardCount += 1
         }
       }
     }
@@ -337,10 +377,64 @@ public final class InMemoryTaskBackend: TaskBackend {
     calendar.startOfDay(for: date)
   }
 
+  /// The period containing `today` for a cadence. Daily is today itself;
+  /// weekly is Monday-first; monthly is the first of the month; a fourteen-day
+  /// series counts forward from its oldest row.
+  private func currentPeriod(
+    cadence: SeriesCadence,
+    today: Date,
+    anchor: Date?,
+    calendar: Calendar
+  ) -> Date {
+    switch cadence {
+    case .daily:
+      return today
+    case .weekly:
+      var mondayFirst = calendar
+      mondayFirst.firstWeekday = 2
+      let components = mondayFirst.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today)
+      return mondayFirst.date(from: components) ?? today
+    case .monthly:
+      let components = calendar.dateComponents([.year, .month], from: today)
+      return calendar.date(from: components) ?? today
+    case .every14days:
+      guard let anchor else { return today }
+      var day = anchor
+      while let next = self.nextPeriod(day, cadence: .every14days, calendar: calendar),
+            next <= today
+      {
+        day = next
+      }
+      return day
+    }
+  }
+
+  private func nextPeriod(_ day: Date, cadence: SeriesCadence, calendar: Calendar) -> Date? {
+    switch cadence {
+    case .daily:
+      return calendar.date(byAdding: .day, value: 1, to: day)
+    case .weekly:
+      var mondayFirst = calendar
+      mondayFirst.firstWeekday = 2
+      return mondayFirst.date(byAdding: .weekOfYear, value: 1, to: day)
+    case .monthly:
+      return calendar.date(byAdding: .month, value: 1, to: day)
+    case .every14days:
+      return calendar.date(byAdding: .day, value: 14, to: day)
+    }
+  }
+
   /// A minted occurrence is authored by the app and already seen, so it never
   /// wears NEW. The planned day and `dueAt` are one fact; a deadline is never
   /// derived from it.
-  private func mint(title: String, recurrenceId: String, behavior: String, day: Date, now: Date) {
+  private func mint(
+    title: String,
+    recurrenceId: String,
+    behavior: String,
+    cadence: SeriesCadence,
+    day: Date,
+    now: Date
+  ) {
     storedTasks.append(
       TaskItem(
         id: nextID(),
@@ -351,7 +445,9 @@ public final class InMemoryTaskBackend: TaskBackend {
         seenAt: now,
         recurrenceId: recurrenceId,
         behavior: behavior,
-        periodStart: day
+        periodStart: day,
+        series: SeriesBehavior(decoded: behavior),
+        cadence: cadence
       )
     )
   }

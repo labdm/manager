@@ -83,7 +83,7 @@ public enum ManagerMetrics {
 }
 
 public extension View {
-  /// Paints the paper background behind a screen, including under the sidebar.
+  /// Paints the paper background behind a screen, including under the tab bar.
   func managerBackground() -> some View {
     background(Color.managerPaper.ignoresSafeArea())
   }
