@@ -2,10 +2,10 @@ import Foundation
 import Testing
 @testable import ManagerCore
 
-/// The in-memory contract for the sheets-and-bottom-tabs shell. Every rule is
-/// checked without SwiftUI: presentation state, the dashboard grid, the three
-/// looks, the explicit series choices and the NEW mark-seen rule.
-@Suite("Sheet shell")
+/// The in-memory contract for create, edit and detail flow. Every rule is
+/// checked without SwiftUI: compact create routing, sheet presentation, the
+/// explicit series choices and the NEW mark-seen rule.
+@Suite("Create and detail flow")
 @MainActor
 struct SheetShellTests {
   let now = utcDate(2026, 11, 19)
@@ -35,45 +35,14 @@ struct SheetShellTests {
     }
   }
 
-  @Test("The dashboard is a grid of category tiles, not a sidebar")
-  func dashboardIsNotASidebar() async {
-    let (board, _) = makeBoard()
-
-    #expect(!board.showsDashboard)
-    #expect(board.selectedViewID == BoardViewItem.home.id)
-
-    board.openDashboard()
-
-    #expect(board.showsDashboard)
-    // Opening the dashboard changes no navigation selection: it is a cover.
-    #expect(board.selectedViewID == BoardViewItem.home.id)
-    #expect(board.dashboardTiles.map(\.title).first == "Home")
-    #expect(board.dashboardTiles.last?.isAddTile == true)
-
-    let household = ViewTemplateCatalog.all[0].view
-    await board.installTemplate(ViewTemplateCatalog.all[0])
-    #expect(board.boardSnapshot.views.contains(household))
-    #expect(board.dashboardTiles.count == 3)
-
-    board.selectDashboardTile(
-      DashboardTile(id: household.id, title: household.title, icon: household.icon, color: household.color)
-    )
-    #expect(!board.showsDashboard)
-    #expect(board.selectedViewID == household.id)
-
-    board.openDashboard()
-    board.selectDashboardTile(board.dashboardTiles.last!)
-    #expect(!board.showsDashboard)
-    #expect(board.presentedSheet == .category(nil))
-  }
-
-  @Test("A create action presents a sheet and inserts no form in the column")
+  @Test("A create action pushes on compact width and inserts no form in the column")
   func createPresentsASheet() async {
     let (board, backend) = makeBoard()
     await waitFor { board.phase == .ready }
 
     board.beginTask(now: now, calendar: calendar)
     #expect(board.presentedSheet == .createTask)
+    #expect(board.isCreateRouteActive)
     #expect(board.draftDueDate == nil)
 
     // The board is unchanged by the create action: no row was inserted and no
@@ -82,10 +51,10 @@ struct SheetShellTests {
     #expect(board.tasks.isEmpty)
     #expect(board.composerFocusRequest == 1)
 
-    board.selectedSlice = .daily
+    board.selectChip(.daily)
     board.beginTask(now: now, calendar: calendar)
     #expect(board.draftDueDate == calendar.startOfDay(for: now))
-    #expect(board.presentedSheet == .createTask)
+    #expect(board.isCreateRouteActive)
 
     for target in [
       BoardSheet.category(nil), .event(nil), .view(nil), .progression(nil), .resource(nil),
@@ -95,19 +64,21 @@ struct SheetShellTests {
     }
     board.dismissSheet()
     #expect(board.presentedSheet == nil)
+    #expect(!board.isCreateRouteActive)
   }
 
-  @Test("A row tap presents the editor and a failed markSeen keeps NEW")
-  func editSheetKeepsTheFailedMarkSeenRule() async {
+  @Test("Selecting a row fills detail without opening the editor")
+  func selectingRowKeepsTheFailedMarkSeenRule() async {
     let task = TaskItem(id: "agent", title: "Install Omarchy", done: false, origin: .agent)
     let (board, backend) = makeBoard(tasks: [task])
     await waitFor { board.phase == .ready }
     #expect(board.tasks.first?.isNew == true)
 
     backend.failWrites = true
-    await board.openTask(task)
+    await board.selectRow(.task(task))
 
-    #expect(board.presentedSheet == .editTask("agent"))
+    #expect(board.presentedSheet == nil)
+    #expect(board.detailTitle == "Install Omarchy")
     // The write failed, so nothing was recorded as seen and NEW stays.
     #expect(backend.markedSeenIDs.isEmpty)
     #expect(board.tasks.first?.seenAt == nil)
@@ -115,7 +86,19 @@ struct SheetShellTests {
     #expect(board.errorMessage == "Could not mark the task as seen")
   }
 
-  @Test("Task look, series and cadence are explicit sheet choices")
+  @Test("A stored card hint never changes the one row")
+  func presentationHintIsIgnored() {
+    let card = TaskItem(id: "card", title: "Card", done: false, look: .card)
+    let check = TaskItem(id: "check", title: "Check", done: false, look: .check)
+    let cardRow = BoardRow.task(card)
+    let checkRow = BoardRow.task(check)
+
+    #expect(cardRow.typeMark == checkRow.typeMark)
+    #expect(cardRow.primaryActionTitle == checkRow.primaryActionTitle)
+    #expect(cardRow.title == "Card")
+  }
+
+  @Test("Task look, series and cadence are explicit choices")
   func lookSeriesAndCadence() async {
     let (board, backend) = makeBoard()
     await waitFor { board.phase == .ready }

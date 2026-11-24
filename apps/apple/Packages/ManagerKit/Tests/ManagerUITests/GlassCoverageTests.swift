@@ -2,12 +2,8 @@ import Foundation
 import ManagerUI
 import Testing
 
-/// Regression guards for the Liquid Glass redesign.
-///
-/// The first version of the redesign wrapped `NavigationSplitView` in a
-/// `GlassEffectContainer` and put clear-glass surfaces on every row, badge and
-/// checkbox. That collapsed the Mac detail column and washed out task titles.
-/// Glass belongs on controls; text-heavy rows keep their opaque paper styling.
+/// Regression guards for Liquid Glass in the row-first shell. Glass belongs on
+/// controls; text-heavy rows, the detail pane and the split view stay opaque.
 @Suite("Liquid Glass")
 struct GlassCoverageTests {
   private static let packageRoot = URL(fileURLWithPath: #filePath)
@@ -32,15 +28,16 @@ struct GlassCoverageTests {
     #expect(theme.contains("#if compiler(>=6.2)"))
   }
 
-  @Test("Navigation root is not wrapped in a glass fusion container")
+  @Test("The adaptive root has no glass fusion container")
   func navigationRootHasNoGlassContainer() throws {
-    let screen = try source("TaskBoardScreen.swift")
-    #expect(!screen.contains("GlassEffectContainer"))
-    #expect(!screen.contains("ManagerGlass.Container"))
-    #expect(!screen.contains("NavigationSplitView"))
-    #expect(screen.contains("NavigationStack"))
-    #expect(screen.contains("BottomTabBar"))
-    #expect(screen.contains("fullScreenCover"))
+    let shell = try source("ManagerShell.swift")
+    #expect(!shell.contains("GlassEffectContainer"))
+    #expect(!shell.contains("ManagerGlass.Container"))
+    #expect(shell.contains("TabView"))
+    #expect(shell.contains("NavigationSplitView"))
+    #expect(shell.contains("navigationDestination"))
+    #expect(!shell.contains("BottomTabBar"))
+    #expect(!shell.contains("fullScreenCover"))
   }
 
   @Test("Text-heavy surfaces keep their opaque styling")
@@ -48,7 +45,7 @@ struct GlassCoverageTests {
     let files = [
       "TaskBoardView.swift",
       "TaskRowView.swift",
-      "CategoryDashboardView.swift",
+      "RowDetailView.swift",
       "Components/Indicators.swift",
       "Components/Sections.swift",
     ]
@@ -59,11 +56,13 @@ struct GlassCoverageTests {
     }
   }
 
-  @Test("Prominent actions still adopt glass")
+  @Test("Prominent actions still adopt glass through ManagerGlass")
   func prominentActionsAdoptGlass() throws {
-    let tabBar = try source("BottomTabBar.swift")
+    let shell = try source("ManagerShell.swift")
+    let menu = try source("MenuNavigation.swift")
     let onboarding = try source("OnboardingViews.swift")
-    #expect(tabBar.contains(".managerPrimaryButton()"))
+    #expect(shell.contains(".managerPrimaryButton()"))
+    #expect(menu.contains(".managerButton()"))
     #expect(onboarding.contains(".managerPrimaryButton()"))
   }
 }

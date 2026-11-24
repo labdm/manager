@@ -36,6 +36,25 @@ public protocol BoardSource: AnyObject {
   func answerQuestion(id: String, optionID: String)
 }
 
+/// Records the row-first shell reads and writes through string-named Convex
+/// functions. A deployment that predates one of them fails that one call; the
+/// model keeps the shell rendered with empty arrays.
+@MainActor
+public protocol ShellBackend: AnyObject {
+  func setActivityOnTasks(_ value: ActivityOnTasks) async throws
+  func groupsList() async throws -> [BoardGroup]
+  func createGroup(name: String) async throws
+  func createInvite(groupId: String, email: String) async throws
+  func acceptInvite(id: String) async throws
+  func declineInvite(id: String) async throws
+  func routingsList() async throws -> [BoardRouting]
+  func createRouting(name: String, cadence: String, title: String) async throws
+  func categoriesList() async throws -> [BoardCategory]
+  func resourcesList() async throws -> [BoardResource]
+  func createAlert(title: String, body: String) async throws
+  func markAlertSeen(id: String) async throws
+}
+
 /// Everything the board needs from a backend.
 ///
 /// `ManagerCore` never imports Convex or Clerk: `ManagerData` implements this

@@ -1,21 +1,26 @@
 import ManagerCore
 import SwiftUI
 
-/// The board column: header, list filter, banners and the mixed rows. Chrome
-/// lives outside this view — `TaskBoardScreen` owns the bottom tabs, the grid
-/// dashboard and the sheet. No form is ever inserted into this column.
-public struct TaskBoardView: View {
+/// The list column. Every chip can wear an unseen badge, and every record is
+/// drawn with the one row anatomy. Nothing here inserts a form or opens a row.
+public struct BoardListView: View {
   @Bindable public var model: TaskBoardModel
+  public let onSelect: (BoardRow) -> Void
 
-  public init(model: TaskBoardModel) {
+  public init(model: TaskBoardModel, onSelect: @escaping (BoardRow) -> Void) {
     self.model = model
+    self.onSelect = onSelect
   }
 
   public var body: some View {
     TimelineView(.everyMinute) { context in
       List {
-        headerRow(now: context.date)
-        listPickerRow
+        if model.selectedDestination == .tasks {
+          headerRow
+          chipStrip
+        } else if model.selectedDestination == .groups {
+          headerRow
+        }
 
         if let notice = model.connectionNotice {
           bannerRow(InlineBanner(text: notice, style: .warning))
@@ -34,44 +39,68 @@ public struct TaskBoardView: View {
       .environment(\.defaultMinListRowHeight, 1)
     }
     .managerBackground()
-    #if os(macOS)
-      .navigationTitle("Manager")
-    #endif
   }
 
-  // MARK: - Rows
-
-  private func headerRow(now: Date) -> some View {
+  private var headerRow: some View {
     CenteredRow {
-      VStack(alignment: .leading, spacing: 4) {
-        Text("Manager").managerMark()
-        Text(model.selectedView.title)
-          .font(ManagerFont.display)
-          .foregroundStyle(Color.managerInk)
-        Text(subtitle(now: now))
-          .font(ManagerFont.meta)
-          .foregroundStyle(Color.managerMuted)
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(.top, 12)
-      .padding(.horizontal, 14)
-    }
-    .plainRow(top: 0, bottom: 8)
-  }
-
-  /// The smart list filter is a control in the column, not a navigation rail.
-  private var listPickerRow: some View {
-    CenteredRow {
-      Picker("List", selection: $model.selectedList) {
-        ForEach(TaskList.allCases) { list in
-          Text(list.title).tag(list)
+      HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Manager").managerMark()
+          Text(model.selectedDestination.title)
+            .font(ManagerFont.display)
+            .foregroundStyle(Color.managerInk)
         }
+        Spacer(minLength: 0)
+        GroupSwitcher(model: model)
       }
-      .pickerStyle(.segmented)
-      .labelsHidden()
       .padding(.horizontal, 14)
+      .padding(.top, 10)
     }
-    .plainRow()
+    .plainRow(top: 0, bottom: 6)
+  }
+
+  /// Chips sit above the list and swipe sideways. Any chip may show an unseen
+  /// count; there is no tab bar or segmented control below it.
+  private var chipStrip: some View {
+    CenteredRow {
+      ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: 8) {
+          ForEach(BoardChip.allCases) { chip in
+            chipButton(chip)
+          }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 2)
+      }
+    }
+    .plainRow(top: 2, bottom: 8)
+  }
+
+  private func chipButton(_ chip: BoardChip) -> some View {
+    let count = model.badgeCount(for: chip)
+    return Button {
+      model.selectChip(chip)
+    } label: {
+      HStack(spacing: 5) {
+        Image(systemName: chip.systemImage)
+          .font(.system(size: 11, weight: .semibold))
+        Text(chip.title)
+          .font(ManagerFont.meta.weight(.semibold))
+      }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 7)
+      .foregroundStyle(
+        model.selectedChip == chip ? Color.managerAccentInk : Color.managerInk
+      )
+      .background {
+        Capsule(style: .continuous)
+          .fill(model.selectedChip == chip ? Color.managerAccent : Color.managerRaised)
+      }
+    }
+    .managerButton()
+    .accessibilityLabel(chip.title)
+    .accessibilityAddTraits(model.selectedChip == chip ? .isSelected : [])
+    .modifier(OptionalBadge(count: count))
   }
 
   private func bannerRow(_ banner: InlineBanner) -> some View {
@@ -83,143 +112,55 @@ public struct TaskBoardView: View {
 
   @ViewBuilder
   private func contentRows(now: Date) -> some View {
-    switch model.phase {
-    case .idle, .loading:
-      skeletonRows
-    case let .failed(message):
-      noticeRow(
+    let rows = model.rows
+    if rows.isEmpty {
+      CenteredRow {
         BoardNoticeView(
-          systemImage: "wifi.exclamationmark",
-          title: "Can't reach the backend",
-          message: message,
-          actionTitle: "Try again",
-          action: model.retry
+          systemImage: model.selectedDestination.systemImage,
+          title: "Nothing here yet",
+          message: "Records you add through Manager or an agent appear here."
         )
-      )
-    case .ready:
-      let sections = model.boardSections(now: now)
-      if sections.isEmpty {
-        noticeRow(
-          BoardNoticeView(
-            systemImage: model.selectedView.resolvedIcon,
-            title: model.selectedList.emptyTitle,
-            message: model.selectedList.emptyMessage
-          )
+        .padding(.horizontal, 14)
+      }
+      .plainRow(top: 20, bottom: 20)
+    } else {
+      ForEach(rows) { row in
+        BoardRowView(
+          row: row,
+          now: now,
+          isWorking: model.isWorking(on: row.id),
+          onOpen: { onSelect(row) },
+          onAction: { Task { await model.performPrimaryAction(on: row) } },
+          onAccept: { Task { await model.acceptInvite(inviteFor: row) } },
+          onDecline: { Task { await model.declineInvite(inviteFor: row) } },
+          onDelete: {
+            if case let .task(task) = row { Task { await model.delete(task) } }
+          }
         )
+        .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+      }
+    }
+  }
+}
+
+/// Applies `.badge()` only when the count is non-zero.
+public struct OptionalBadge: ViewModifier {
+  public let count: Int
+
+  public init(count: Int) {
+    self.count = count
+  }
+
+  public func body(content: Content) -> some View {
+    Group {
+      if count > 0 {
+        content.badge(count)
       } else {
-        ForEach(sections) { section in
-          boardSection(section, now: now)
-        }
+        content
       }
     }
-  }
-
-  private func boardSection(_ section: BoardSection, now: Date) -> some View {
-    Section {
-      ForEach(section.rows) { row in
-        boardRow(row, now: now)
-      }
-    } header: {
-      CenteredRow {
-        Text(section.title)
-          .font(.system(.caption2).weight(.semibold))
-          .tracking(1.4)
-          .textCase(.uppercase)
-          .foregroundStyle(Color.managerMuted)
-          .padding(.horizontal, 14)
-          .padding(.top, 10)
-      }
-      .plainRow(top: 0, bottom: 2)
-    }
-  }
-
-  @ViewBuilder
-  private func boardRow(_ row: BoardRow, now: Date) -> some View {
-    switch row {
-    case let .task(task):
-      taskRow(task, now: now)
-    case let .alert(alert):
-      CenteredRow {
-        AlertBandView(alert: alert, onDismiss: { model.dismissAlert(alert) })
-          .padding(.horizontal, 14)
-      }
-      .plainRow()
-    case let .question(question):
-      CenteredRow {
-        QuestionView(question: question, onAnswer: { optionID in
-          model.answerQuestion(question, optionID: optionID)
-        })
-        .padding(.horizontal, 14)
-      }
-      .plainRow()
-    case let .progression(progression):
-      CenteredRow {
-        ProgressionView(progression: progression)
-          .padding(.horizontal, 14)
-      }
-      .plainRow()
-    case let .quest(quest):
-      CenteredRow {
-        QuestView(quest: quest)
-          .padding(.horizontal, 14)
-      }
-      .plainRow()
-    }
-  }
-
-  private func taskRow(_ task: TaskItem, now: Date) -> some View {
-    CenteredRow {
-      TaskRowView(
-        task: task,
-        now: now,
-        isWorking: model.isWorking(on: task.id),
-        onOpen: {
-          Task { await model.openTask(task) }
-        },
-        onToggle: { Task { await model.toggle(task) } },
-        onDelete: { Task { await model.delete(task) } }
-      )
-    }
-    .listRowInsets(EdgeInsets(top: 1, leading: 8, bottom: 1, trailing: 8))
-    .listRowSeparator(.hidden)
-    .listRowBackground(Color.clear)
-  }
-
-  private func noticeRow(_ notice: BoardNoticeView) -> some View {
-    CenteredRow {
-      notice.padding(.horizontal, 14)
-    }
-    .plainRow()
-  }
-
-  private var skeletonRows: some View {
-    ForEach(0..<3, id: \.self) { index in
-      CenteredRow {
-        HStack(spacing: 12) {
-          RoundedRectangle(cornerRadius: 7, style: .continuous)
-            .strokeBorder(Color.managerBorder, lineWidth: 1.5)
-            .frame(width: 22, height: 22)
-          Capsule()
-            .fill(Color.managerBorder.opacity(0.6))
-            .frame(width: index == 1 ? 210 : 300, height: 11)
-          Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 14)
-        .redacted(reason: .placeholder)
-      }
-      .plainRow()
-    }
-  }
-
-  // MARK: - Helpers
-
-  private func subtitle(now: Date) -> String {
-    guard model.phase == .ready else { return "Loading…" }
-    let open = model.openCount
-    guard open > 0 else { return "All clear." }
-    let today = model.openTodayCount(now: now)
-    return today > 0 ? "\(today) due today · \(open) open" : "\(open) open"
   }
 }
 

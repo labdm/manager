@@ -75,6 +75,33 @@ public struct BoardViewItem: Identifiable, Hashable, Codable, Sendable {
     self.templateID = templateID
   }
 
+  private enum CodingKeys: String, CodingKey {
+    case id, title, icon, color, kind
+    case templateID = "templateId"
+    case templateIDUpper = "templateID"
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = try container.decodeIfPresent(String.self, forKey: .id) ?? ""
+    title = try container.decodeIfPresent(String.self, forKey: .title) ?? id
+    icon = try container.decodeIfPresent(String.self, forKey: .icon) ?? ""
+    color = try container.decodeIfPresent(String.self, forKey: .color) ?? ""
+    kind = try container.decodeIfPresent(Kind.self, forKey: .kind) ?? .custom
+    templateID = try container.decodeIfPresent(String.self, forKey: .templateID)
+      ?? container.decodeIfPresent(String.self, forKey: .templateIDUpper)
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(id, forKey: .id)
+    try container.encode(title, forKey: .title)
+    try container.encode(icon, forKey: .icon)
+    try container.encode(color, forKey: .color)
+    try container.encode(kind, forKey: .kind)
+    try container.encodeIfPresent(templateID, forKey: .templateID)
+  }
+
   public static let home = BoardViewItem(
     id: "home",
     title: "Home",
@@ -206,11 +233,36 @@ public struct BoardAlert: Identifiable, Hashable, Codable, Sendable {
   public var id: String
   public var title: String
   public var body: String
+  /// `self`, `agent` or `member`. Missing fields decode as empty and are read
+  /// as someone else.
+  public var author: String
+  public var seenAt: Date?
 
-  public init(id: String, title: String, body: String) {
+  public init(
+    id: String,
+    title: String,
+    body: String,
+    author: String = "",
+    seenAt: Date? = nil
+  ) {
     self.id = id
     self.title = title
     self.body = body
+    self.author = author
+    self.seenAt = seenAt
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case id, title, body, author, seenAt
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = try container.decode(String.self, forKey: .id)
+    title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+    body = try container.decodeIfPresent(String.self, forKey: .body) ?? ""
+    author = try container.decodeIfPresent(String.self, forKey: .author) ?? ""
+    seenAt = try container.decodeIfPresent(Date.self, forKey: .seenAt)
   }
 }
 
@@ -231,12 +283,20 @@ public struct BoardQuestion: Identifiable, Hashable, Codable, Sendable {
   public var prompt: String
   public var options: [QuestionOption]
   public var answeredAt: Date?
+  public var seenAt: Date?
 
-  public init(id: String, prompt: String, options: [QuestionOption], answeredAt: Date? = nil) {
+  public init(
+    id: String,
+    prompt: String,
+    options: [QuestionOption],
+    answeredAt: Date? = nil,
+    seenAt: Date? = nil
+  ) {
     self.id = id
     self.prompt = prompt
     self.options = options
     self.answeredAt = answeredAt
+    self.seenAt = seenAt
   }
 }
 
@@ -287,20 +347,115 @@ public struct BoardQuest: Identifiable, Hashable, Codable, Sendable {
   }
 }
 
-public enum BoardRow: Identifiable, Sendable {
+/// One row anatomy for every record type. The stored `look` is deliberately
+/// not part of this enum: a `card` hint in data still draws as this row.
+public enum BoardRow: Identifiable, Hashable, Sendable {
   case task(TaskItem)
   case alert(BoardAlert)
   case question(BoardQuestion)
+  case invite(BoardInvite)
   case progression(BoardProgression)
   case quest(BoardQuest)
+  case group(BoardGroup)
+  case category(BoardCategory)
+  case resource(BoardResource)
+  case routing(BoardRouting)
 
   public var id: String {
     switch self {
     case let .task(task): "task-\(task.id)"
     case let .alert(alert): "alert-\(alert.id)"
     case let .question(question): "question-\(question.id)"
+    case let .invite(invite): "invite-\(invite.id)"
     case let .progression(progression): "progression-\(progression.id)"
     case let .quest(quest): "quest-\(quest.id)"
+    case let .group(group): "group-\(group.id)"
+    case let .category(category): "category-\(category.id)"
+    case let .resource(resource): "resource-\(resource.id)"
+    case let .routing(routing): "routing-\(routing.id)"
+    }
+  }
+
+  public var title: String {
+    switch self {
+    case let .task(task): task.title
+    case let .alert(alert): alert.title
+    case let .question(question): question.prompt
+    case let .invite(invite): invite.title
+    case let .progression(progression): progression.title
+    case let .quest(quest): quest.title
+    case let .group(group): group.title
+    case let .category(category): category.displayTitle
+    case let .resource(resource): resource.displayTitle
+    case let .routing(routing): routing.displayTitle
+    }
+  }
+
+  public var body: String? {
+    switch self {
+    case let .task(task): task.notes
+    case let .alert(alert): alert.body
+    case let .invite(invite): invite.email.isEmpty ? nil : "Invited to \(invite.groupId)"
+    case let .resource(resource): resource.unit.isEmpty ? nil : "\(resource.quantity) \(resource.unit)"
+    case let .routing(routing): routing.title.isEmpty ? nil : "\(routing.trigger) · \(routing.executionKind)"
+    default: nil
+    }
+  }
+
+  /// The type mark is an image, never a button.
+  public var typeMark: String {
+    switch self {
+    case .task: "checkmark.circle"
+    case .alert: "bell"
+    case .question: "questionmark.circle"
+    case .invite: "envelope"
+    case .progression: "chart.bar"
+    case .quest: "exclamationmark.circle"
+    case .group: "person.3"
+    case .category: "square.stack.3d.up"
+    case .resource: "chart.bar"
+    case .routing: "gearshape.2"
+    }
+  }
+
+  public var isUnseen: Bool {
+    switch self {
+    case let .task(task): task.isNew
+    case let .alert(alert): alert.isUnseen
+    case let .question(question): question.seenAt == nil && question.answeredAt == nil
+    case let .invite(invite): invite.isNew
+    default: false
+    }
+  }
+
+  public var progressText: String? {
+    switch self {
+    case let .progression(progression): "\(progression.current)/\(progression.target)"
+    default: nil
+    }
+  }
+
+  public var groupID: String? {
+    switch self {
+    case let .task(task): task.groupID
+    case let .invite(invite): invite.groupId
+    case .group: nil
+    default: nil
+    }
+  }
+
+  public var primaryActionTitle: String {
+    switch self {
+    case let .task(task): task.done ? "Reopen" : "Done"
+    case .alert: "Mark as read"
+    case .question: "Answer"
+    case .invite: "Accept"
+    case .progression: "Log"
+    case .quest: "Open"
+    case .group: "Open"
+    case .category: "Open"
+    case .resource: "Open"
+    case .routing: "Open"
     }
   }
 }
@@ -321,35 +476,72 @@ public struct BoardSection: Identifiable, Sendable {
 
 /// Everything the shell draws except the live task list. It is the unit-test
 /// source: the in-memory backend owns one, and the Convex backend keeps the
-/// last `board:slice` payload in the same shape.
+/// last `board:slice` payload in the same shape. Every newer array defaults to
+/// empty, so an older payload still draws the shell.
 public struct BoardSnapshot: Codable, Sendable {
   public var views: [BoardViewItem]
   public var alerts: [BoardAlert]
   public var questions: [BoardQuestion]
   public var progressions: [BoardProgression]
   public var quests: [BoardQuest]
+  public var groups: [BoardGroup]
+  public var invites: [BoardInvite]
+  public var routings: [BoardRouting]
+  public var categories: [BoardCategory]
+  public var resources: [BoardResource]
 
   public init(
     views: [BoardViewItem] = [.home],
     alerts: [BoardAlert] = [],
     questions: [BoardQuestion] = [],
     progressions: [BoardProgression] = [],
-    quests: [BoardQuest] = []
+    quests: [BoardQuest] = [],
+    groups: [BoardGroup] = [],
+    invites: [BoardInvite] = [],
+    routings: [BoardRouting] = [],
+    categories: [BoardCategory] = [],
+    resources: [BoardResource] = []
   ) {
     self.views = views
     self.alerts = alerts
     self.questions = questions
     self.progressions = progressions
     self.quests = quests
+    self.groups = groups
+    self.invites = invites
+    self.routings = routings
+    self.categories = categories
+    self.resources = resources
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case views, alerts, questions, progressions, quests
+    case groups, invites, routings, categories, resources
+  }
+
+  /// An older payload omits the newer arrays. Every one of them becomes an
+  /// empty array rather than failing the whole snapshot.
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    views = try container.decodeIfPresent([BoardViewItem].self, forKey: .views) ?? [.home]
+    alerts = try container.decodeIfPresent([BoardAlert].self, forKey: .alerts) ?? []
+    questions = try container.decodeIfPresent([BoardQuestion].self, forKey: .questions) ?? []
+    progressions = try container.decodeIfPresent([BoardProgression].self, forKey: .progressions) ?? []
+    quests = try container.decodeIfPresent([BoardQuest].self, forKey: .quests) ?? []
+    groups = try container.decodeIfPresent([BoardGroup].self, forKey: .groups) ?? []
+    invites = try container.decodeIfPresent([BoardInvite].self, forKey: .invites) ?? []
+    routings = try container.decodeIfPresent([BoardRouting].self, forKey: .routings) ?? []
+    categories = try container.decodeIfPresent([BoardCategory].self, forKey: .categories) ?? []
+    resources = try container.decodeIfPresent([BoardResource].self, forKey: .resources) ?? []
   }
 
   /// Content used when no backend payload has arrived yet (previews, tests and
-  /// the first frame before `board:slice` answers). Rail and tabs come from the
-  /// shell itself, so they always show even with an empty snapshot.
+  /// the first frame before `board:slice` answers). The destinations and chips
+  /// come from the shell itself, so they always show with an empty snapshot.
   public static let starter = BoardSnapshot(
     views: [.home],
     alerts: [
-      BoardAlert(id: "flight", title: "Flight is Thursday", body: "Leave for the airport by 08:00."),
+      BoardAlert(id: "flight", title: "Flight is Thursday", body: "Leave for the airport by 08:00.", author: "agent"),
     ],
     questions: [
       BoardQuestion(
@@ -376,31 +568,47 @@ public struct BoardSnapshot: Codable, Sendable {
     ]
   )
 
-  /// Mixed rows for one slice, grouped by kind. Empty groups are dropped; the
-  /// rail and tabs are owned by the shell so they never disappear.
+  /// Mixed rows for one chip, grouped by kind. Empty groups are dropped; the
+  /// chips and destinations are owned by the shell so they never disappear.
   public func sections(
     tasks: [TaskItem],
-    slice: BoardSlice,
+    chip: BoardChip,
+    activity: ActivityOnTasks = .others,
+    groupID: String? = nil,
     now: Date = .now,
     calendar: Calendar = .current
   ) -> [BoardSection] {
-    let openTasks = tasks.filter {
-      !$0.done && $0.outcome == nil && $0.deletedAt == nil && slice.contains($0.dueAt ?? .distantPast, now: now, calendar: calendar)
+    let inGroup = { (rowGroupID: String?) -> Bool in
+      guard let groupID else { return true }
+      return rowGroupID == nil || rowGroupID == groupID
     }
+    let openTasks = tasks.filter { task in
+      !task.done
+        && task.outcome == nil
+        && task.deletedAt == nil
+        && chip.contains(task, now: now, calendar: calendar)
+        && inGroup(task.groupID)
+    }
+    let visibleAlerts = alerts.filter { activity.includes($0) && $0.seenAt == nil }
+    let openQuestions = questions.filter { $0.answeredAt == nil }
+    let pendingInvites = invites.filter { $0.isPending }
+    let visibleProgressions = progressions.filter { _ in inGroup(nil) }
 
     var result: [BoardSection] = []
-    if !alerts.isEmpty {
-      result.append(BoardSection(id: "alerts", title: "Alerts", rows: alerts.map(BoardRow.alert)))
+    if !visibleAlerts.isEmpty {
+      result.append(BoardSection(id: "messages", title: "Messages", rows: visibleAlerts.map(BoardRow.alert)))
     }
-    let openQuestions = questions.filter { $0.answeredAt == nil }
     if !openQuestions.isEmpty {
       result.append(BoardSection(id: "questions", title: "Questions", rows: openQuestions.map(BoardRow.question)))
+    }
+    if !pendingInvites.isEmpty {
+      result.append(BoardSection(id: "invites", title: "Invites", rows: pendingInvites.map(BoardRow.invite)))
     }
     if !openTasks.isEmpty {
       result.append(BoardSection(id: "tasks", title: "Tasks", rows: openTasks.map(BoardRow.task)))
     }
-    if !progressions.isEmpty {
-      result.append(BoardSection(id: "progression", title: "Progression", rows: progressions.map(BoardRow.progression)))
+    if !visibleProgressions.isEmpty {
+      result.append(BoardSection(id: "progressions", title: "Progressions", rows: visibleProgressions.map(BoardRow.progression)))
     }
     if !quests.isEmpty {
       result.append(BoardSection(id: "quests", title: "Quests", rows: quests.map(BoardRow.quest)))
