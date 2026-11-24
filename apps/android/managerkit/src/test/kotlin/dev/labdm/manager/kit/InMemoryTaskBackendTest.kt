@@ -17,6 +17,8 @@ import org.junit.Test
 class InMemoryTaskBackendTest {
 
     private val now = 1_767_321_600_000L
+    private val dayStart: Long = DueDateMath.startOfDay(now)
+    private val twoDaysBefore: Long = dayStart - 2 * 86_400_000L
 
     private fun backend(initial: List<TaskItem> = emptyList()) =
         InMemoryTaskBackend(initial, now = { now })
@@ -166,5 +168,95 @@ class InMemoryTaskBackendTest {
         assertEquals(1_767_312_000_000L, created.plannedDay)
         assertEquals(Priority.NORMAL, created.priority)
         assertEquals(10, created.priorityRank)
+    }
+
+    // MARK: - Replace and stack
+
+    @Test
+    fun `a replace daily series supersedes the older period and keeps one open row`() = runTest {
+        val backend = backend(
+            listOf(
+                TaskItem(
+                    id = "1",
+                    title = "Wash dishes",
+                    done = false,
+                    plannedOn = twoDaysBefore,
+                    recurrenceId = "dishes",
+                    periodStart = twoDaysBefore,
+                    behavior = TaskBehavior.REPLACE,
+                ),
+            ),
+        )
+
+        backend.reconcile(now)
+
+        // The open board keeps one row; the missed period is superseded and left behind.
+        assertEquals(1, backend.allTasks.count { TaskFacts.isOpen(it) })
+        assertEquals(TaskOutcome.SUPERSEDED, backend.storedTasks.first { it.id == "1" }.outcome)
+    }
+
+    @Test
+    fun `a stack daily journal keeps every open period`() = runTest {
+        val backend = backend(
+            listOf(
+                TaskItem(
+                    id = "1",
+                    title = "Journal",
+                    done = false,
+                    plannedOn = twoDaysBefore,
+                    recurrenceId = "journal",
+                    periodStart = twoDaysBefore,
+                    behavior = TaskBehavior.STACK,
+                ),
+                TaskItem(
+                    id = "2",
+                    title = "Journal",
+                    done = false,
+                    plannedOn = twoDaysBefore + 86_400_000L,
+                    recurrenceId = "journal",
+                    periodStart = twoDaysBefore + 86_400_000L,
+                    behavior = TaskBehavior.STACK,
+                ),
+                TaskItem(
+                    id = "3",
+                    title = "Journal",
+                    done = false,
+                    plannedOn = dayStart,
+                    recurrenceId = "journal",
+                    periodStart = dayStart,
+                    behavior = TaskBehavior.STACK,
+                ),
+            ),
+        )
+
+        backend.reconcile(now)
+
+        // A stack keeps every period open, so a missed day never closes the next one.
+        assertEquals(3, backend.allTasks.count { TaskFacts.isOpen(it) })
+    }
+
+    @Test
+    fun `a second reconcile does not duplicate the mint`() = runTest {
+        val backend = backend(
+            listOf(
+                TaskItem(
+                    id = "1",
+                    title = "Wash dishes",
+                    done = false,
+                    plannedOn = twoDaysBefore,
+                    recurrenceId = "dishes",
+                    periodStart = twoDaysBefore,
+                    behavior = TaskBehavior.REPLACE,
+                ),
+            ),
+        )
+
+        backend.reconcile(now)
+        backend.reconcile(now)
+
+        assertEquals(1, backend.allTasks.count { TaskFacts.isOpen(it) })
+        // One superseded row plus the minted open row: nothing was minted twice.
+        assertEquals(2, backend.storedTasks.size)
+        assertEquals(1, backend.storedTasks.count { TaskFacts.isOpen(it) })
     }
 }

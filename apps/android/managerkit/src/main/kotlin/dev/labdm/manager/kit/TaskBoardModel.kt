@@ -36,12 +36,27 @@ data class BoardState(
     val isSaving: Boolean = false,
     val draft: TaskDraft = TaskDraft(),
     val edit: TaskEdit? = null,
+    val selectedSlice: TaskSlice = TaskSlice.TASKS,
+    val selectedView: TaskView = TaskView.HOME,
+    val findMoreOpen: Boolean = false,
+    val alerts: List<BoardAlert> = emptyList(),
+    val questions: List<BoardQuestion> = emptyList(),
+    val progression: ProgressionState? = null,
+    val quest: QuestState? = null,
+    val pinnedTaskIds: Set<String> = emptySet(),
 ) {
     val draftTitle: String get() = draft.title
     val draftDueAt: Long? get() = draft.plannedOn
 
     /** Rows another person or an agent wrote and you have not opened. */
     val newCount: Int get() = tasks.count { it.isNew }
+
+    /** Unread alerts. Reading one clears it from the band. */
+    val unreadAlerts: List<BoardAlert> get() = alerts.filter { it.isUnread }
+
+    /** Open questions. An answered question leaves the band. */
+    val openQuestions: List<BoardQuestion>
+        get() = questions.filter { it.answeredAt == null }
 }
 
 /**
@@ -382,6 +397,108 @@ class TaskBoardModel(
         } finally {
             _state.update { it.copy(inFlight = it.inFlight - task.id) }
         }
+    }
+
+    // MARK: - Home shell
+
+    /** Selects the built-in Home view. */
+    fun selectHome() {
+        _state.update { it.copy(selectedView = TaskView.HOME, findMoreOpen = false) }
+    }
+
+    /** Selects a time slice for the main column. */
+    fun selectSlice(slice: TaskSlice) {
+        _state.update { it.copy(selectedSlice = slice) }
+    }
+
+    /** Opens the Find more catalog. */
+    fun openFindMore() {
+        _state.update { it.copy(findMoreOpen = true) }
+    }
+
+    /** Closes the Find more catalog. */
+    fun closeFindMore() {
+        _state.update { it.copy(findMoreOpen = false) }
+    }
+
+    /** Installs a catalog template onto the rail. */
+    fun installTemplate(template: TaskTemplate) {
+        _state.update {
+            it.copy(
+                selectedView = TaskView(
+                    id = "view-${template.slug}",
+                    title = template.name,
+                    icon = TaskIcons.resolve(template.icon),
+                    color = TaskColors.resolve(template.color),
+                    kind = TaskViewKind.TEMPLATE,
+                ),
+                findMoreOpen = false,
+            )
+        }
+    }
+
+    /** Creates a custom view from the editor's title, icon and color. Unknown values fall back. */
+    fun createCustomView(title: String, icon: String, color: String): TaskView =
+        TaskView(
+            id = "view-custom",
+            title = title,
+            icon = TaskIcons.resolve(icon),
+            color = TaskColors.resolve(color),
+            kind = TaskViewKind.CUSTOM,
+        )
+
+    /** Marks an alert read; reading clears it from the band and keeps it in the log. */
+    fun markAlertRead(alertId: String) {
+        _state.update { current ->
+            current.copy(alerts = current.alerts.map { if (it.id == alertId) it.copy(seenAt = now()) else it })
+        }
+    }
+
+    /** Records an answer; the question leaves the open band. */
+    fun answerQuestion(questionId: String, optionId: String) {
+        _state.update { current ->
+            current.copy(
+                questions = current.questions.map { question ->
+                    if (question.id == questionId) question.copy(answeredAt = now()) else question
+                },
+            )
+        }
+    }
+
+    /** Pins a row to the top of the current view. A pin changes no priority or date. */
+    fun pinTask(taskId: String) {
+        _state.update { it.copy(pinnedTaskIds = it.pinnedTaskIds + taskId) }
+    }
+
+    /** Removes a pin. */
+    fun unpinTask(taskId: String) {
+        _state.update { it.copy(pinnedTaskIds = it.pinnedTaskIds - taskId) }
+    }
+
+    // MARK: - Slices
+
+    fun tasksForSlice(slice: TaskSlice, now: Long = now()): List<TaskItem> =
+        TaskSlices.tasksFor(_state.value.tasks, slice, now)
+
+    fun tasksForCurrentSlice(now: Long = now()): List<TaskItem> = tasksForSlice(_state.value.selectedSlice, now)
+
+    /**
+     * The planned day a create in the current slice lands on. A time-bound slice
+     * composes into its own day; the open Tasks view filters by nothing.
+     */
+    fun composerPlannedDay(slice: TaskSlice = _state.value.selectedSlice, now: Long = now()): Long? =
+        when (slice) {
+            TaskSlice.TASKS -> null
+            TaskSlice.DAILY, TaskSlice.WEEKLY, TaskSlice.MONTHLY -> DueDateMath.startOfDay(now)
+        }
+
+    /** Composes a task in the current slice, prefilling the slice's day. */
+    suspend fun addTaskInCurrentSlice(): Boolean {
+        val day = composerPlannedDay()
+        if (day != null && _state.value.draft.plannedOn == null) {
+            _state.update { it.copy(draft = it.draft.copy(plannedOn = day)) }
+        }
+        return addTask()
     }
 
     fun dismissError() {

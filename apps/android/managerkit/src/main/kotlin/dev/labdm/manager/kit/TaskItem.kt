@@ -37,6 +37,12 @@ data class TaskItem(
     /** When the viewer opened the row. Absent plus an agent origin means NEW. */
     val seenAt: Long? = null,
     val completedAt: Long? = null,
+    /** The series this occurrence belongs to, when it repeats. */
+    val recurrenceId: String? = null,
+    /** The civil day this occurrence covers. Start of a local day, like `plannedOn`. */
+    val periodStart: Long? = null,
+    /** How the series treats its open occurrences. Absent on one-off tasks. */
+    val behavior: TaskBehavior? = null,
 ) {
     /** The planned day is one fact with two wire names. */
     val plannedDay: Long?
@@ -58,6 +64,18 @@ data class TaskItem(
     )
 
     fun withSeen(now: Long): TaskItem = copy(seenAt = now)
+
+    /** Marks the occurrence terminal for its series: superseded or missed. */
+    fun withOutcome(outcome: TaskOutcome?, now: Long = System.currentTimeMillis()): TaskItem = copy(
+        outcome = outcome,
+        overdue = TaskFacts.isOverdue(deadlineAt, done, now),
+        effectiveRank = TaskFacts.effectiveRank(
+            priority = priority,
+            priorityRank = priorityRank,
+            overdue = TaskFacts.isOverdue(deadlineAt, done, now),
+            overduePolicy = overduePolicy,
+        ),
+    )
 
     /** Applies an edited draft locally. `deadlineAt` never writes the planned day. */
     fun withDraft(draft: TaskDraft, now: Long = System.currentTimeMillis()): TaskItem {

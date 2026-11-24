@@ -4,6 +4,7 @@ import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,11 +13,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -31,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -44,17 +49,29 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.labdm.manager.kit.BoardAlert
+import dev.labdm.manager.kit.BoardColumnSections
 import dev.labdm.manager.kit.BoardPhase
+import dev.labdm.manager.kit.BoardState
+import dev.labdm.manager.kit.BoardQuestion
+import dev.labdm.manager.kit.BoardQuestionOption
 import dev.labdm.manager.kit.DueDateMath
 import dev.labdm.manager.kit.OverduePolicy
 import dev.labdm.manager.kit.PlannedTimeMath
 import dev.labdm.manager.kit.Priority
+import dev.labdm.manager.kit.ProgressionState
+import dev.labdm.manager.kit.QuestState
 import dev.labdm.manager.kit.TaskBoardModel
 import dev.labdm.manager.kit.TaskDateLabels
 import dev.labdm.manager.kit.TaskDraft
 import dev.labdm.manager.kit.TaskItem
+import dev.labdm.manager.kit.TaskSlice
+import dev.labdm.manager.kit.TaskView
+import dev.labdm.manager.kit.TaskViewKind
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Date
@@ -62,6 +79,10 @@ import java.util.Date
 /**
  * The signed-in screen. `account` and `onSignOut` come from the app layer
  * because the account control is a Clerk composable, like Apple's `Accessory`.
+ *
+ * The Home shell: a left rail with Home and Find more, a main column with the
+ * Tasks / Daily / Weekly / Monthly tabs and a composing `+`, and the column that
+ * draws alerts, questions, task rows, progression bars and quest steppers.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,56 +109,343 @@ fun TaskBoardScreen(
             )
         },
     ) { padding ->
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp)
                 .background(MaterialTheme.colorScheme.background),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            model.connectionNotice?.let { Notice(it) }
-            state.errorMessage?.let { message ->
-                Notice(
-                    text = message,
-                    action = {
-                        TextButton(onClick = { model.dismissError() }) { Text("Dismiss") }
-                    },
-                )
-            }
-
-            Composer(model = model)
-
-            when (val phase = state.phase) {
-                BoardPhase.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth())
-                is BoardPhase.Failed -> Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(phase.message, color = MaterialTheme.colorScheme.error)
-                        Button(onClick = { model.retry() }) { Text("Retry") }
-                    }
-                }
-                BoardPhase.Idle, BoardPhase.Ready -> Unit
-            }
-
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                items(items = state.tasks, key = { it.id }) { task ->
-                    TaskRow(
-                        task = task,
-                        busy = task.id in state.inFlight,
-                        onOpen = { scope.launch { model.openTask(task) } },
-                        onCheckedChange = { done -> scope.launch { model.setDone(task.id, done) } },
-                        onDelete = { scope.launch { model.delete(task) } },
-                    )
-                }
-            }
+            HomeRail(
+                selectedView = state.selectedView,
+                findMoreOpen = state.findMoreOpen,
+                onHome = { model.selectHome() },
+                onFindMore = { model.openFindMore() },
+                modifier = Modifier.width(104.dp),
+            )
+            HomeMain(
+                model = model,
+                state = state,
+                scope = scope,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 
     state.edit?.let { edit ->
         TaskEditorDialog(model = model, draft = edit.draft, isSaving = edit.isSaving)
+    }
+}
+@Composable
+private fun HomeRail(
+    selectedView: TaskView,
+    findMoreOpen: Boolean,
+    onHome: () -> Unit,
+    onFindMore: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        RailButton(
+            icon = Icons.Filled.Home,
+            label = "Home",
+            selected = selectedView.kind == TaskViewKind.HOME && !findMoreOpen,
+            onClick = onHome,
+        )
+        RailButton(
+            icon = Icons.Filled.List,
+            label = "Find more",
+            selected = findMoreOpen,
+            onClick = onFindMore,
+        )
+    }
+}
+
+@Composable
+private fun RailButton(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun HomeMain(
+    model: TaskBoardModel,
+    state: BoardState,
+    scope: CoroutineScope,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        MainTabs(
+            selectedSlice = state.selectedSlice,
+            onSliceSelect = { model.selectSlice(it) },
+            onCompose = { scope.launch { model.addTaskInCurrentSlice() } },
+        )
+        Composer(model = model)
+        BoardColumn(model = model, state = state, scope = scope)
+    }
+}
+
+@Composable
+private fun MainTabs(
+    selectedSlice: TaskSlice,
+    onSliceSelect: (TaskSlice) -> Unit,
+    onCompose: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        TaskSlice.entries.forEach { slice ->
+            if (slice == selectedSlice) {
+                Button(onClick = { onSliceSelect(slice) }) { Text(slice.wire.replaceFirstChar { it.uppercase() }) }
+            } else {
+                OutlinedButton(onClick = { onSliceSelect(slice) }) { Text(slice.wire.replaceFirstChar { it.uppercase() }) }
+            }
+        }
+        Button(onClick = onCompose) { Text("+") }
+    }
+}
+
+@Composable
+private fun BoardColumn(
+    model: TaskBoardModel,
+    state: BoardState,
+    scope: CoroutineScope,
+) {
+    val tasks = model.tasksForCurrentSlice()
+    val sections = BoardColumnSections.of(
+        tasks = tasks,
+        alerts = state.unreadAlerts,
+        questions = state.openQuestions,
+        progression = state.progression,
+        quest = state.quest,
+        pinnedTaskIds = state.pinnedTaskIds,
+    )
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        sections.alerts.forEach { alert ->
+            AlertBand(
+                alert = alert,
+                onRead = { model.markAlertRead(alert.id) },
+            )
+        }
+        sections.questions.forEach { question ->
+            QuestionGroup(
+                question = question,
+                onAnswer = { option: BoardQuestionOption -> model.answerQuestion(question.id, option.id) },
+            )
+        }
+        sections.pinnedTasks.forEach { task ->
+            TaskRow(
+                task = task,
+                busy = task.id in state.inFlight,
+                onOpen = { scope.launch { model.openTask(task) } },
+                onCheckedChange = { done -> scope.launch { model.setDone(task.id, done) } },
+                onDelete = { scope.launch { model.delete(task) } },
+            )
+        }
+        sections.tasks.forEach { task ->
+            TaskRow(
+                task = task,
+                busy = task.id in state.inFlight,
+                onOpen = { scope.launch { model.openTask(task) } },
+                onCheckedChange = { done -> scope.launch { model.setDone(task.id, done) } },
+                onDelete = { scope.launch { model.delete(task) } },
+            )
+        }
+        sections.progression?.let { ProgressionBar(progression = it) }
+        sections.quest?.let { QuestStepper(quest = it) }
+        if (sections.isEmpty) {
+            Text(
+                text = "Nothing here yet.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AlertBand(
+    alert: BoardAlert,
+    onRead: (String) -> Unit,
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = alert.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = alert.source?.wire ?: "manager",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            alert.body?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            TextButton(onClick = { onRead(alert.id) }) { Text("Read") }
+        }
+    }
+}
+
+@Composable
+private fun QuestionGroup(
+    question: BoardQuestion,
+    onAnswer: (BoardQuestionOption) -> Unit,
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = question.prompt,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                question.options.forEach { option ->
+                    FilterChip(
+                        selected = false,
+                        onClick = { onAnswer(option) },
+                        label = { Text(option.label) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProgressionBar(progression: ProgressionState) {
+    val progress = if (progression.target > 0) progression.current.coerceIn(0, progression.target).toFloat() / progression.target else 0f
+    Card(Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = progression.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = "${progression.current}/${progression.target}${progression.unit?.let { " $it" } ?: ""}",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun QuestStepper(quest: QuestState) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = quest.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                quest.steps.forEach { step ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            shape = MaterialTheme.shapes.small,
+                        ) {
+                            Text(
+                                text = step.position.toString(),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                        Text(
+                            text = step.title,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                // An empty next step is the waiting case: the quest stays open.
+                if (quest.nextStep == null) {
+                    Text(
+                        text = "Waiting",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
     }
 }
 

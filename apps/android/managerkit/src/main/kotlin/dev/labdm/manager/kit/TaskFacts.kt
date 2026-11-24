@@ -76,6 +76,26 @@ enum class TaskOutcome(val wire: String) {
 }
 
 /**
+ * How a recurrence treats its open occurrences.
+ *
+ * `replace` keeps at most one open occurrence: when the next period starts, the
+ * previous open row becomes `superseded` and a new open row is minted. A missed
+ * day never leaves an open pile behind, so the open board stays at one card.
+ *
+ * `stack` inserts one open occurrence per period and leaves the older ones open,
+ * so a journal keeps every missed day writable.
+ */
+enum class TaskBehavior(val wire: String) {
+    REPLACE("replace"),
+    STACK("stack"),
+    ;
+
+    companion object {
+        fun fromWire(raw: String?): TaskBehavior? = entries.firstOrNull { it.wire == raw }
+    }
+}
+
+/**
  * Facts the backend derives on read, kept here so the in-memory backend and the
  * board agree with `taskView` before a cron exists.
  */
@@ -111,4 +131,11 @@ object TaskFacts {
         val escalate = overdue && overduePolicy == OverduePolicy.ESCALATE && priority?.isSeed == true
         return if (escalate) minOf(rank + ESCALATE_BUMP, MAX_RANK) else rank
     }
+
+    /**
+     * The open board: not done, and not already superseded or missed. A missed
+     * chance retires and a skipped period supersedes, and neither leaves an open
+     * row behind.
+     */
+    fun isOpen(task: TaskItem): Boolean = task.outcome == null && !task.done
 }

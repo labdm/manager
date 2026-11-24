@@ -19,6 +19,9 @@ data class TaskDraft(
     val priority: Priority? = null,
     val priorityRank: Int? = null,
     val overduePolicy: OverduePolicy = OverduePolicy.NONE,
+    val recurrenceId: String? = null,
+    val periodStart: Long? = null,
+    val behavior: TaskBehavior? = null,
 ) {
     /** Omitted priority and rank are `normal` / 10, never blank. */
     val resolvedPriority: Priority
@@ -52,6 +55,9 @@ data class TaskDraft(
             priority = task.priority,
             priorityRank = task.priorityRank,
             overduePolicy = task.overduePolicy,
+            recurrenceId = task.recurrenceId,
+            periodStart = task.periodStart,
+            behavior = task.behavior,
         )
     }
 }

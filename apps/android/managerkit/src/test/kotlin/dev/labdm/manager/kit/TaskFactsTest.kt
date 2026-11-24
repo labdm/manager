@@ -199,6 +199,24 @@ class TaskFactsTest {
         assertNull(done.withDone(false, now = 1_767_400_000_000L).completedAt)
     }
 
+    // MARK: - Recurrence facts
+
+    @Test
+    fun `task behavior parses the replace and stack seeds`() {
+        assertEquals(TaskBehavior.REPLACE, TaskBehavior.fromWire("replace"))
+        assertEquals(TaskBehavior.STACK, TaskBehavior.fromWire("stack"))
+        assertNull(TaskBehavior.fromWire(null))
+        assertNull(TaskBehavior.fromWire("daily"))
+    }
+
+    @Test
+    fun `open means not done and not superseded or missed`() {
+        assertTrue(TaskFacts.isOpen(TaskItem("1", "Buy milk", done = false)))
+        assertFalse(TaskFacts.isOpen(TaskItem("1", "Buy milk", done = true)))
+        assertFalse(TaskFacts.isOpen(TaskItem("1", "Dishes", done = false, outcome = TaskOutcome.SUPERSEDED)))
+        assertFalse(TaskFacts.isOpen(TaskItem("1", "Burger", done = false, outcome = TaskOutcome.MISSED)))
+    }
+
     // MARK: - Planned time
 
     @Test
