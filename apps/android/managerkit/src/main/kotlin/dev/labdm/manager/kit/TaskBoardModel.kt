@@ -651,7 +651,8 @@ class TaskBoardModel(
         _state.update { it.copy(chip = chip, selectedRow = null) }
     }
 
-    fun selectGroup(groupId: String?) = _state.update { it.copy(selectedGroupId = groupId) }
+    fun selectGroup(groupId: String?) =
+        _state.update { it.copy(selectedGroupId = groupId, selectedRow = null) }
 
     fun openDrawer() = _state.update { it.copy(drawerOpen = true) }
 
@@ -672,12 +673,14 @@ class TaskBoardModel(
 
     /** Persists the Tasks-page activity rule. History in Messages ignores it. */
     fun setActivityOnTasks(value: ActivityOnTasks) {
+        val previous = _state.value.activityOnTasks
         _state.update { it.copy(activityOnTasks = value) }
         viewModelScope.launch {
             try {
                 backend.setActivityOnTasks(value)
+                _state.update { it.copy(errorMessage = null) }
             } catch (error: Exception) {
-                _state.update { it.copy(errorMessage = message(error)) }
+                _state.update { it.copy(activityOnTasks = previous, errorMessage = message(error)) }
             }
         }
     }
@@ -729,21 +732,22 @@ class TaskBoardModel(
 
                     ShellRowKind.MESSAGE -> {
                         val id = row.id.removePrefix("message-")
-                        markAlertRead(id)
-                    }
-
-                    ShellRowKind.INVITE -> {
-                        val id = row.id.removePrefix("invite-")
+                        backend.markAlertSeen(id)
                         val stamp = now()
                         _state.update { current ->
+                            val board = current.board
                             current.copy(
-                                invites = current.invites.map {
-                                    if (it.id == id) it.copy(seenAt = stamp) else it
-                                },
+                                board = board.copy(
+                                    alerts = board.alerts.map { alert ->
+                                        if (alert.id == id) alert.copy(seenAt = stamp) else alert
+                                    },
+                                ),
                             )
                         }
                     }
 
+                    // Invites and questions have no mark-seen mutation. Accept,
+                    // decline, and answer are the writes that clear them.
                     else -> Unit
                 }
             } catch (error: Exception) {
@@ -775,7 +779,7 @@ class TaskBoardModel(
         } catch (error: Exception) {
             _state.update {
                 it.copy(
-                    invites = listOf(invite.copy(seenAt = now())) + it.invites,
+                    invites = listOf(invite) + it.invites,
                     errorMessage = message(error),
                 )
             }
@@ -807,10 +811,13 @@ class TaskBoardModel(
         }
     }
 
-    suspend fun createRouting(trigger: String, execution: String): Boolean {
-        if (trigger.isBlank() || execution.isBlank()) return false
+    suspend fun createRouting(name: String, cadence: String, title: String): Boolean {
+        val trimmed = name.trim()
+        val taskTitle = title.trim()
+        if (trimmed.isEmpty() || taskTitle.isEmpty()) return false
+        val period = cadence.trim().ifEmpty { "daily" }
         return try {
-            backend.createRouting(trigger.trim(), execution.trim())
+            backend.createRouting(trimmed, period, taskTitle)
             true
         } catch (error: Exception) {
             _state.update { it.copy(errorMessage = message(error)) }
@@ -841,7 +848,6 @@ class TaskBoardModel(
         val messages =
             if (chip == BoardChip.ALL) {
                 state.board.alerts.filter { activityVisible(it, state.activityOnTasks) }
-                    .filter { it.isUnread }
                     .map(::messageRow)
             } else {
                 emptyList()
@@ -911,7 +917,9 @@ class TaskBoardModel(
         when (setting) {
             ActivityOnTasks.ALL -> true
             ActivityOnTasks.NONE -> false
-            ActivityOnTasks.OTHERS -> alert.source != null && alert.source != TaskOrigin.SELF
+            // A missing author is not the signed-in user, so an older payload
+            // still appears under the default setting.
+            ActivityOnTasks.OTHERS -> alert.source != TaskOrigin.SELF
         }
 
     private fun messageRow(alert: BoardAlert) =
@@ -991,18 +999,8 @@ class TaskBoardModel(
             )
         }
 
-    private fun resourceRows(): List<ShellRow> {
-        val state = _state.value
-        return state.board.progressions.map(::progressionRow) +
-            state.routings.map { routing ->
-                ShellRow(
-                    id = "routing-${routing.id}",
-                    title = routing.title,
-                    kind = ShellRowKind.ROUTING,
-                    body = "${routing.trigger} → ${routing.execution}",
-                )
-            }
-    }
+    private fun resourceRows(): List<ShellRow> =
+        _state.value.board.progressions.map(::progressionRow)
 
     // MARK: - Views
 
@@ -1050,13 +1048,6 @@ class TaskBoardModel(
             current.copy(views = views, selectedViewId = view.id, presentedSheet = null)
         }
         return view
-    }
-
-    /** Marks an alert read; reading clears it from the band and keeps it in the log. */
-    fun markAlertRead(alertId: String) {
-        _state.update { current ->
-            current.copy(alerts = current.alerts.map { if (it.id == alertId) it.copy(seenAt = now()) else it })
-        }
     }
 
     /** Records an answer; the question leaves the open band. */

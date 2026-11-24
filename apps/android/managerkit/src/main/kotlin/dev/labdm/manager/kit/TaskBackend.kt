@@ -48,6 +48,9 @@ interface TaskBackend {
      */
     suspend fun markSeen(id: String)
 
+    /** Calls `alerts:read`. A failed open must not stamp `seenAt`. */
+    suspend fun markAlertSeen(id: String)
+
     /** Writes the editable facts of an existing row. Delete stays [deleteTask]. */
     suspend fun updateTask(id: String, draft: TaskDraft)
 
@@ -75,7 +78,11 @@ interface TaskBackend {
 
     suspend fun declineInvite(id: String) = Unit
 
-    suspend fun createRouting(trigger: String, execution: String) = Unit
+    /**
+     * `routings:create` with an explicit cron trigger and a `createTask`
+     * execution. Cadence is `daily`, `weekly` or `monthly`.
+     */
+    suspend fun createRouting(name: String, cadence: String, title: String) = Unit
 
     suspend fun setActivityOnTasks(value: ActivityOnTasks) = Unit
 }

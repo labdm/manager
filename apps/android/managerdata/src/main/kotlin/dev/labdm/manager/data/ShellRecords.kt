@@ -64,13 +64,14 @@ data class AlertWireRecord(
     val title: String? = null,
     val body: String? = null,
     val source: String? = null,
+    val origin: String? = null,
     val seenAt: Float64? = null,
 ) {
     fun toAlert(): BoardAlert = BoardAlert(
         id = id,
         title = title?.takeIf(String::isNotBlank) ?: "Message",
         body = body,
-        source = TaskOrigin.fromWire(source),
+        source = TaskOrigin.fromWire(origin) ?: TaskOrigin.fromWire(source),
         seenAt = seenAt?.toLong(),
     )
 }
@@ -182,6 +183,7 @@ data class InviteWireRecord(
     val groupName: String? = null,
     val title: String? = null,
     val body: String? = null,
+    val email: String? = null,
     val invitee: String? = null,
     val seenAt: Float64? = null,
 ) {
@@ -189,11 +191,16 @@ data class InviteWireRecord(
         id = id,
         groupId = groupId.orEmpty(),
         groupName = groupName ?: groupId.orEmpty(),
-        title = title?.takeIf(String::isNotBlank) ?: "Group invitation",
-        body = body ?: invitee,
+        title = title?.takeIf(String::isNotBlank) ?: email ?: "Group invitation",
+        body = body ?: email ?: invitee,
         seenAt = seenAt?.toLong(),
     )
 }
+
+@Serializable
+data class InvitesRecord(
+    val invites: List<InviteWireRecord>? = null,
+)
 
 @Serializable
 data class RoutingsRecord(

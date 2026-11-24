@@ -39,6 +39,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
@@ -335,6 +336,9 @@ private fun ShellColumn(
         if (state.destination == ShellDestination.TASKS) {
             FilterChips(model, state)
         }
+        if (state.destination == ShellDestination.GROUPS) {
+            GroupComposer(model, state, scope)
+        }
         ShellList(model, state, scope)
     }
 }
@@ -605,6 +609,58 @@ private fun DetailPane(
     }
 }
 
+@Composable
+private fun GroupComposer(
+    model: TaskBoardModel,
+    state: BoardState,
+    scope: CoroutineScope,
+) {
+    var name by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    val groupId = state.selectedGroupId ?: state.groups.firstOrNull { it.isDefault }?.id
+    Column(
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Group name") },
+            modifier = Modifier.fillMaxWidth().testTag("group-name"),
+            singleLine = true,
+        )
+        TextButton(
+            onClick = {
+                scope.launch {
+                    if (model.createGroup(name, "", "")) name = ""
+                }
+            },
+            modifier = Modifier.testTag("create-group"),
+        ) {
+            Text("Create group")
+        }
+        OutlinedTextField(
+            value = email,
+            onValueChange = { email = it },
+            label = { Text("Invite email") },
+            modifier = Modifier.fillMaxWidth().testTag("invite-email"),
+            singleLine = true,
+        )
+        TextButton(
+            onClick = {
+                val id = groupId ?: return@TextButton
+                scope.launch {
+                    if (model.createInvite(id, email)) email = ""
+                }
+            },
+            enabled = groupId != null,
+            modifier = Modifier.testTag("create-invite"),
+        ) {
+            Text("Invite")
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ShellDrawer(model: TaskBoardModel) {
@@ -692,25 +748,32 @@ private fun MenuPageScreen(
 
                 "Routings" -> {
                     state.routings.forEach { routing ->
-                        Text("${routing.trigger} → ${routing.execution}")
+                        Text("${routing.title}: ${routing.trigger} → ${routing.execution}")
                     }
-                    var trigger by remember { mutableStateOf("") }
-                    var execution by remember { mutableStateOf("") }
-                    androidx.compose.material3.OutlinedTextField(
-                        value = trigger,
-                        onValueChange = { trigger = it },
-                        label = { Text("Trigger") },
-                        modifier = Modifier.fillMaxWidth(),
+                    var name by remember { mutableStateOf("") }
+                    var cadence by remember { mutableStateOf("daily") }
+                    var title by remember { mutableStateOf("") }
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Name") },
+                        modifier = Modifier.fillMaxWidth().testTag("routing-name"),
                     )
-                    androidx.compose.material3.OutlinedTextField(
-                        value = execution,
-                        onValueChange = { execution = it },
-                        label = { Text("Execution") },
-                        modifier = Modifier.fillMaxWidth(),
+                    OutlinedTextField(
+                        value = cadence,
+                        onValueChange = { cadence = it },
+                        label = { Text("Cadence") },
+                        modifier = Modifier.fillMaxWidth().testTag("routing-cadence"),
+                    )
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        label = { Text("Task title") },
+                        modifier = Modifier.fillMaxWidth().testTag("routing-title"),
                     )
                     TextButton(
                         onClick = {
-                            scope.launch { model.createRouting(trigger, execution) }
+                            scope.launch { model.createRouting(name, cadence, title) }
                         },
                     ) {
                         Text("Create routing")

@@ -118,7 +118,8 @@ object TaskColors {
 
 /**
  * An alert from an agent or another person. Not a task: no checkbox, no done
- * state. Reading one clears it from the band and keeps it in the log.
+ * state. Reading one clears NEW. The Tasks feed keeps it when the activity
+ * setting includes the author. Messages always keeps it.
  */
 data class BoardAlert(
     val id: String,

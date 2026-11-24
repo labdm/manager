@@ -142,13 +142,14 @@ class ConvexTaskBackend(
         )
     }
 
-    /** Invites arrive in the same payload as groups; there is no separate list call. */
     override fun groupUpdates(): Flow<List<GroupItem>> = flow {
         emit(groupsPayload().allGroups.map(GroupWireRecord::toGroup))
     }
 
     override fun inviteUpdates(): Flow<List<InviteItem>> = flow {
-        emit(groupsPayload().invites.orEmpty().map(InviteWireRecord::toInvite))
+        val listed = runCatching { invitesPayload() }.getOrNull()
+        val records = listed ?: runCatching { groupsPayload().invites.orEmpty() }.getOrDefault(emptyList())
+        emit(records.map(InviteWireRecord::toInvite))
     }
 
     override fun routingUpdates(): Flow<List<RoutingItem>> = flow {
@@ -166,7 +167,7 @@ class ConvexTaskBackend(
         perform<JsonElement?> {
             client.mutation<JsonElement?>(
                 ConvexFunction.GROUPS_CREATE,
-                mapOf("name" to name, "icon" to icon, "color" to color),
+                mapOf("name" to name),
             )
         }
     }
@@ -175,29 +176,41 @@ class ConvexTaskBackend(
         perform<JsonElement?> {
             client.mutation<JsonElement?>(
                 ConvexFunction.INVITES_CREATE,
-                mapOf("groupId" to groupId, "invitee" to invitee),
+                mapOf("groupId" to groupId, "email" to invitee),
             )
         }
     }
 
     override suspend fun acceptInvite(id: String) {
         perform<JsonElement?> {
-            client.mutation<JsonElement?>(ConvexFunction.INVITES_ACCEPT, mapOf("id" to id))
+            client.mutation<JsonElement?>(ConvexFunction.INVITES_ACCEPT, mapOf("inviteId" to id))
         }
     }
 
     override suspend fun declineInvite(id: String) {
         perform<JsonElement?> {
-            client.mutation<JsonElement?>(ConvexFunction.INVITES_DECLINE, mapOf("id" to id))
+            client.mutation<JsonElement?>(ConvexFunction.INVITES_DECLINE, mapOf("inviteId" to id))
         }
     }
 
-    override suspend fun createRouting(trigger: String, execution: String) {
+    override suspend fun createRouting(name: String, cadence: String, title: String) {
         perform<JsonElement?> {
             client.mutation<JsonElement?>(
                 ConvexFunction.ROUTINGS_CREATE,
-                mapOf("trigger" to trigger, "execution" to execution),
+                mapOf(
+                    "name" to name,
+                    "trigger" to "cron",
+                    "cadence" to cadence,
+                    "executionKind" to "createTask",
+                    "title" to title,
+                ),
             )
+        }
+    }
+
+    override suspend fun markAlertSeen(id: String) {
+        perform<JsonElement?> {
+            client.mutation<JsonElement?>(ConvexFunction.ALERTS_READ, mapOf("id" to id))
         }
     }
 
@@ -209,6 +222,13 @@ class ConvexTaskBackend(
             )
         }
     }
+
+    private suspend fun invitesPayload(): List<InviteWireRecord> =
+        when (val payload = perform<JsonElement?> { client.mutation<JsonElement?>(ConvexFunction.INVITES_LIST) }) {
+            null -> emptyList()
+            is JsonArray -> wireJson.decodeFromString<List<InviteWireRecord>>(payload.toString())
+            else -> wireJson.decodeFromString<InvitesRecord>(payload.toString()).invites.orEmpty()
+        }
 
     private suspend fun groupsPayload(): GroupsRecord =
         when (val payload = perform<JsonElement?> { client.mutation<JsonElement?>(ConvexFunction.GROUPS_LIST) }) {

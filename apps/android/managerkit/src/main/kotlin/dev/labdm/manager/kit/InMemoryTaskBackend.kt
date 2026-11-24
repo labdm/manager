@@ -41,7 +41,9 @@ class InMemoryTaskBackend(
     val invitesCreated = mutableListOf<Pair<String, String>>()
     val acceptedInvites = mutableListOf<String>()
     val declinedInvites = mutableListOf<String>()
-    val routingsCreated = mutableListOf<Pair<String, String>>()
+    val routingsCreated = mutableListOf<Triple<String, String, String>>()
+    val markedAlertIds = mutableListOf<String>()
+    var failWrites = false
     var activityOnTasks: ActivityOnTasks = ActivityOnTasks.OTHERS
 
     /** Rows the list shows: open rows plus done rows, minus soft-deleted ones. */
@@ -361,27 +363,41 @@ class InMemoryTaskBackend(
     }
 
     override suspend fun acceptInvite(id: String) {
+        if (failWrites) error("Could not accept the invite")
         acceptedInvites += id
         invites.value = invites.value.filterNot { it.id == id }
     }
 
     override suspend fun declineInvite(id: String) {
+        if (failWrites) error("Could not decline the invite")
         declinedInvites += id
         invites.value = invites.value.filterNot { it.id == id }
     }
 
-    override suspend fun createRouting(trigger: String, execution: String) {
-        routingsCreated += trigger to execution
+    override suspend fun createRouting(name: String, cadence: String, title: String) {
+        if (failWrites) error("Could not create the routing")
+        routingsCreated += Triple(name, cadence, title)
         routings.value = routings.value + RoutingItem(
             id = "local-routing-${routings.value.size + 1}",
-            title = "$trigger → $execution",
-            trigger = trigger,
-            execution = execution,
+            title = name,
+            trigger = "cron",
+            execution = "$cadence · $title",
         )
     }
 
     override suspend fun setActivityOnTasks(value: ActivityOnTasks) {
+        if (failWrites) error("Could not save the setting")
         activityOnTasks = value
+    }
+
+    override suspend fun markAlertSeen(id: String) {
+        if (failWrites) error("Could not mark the message as read")
+        markedAlertIds += id
+        boardSlice.value = boardSlice.value.copy(
+            alerts = boardSlice.value.alerts.map { alert ->
+                if (alert.id == id && alert.seenAt == null) alert.copy(seenAt = now()) else alert
+            },
+        )
     }
 
     /** Test/preview hook for a board slice without a deployment. */
