@@ -4,15 +4,16 @@
 }
 
 html,
-body {
+body,
+#root {
   height: 100%;
+}
+
+html:has(.shell-frame),
+html:has(.shell-frame) body {
   overflow: hidden;
 }
 
 body {
   margin: 0;
-}
-
-#root {
-  height: 100%;
 }
