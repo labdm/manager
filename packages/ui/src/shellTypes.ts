@@ -53,7 +53,7 @@ export const ACTIVITY_OPTIONS: ReadonlyArray<{ id: ActivityValue; label: string 
   { id: "none", label: "None" },
 ];
 
-export type RowType = "task" | "message" | "question" | "invite" | "progression";
+export type RowType = "task" | "message" | "question" | "invite" | "progression" | "quest";
 
 /** One anatomy for every entity. Empty slots are omitted, never placeholders. */
 export interface FeedRow {
@@ -74,6 +74,10 @@ export interface FeedRow {
   alertId?: string;
   inviteId?: string;
   progressionId?: string;
+  questionId?: string;
+  options?: ReadonlyArray<{ id: string; label: string }>;
+  questId?: string;
+  steps?: ReadonlyArray<{ id: string; title: string; done: boolean }>;
   done?: boolean;
   origin?: string | null;
 }
@@ -139,7 +143,9 @@ export type FormKind =
   | "invite"
   | "category"
   | "resource"
-  | "routing";
+  | "routing"
+  | "quest"
+  | "progression";
 
 export interface TaskFormDraft {
   title: string;

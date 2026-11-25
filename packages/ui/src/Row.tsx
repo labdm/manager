@@ -1,4 +1,4 @@
-import { CircleHelp, ListChecks, Mail, MessageCircle, Users, ChartNoAxesColumn } from "lucide-react";
+import { CircleHelp, Flag, ListChecks, Mail, MessageCircle, Users, ChartNoAxesColumn } from "lucide-react";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { resolveLucideIcon } from "./iconCatalog";
@@ -12,6 +12,7 @@ const TYPE_ICONS: Record<RowType, typeof ListChecks> = {
   question: CircleHelp,
   invite: Mail,
   progression: ChartNoAxesColumn,
+  quest: Flag,
 };
 
 export interface ProductRowProps {

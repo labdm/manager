@@ -40,6 +40,9 @@ import {
   InviteForm,
   MessageForm,
   NameForm,
+  ProgressionForm,
+  ProgressionLogForm,
+  QuestStepForm,
   ResourceForm,
   RoutingForm,
   TaskForm,
@@ -48,11 +51,15 @@ import { MenuPageView } from "./MenuPages";
 import { ProductRow } from "./Row";
 import {
   acceptInviteRef,
+  addQuestStepRef,
+  answerQuestionRef,
   boardSliceRef,
   createAlertRef,
   createCategoryRef,
   createGroupRef,
   createInviteRef,
+  createProgressionRef,
+  createQuestRef,
   createRecurrenceRef,
   createResourceRef,
   createRoutingRef,
@@ -65,6 +72,7 @@ import {
   listInvitesRef,
   listResourcesRef,
   listRoutingsRef,
+  logProgressionRef,
   markSeenRef,
   readAlertRef,
   removeTaskRef,
@@ -79,6 +87,7 @@ import {
   chipBadge,
   chipTab,
   progressionToRow,
+  questToRow,
   questionToRow,
   recurrenceArgsFromForm,
   resolvedTimezone,
@@ -218,17 +227,26 @@ function Confirmation({
 
 function RowDetail({
   row,
+  tasks,
   onBack,
   onAction,
   onSecondary,
   onDelete,
+  onAnswer,
+  onLog,
+  onAddStep,
 }: {
   row: FeedRow;
+  tasks: ReadonlyArray<{ id: string; title: string }>;
   onBack: () => void;
   onAction: () => void;
   onSecondary?: () => void;
   onDelete?: () => void;
+  onAnswer?: (optionId: string) => void;
+  onLog?: (amount: number) => void;
+  onAddStep?: (taskId: string) => void;
 }) {
+  const specialized = row.type === "question" || row.type === "progression" || row.type === "quest";
   return (
     <section className="flex h-full flex-col gap-4 overflow-y-auto p-4" aria-label="Row detail">
       <div className="flex items-center gap-2 md:hidden">
@@ -242,6 +260,13 @@ function RowDetail({
       </div>
       <p className="text-sm capitalize text-muted-foreground">{row.type}</p>
       {row.body ? <p className="text-sm">{row.body}</p> : null}
+      {row.type === "quest" && row.steps?.length ? (
+        <ul className="flex flex-col gap-1 text-sm" aria-label="Quest steps">
+          {row.steps.map((step) => (
+            <li key={step.id}>{step.title}</li>
+          ))}
+        </ul>
+      ) : null}
       <dl className="flex flex-col gap-2 text-sm">
         {row.progress ? (
           <div><dt className="inline font-medium">Progress: </dt><dd className="inline">{row.progress}</dd></div>
@@ -254,18 +279,31 @@ function RowDetail({
         ) : null}
         {row.groupMark ? <div className="text-muted-foreground">Group item</div> : null}
       </dl>
-      <div className="flex flex-wrap gap-2">
-        {row.action ? <Button type="button" onClick={onAction}>{row.action}</Button> : null}
-        {onSecondary ? (
-          <Button type="button" variant="outline" onClick={onSecondary}>
-            Decline
-          </Button>
+      <div className="flex flex-col gap-3">
+        {row.type === "question" && row.options?.length ? (
+          <div className="flex flex-wrap gap-2" aria-label="Answer options">
+            {row.options.map((option) => (
+              <Button key={option.id} type="button" onClick={() => onAnswer?.(option.id)}>
+                {option.label}
+              </Button>
+            ))}
+          </div>
         ) : null}
-        {onDelete ? (
-          <Button type="button" variant="destructive" onClick={onDelete}>
-            Delete task
-          </Button>
-        ) : null}
+        {row.type === "progression" && onLog ? <ProgressionLogForm onLog={onLog} /> : null}
+        {row.type === "quest" && onAddStep ? <QuestStepForm tasks={tasks} onAdd={onAddStep} /> : null}
+        <div className="flex flex-wrap gap-2">
+          {!specialized && row.action ? <Button type="button" onClick={onAction}>{row.action}</Button> : null}
+          {onSecondary ? (
+            <Button type="button" variant="outline" onClick={onSecondary}>
+              Decline
+            </Button>
+          ) : null}
+          {onDelete ? (
+            <Button type="button" variant="destructive" onClick={onDelete}>
+              Delete task
+            </Button>
+          ) : null}
+        </div>
       </div>
     </section>
   );
@@ -294,6 +332,11 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
   const createRouting = useMutation(createRoutingRef);
   const saveActivity = useMutation(setActivityRef);
   const removeTask = useMutation(removeTaskRef);
+  const createProgression = useMutation(createProgressionRef);
+  const logProgression = useMutation(logProgressionRef);
+  const createQuest = useMutation(createQuestRef);
+  const addQuestStep = useMutation(addQuestStepRef);
+  const answerQuestion = useMutation(answerQuestionRef);
 
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -398,6 +441,7 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
         .filter((invite) => !invite.status || invite.status === "pending")
         .map((invite) => inviteToRow(invite, groups)),
       ...(board?.progressions ?? []).map(progressionToRow),
+      ...(board?.quests ?? []).map(questToRow),
     ];
     return mixed.filter((row) => activityVisible(row, activity));
   }, [activity, board, destination, groups, invites, locallySeen, messageAlerts]);
@@ -463,8 +507,41 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
     }
   }
 
+  async function submitLog(progressionId: string, amount: number) {
+    try {
+      await logProgression({ progressionId, amount });
+      await loadBoard();
+    } catch (caught) {
+      setError(errorMessage(caught, "Could not log progress"));
+    }
+  }
+
+  async function submitAnswer(row: FeedRow, optionId: string) {
+    if (!row.questionId) return;
+    try {
+      await answerQuestion({ questionId: row.questionId, optionId });
+      setSelected(null);
+      await loadBoard();
+    } catch (caught) {
+      setError(errorMessage(caught, "Could not answer the question"));
+    }
+  }
+
+  async function submitQuestStep(questId: string, taskId: string) {
+    try {
+      await addQuestStep({ questId, taskId });
+      await loadBoard();
+    } catch (caught) {
+      setError(errorMessage(caught, "Could not add the quest step"));
+    }
+  }
+
   async function rowAction(row: FeedRow) {
     try {
+      if (row.type === "question" || row.type === "quest") {
+        openRow(row);
+        return;
+      }
       if (row.type === "task" && row.taskId) {
         await toggleTask({ id: String(row.taskId) });
         await loadBoard();
@@ -474,8 +551,10 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
       } else if (row.type === "invite" && row.inviteId) {
         await acceptInvite({ inviteId: row.inviteId });
         await loadQueries();
+      } else if (row.type === "progression" && row.progressionId) {
+        await submitLog(row.progressionId, 1);
       } else {
-        setError(`${row.action} opens with its own flow.`);
+        setError(`${row.action ?? "That action"} is not available.`);
       }
     } catch (caught) {
       setError(errorMessage(caught, `Could not ${row.action?.toLowerCase() ?? "act"}`));
@@ -564,6 +643,26 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
     }
   }
 
+  async function submitQuest(title: string) {
+    try {
+      await createQuest({ title });
+      setForm(null);
+      await loadBoard();
+    } catch (caught) {
+      setError(errorMessage(caught, "Could not create the quest"));
+    }
+  }
+
+  async function submitProgression(title: string, target: number, unit: string) {
+    try {
+      await createProgression(unit ? { title, target, unit } : { title, target });
+      setForm(null);
+      await loadBoard();
+    } catch (caught) {
+      setError(errorMessage(caught, "Could not create the progression"));
+    }
+  }
+
   async function submitRouting(name: string, cadence: "daily" | "weekly" | "monthly", title: string) {
     try {
       await createRouting({
@@ -625,6 +724,10 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
         return <ResourceForm onSubmit={(title, quantity) => void submitResource(title, quantity)} onCancel={resetPanes} error={error} />;
       case "routing":
         return <RoutingForm onSubmit={(name, cadence, title) => void submitRouting(name, cadence, title)} onCancel={resetPanes} error={error} />;
+      case "quest":
+        return <NameForm title="New quest" label="Title" buttonLabel="Create quest" onSubmit={(value) => void submitQuest(value)} onCancel={resetPanes} error={error} />;
+      case "progression":
+        return <ProgressionForm onSubmit={(title, target, unit) => void submitProgression(title, target, unit)} onCancel={resetPanes} error={error} />;
     }
   }
 
@@ -718,6 +821,16 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
           <Button type="button" className="self-start" onClick={() => openForm("message")}>
             Compose message
           </Button>
+        ) : null}
+        {destination === "tasks" ? (
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={() => openForm("quest")}>
+              Create quest
+            </Button>
+            <Button type="button" variant="outline" onClick={() => openForm("progression")}>
+              Create progression
+            </Button>
+          </div>
         ) : null}
         {rows.length ? (
           <ul className="flex flex-col gap-2">
@@ -859,12 +972,20 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
               ) : selected ? (
                 <RowDetail
                   row={selected}
+                  tasks={(board?.tasks ?? []).map((task) => ({ id: String(task.id), title: task.title }))}
                   onBack={resetPanes}
                   onAction={() => void rowAction(selected)}
                   onSecondary={
                     selected.type === "invite" ? () => void declineInvite(selected) : undefined
                   }
                   onDelete={selected.type === "task" ? () => setConfirmDelete(selected) : undefined}
+                  onAnswer={(optionId) => void submitAnswer(selected, optionId)}
+                  onLog={(amount) => {
+                    if (selected.progressionId) void submitLog(selected.progressionId, amount);
+                  }}
+                  onAddStep={(taskId) => {
+                    if (selected.questId) void submitQuestStep(selected.questId, taskId);
+                  }}
                 />
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
