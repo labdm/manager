@@ -48,7 +48,7 @@ private struct AuthGate: View {
           isAuthPresented = true
         }
       case .authenticated:
-        TaskBoardScreen(model: board) {
+        ManagerShell(model: board) {
           AccountButton()
         }
       }

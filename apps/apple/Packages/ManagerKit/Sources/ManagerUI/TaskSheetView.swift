@@ -17,7 +17,6 @@ public struct TaskSheetView: View {
   @State private var hasLocation: Bool
   @State private var hasDeadline: Bool
   @State private var hasReminder: Bool
-  @State private var look: TaskLook
   @State private var series: SeriesBehavior
   @State private var cadence: SeriesCadence
   @FocusState private var isTitleFocused: Bool
@@ -46,7 +45,6 @@ public struct TaskSheetView: View {
     _hasLocation = State(initialValue: !(initial.location?.isEmpty ?? true))
     _hasDeadline = State(initialValue: initial.deadlineAt != nil)
     _hasReminder = State(initialValue: initial.remindAt != nil)
-    _look = State(initialValue: initial.look)
     _series = State(initialValue: initial.series)
     _cadence = State(initialValue: initial.cadence)
   }
@@ -63,18 +61,6 @@ public struct TaskSheetView: View {
           TextField("Notes", text: notesBinding, axis: .vertical)
             .lineLimit(2...6)
         }
-      }
-
-      Section("Look") {
-        Picker("Task look", selection: $look) {
-          ForEach(TaskLook.allCases, id: \.self) { look in
-            Text(look.title).tag(look)
-          }
-        }
-        .pickerStyle(.segmented)
-        Text("Check is compact, row is a single line, card shows the details.")
-          .font(ManagerFont.meta)
-          .foregroundStyle(Color.managerMuted)
       }
 
       Section("Series") {
@@ -165,7 +151,7 @@ public struct TaskSheetView: View {
     #if os(macOS)
       .frame(minWidth: 440, minHeight: 520)
     #endif
-    .onChange(of: model.composerFocusRequest) { _ in
+    .onChange(of: model.composerFocusRequest) { _, _ in
       isTitleFocused = true
     }
     .toolbar {
@@ -217,7 +203,8 @@ public struct TaskSheetView: View {
   private func save() {
     var resolved = draft
     resolved.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
-    resolved.look = look
+    // The stored look is left untouched. A card hint in data never changes the
+    // one row the board draws.
     resolved.series = series
     resolved.cadence = cadence
     resolved.notes = hasNotes ? resolved.notes : nil

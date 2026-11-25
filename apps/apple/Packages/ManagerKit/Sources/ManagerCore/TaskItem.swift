@@ -29,6 +29,10 @@ public struct TaskItem: Identifiable, Hashable, Sendable, Codable {
   public var deletedAt: Date?
   /// Recurrence identifier links this task to a recurring series.
   public var recurrenceId: String?
+  /// Named or built-in event this task belongs to. An older row omits it.
+  public var eventID: String?
+  /// The one group this item belongs to. An older row omits it.
+  public var groupID: String?
   /// Behavior of the recurrence: "replace" or "stack".
   public var behavior: String?
   /// Start of the civil day period for recurrence minting.
@@ -72,6 +76,8 @@ public struct TaskItem: Identifiable, Hashable, Sendable, Codable {
     completedAt: Date? = nil,
     deletedAt: Date? = nil,
     recurrenceId: String? = nil,
+    eventID: String? = nil,
+    groupID: String? = nil,
     behavior: String? = nil,
     periodStart: Date? = nil,
     look: TaskLook = .check,
@@ -98,6 +104,8 @@ public struct TaskItem: Identifiable, Hashable, Sendable, Codable {
     self.completedAt = completedAt
     self.deletedAt = deletedAt
     self.recurrenceId = recurrenceId
+    self.eventID = eventID
+    self.groupID = groupID
     self.behavior = behavior
     self.periodStart = periodStart
     self.look = look

@@ -17,6 +17,23 @@ enum ConvexFunction {
   static let viewsInstallTemplate = "views:installTemplate"
   static let viewsCreateCustom = "views:createCustom"
   static let boardSlice = "board:slice"
+
+  // Row-first shell. Every call uses a string name, the same style as the
+  // task calls above. A deployment that predates one of them fails only that
+  // read or write; the shell keeps drawing with an empty array.
+  static let categoriesList = "categories:list"
+  static let resourcesList = "resources:list"
+  static let alertsCreate = "alerts:create"
+  static let alertsRead = "alerts:read"
+  static let groupsList = "groups:list"
+  static let groupsCreate = "groups:create"
+  static let invitesList = "invites:list"
+  static let invitesCreate = "invites:create"
+  static let invitesAccept = "invites:accept"
+  static let invitesDecline = "invites:decline"
+  static let routingsList = "routings:list"
+  static let routingsCreate = "routings:create"
+  static let setActivityOnTasks = "users:setActivityOnTasks"
 }
 
 /// Wire shape of `TaskView` from `packages/backend/convex/lib/taskService.ts`.
@@ -47,10 +64,12 @@ struct TaskRecord: Decodable {
   @OptionalConvexFloat var completedAt: Double?
   @OptionalConvexFloat var deletedAt: Double?
   // Target vocabulary: not written by the M1 mutation, but decoded when a
-  // newer deployment starts sending it.
+  // newer deployment starts sending it. Missing fields stay empty.
   let look: String?
   let series: String?
   let cadence: String?
+  let eventID: String?
+  let groupID: String?
 
   var item: TaskItem {
     let priority = TaskPriority(decoded: self.priority)
@@ -93,6 +112,8 @@ struct TaskRecord: Decodable {
       seenAt: seenAt.map { DueDateMath.date(fromMilliseconds: $0) },
       completedAt: completedAt.map { DueDateMath.date(fromMilliseconds: $0) },
       deletedAt: trashedAt,
+      eventID: eventID,
+      groupID: groupID,
       look: TaskLook(decoded: look),
       series: SeriesBehavior(decoded: series),
       cadence: SeriesCadence(decoded: cadence)
@@ -122,7 +143,7 @@ struct RemovalRecord: Decodable {
 /// websocket for the process and resubscribes after a drop. A task completed by
 /// the web app or an MCP bot therefore lands here without polling.
 @MainActor
-public final class ConvexTaskBackend: TaskBackend {
+public final class ConvexTaskBackend: TaskBackend, ShellBackend {
   // Internal so the BoardSource extension in ConvexBoardSource.swift can call
   // the same client helpers as the task calls.
   let client: ConvexClientWithAuth<String>

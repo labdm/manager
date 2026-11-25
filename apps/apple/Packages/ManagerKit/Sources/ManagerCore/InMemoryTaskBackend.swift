@@ -32,6 +32,14 @@ public final class InMemoryTaskBackend: TaskBackend {
   public var createdRecurrences: [(title: String, behavior: String, periodStart: Date)] = []
   public var dismissedAlertIDs: [String] = []
   public var answeredQuestionIDs: [String] = []
+  public var activityOnTasksValues: [ActivityOnTasks] = []
+  public var createdGroupNames: [String] = []
+  public var createdInvites: [(groupId: String, email: String)] = []
+  public var acceptedInviteIDs: [String] = []
+  public var declinedInviteIDs: [String] = []
+  public var createdRoutings: [(name: String, cadence: String, title: String)] = []
+  public var createdAlerts: [(title: String, body: String)] = []
+  public var markedAlertIDs: [String] = []
 
   private var boardContinuation: AsyncThrowingStream<BoardSnapshot, Error>.Continuation?
 
@@ -181,7 +189,7 @@ public final class InMemoryTaskBackend: TaskBackend {
     }
   }
 
-  private func emitBoard() {
+  func emitBoard() {
     boardContinuation?.yield(boardSnapshot)
   }
 
@@ -244,7 +252,9 @@ public final class InMemoryTaskBackend: TaskBackend {
 
   public func dismissAlert(id: String) {
     dismissedAlertIDs.append(id)
-    boardSnapshot.alerts.removeAll { $0.id == id }
+    if let index = boardSnapshot.alerts.firstIndex(where: { $0.id == id }) {
+      boardSnapshot.alerts[index].seenAt = Date()
+    }
     emitBoard()
   }
 

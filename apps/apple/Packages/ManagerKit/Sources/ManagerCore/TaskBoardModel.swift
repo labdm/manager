@@ -1,12 +1,12 @@
 import Foundation
 import Observation
 
-/// Presentation state for the task board.
+/// Presentation state for the row-first shell.
 ///
-/// Owns the live task list, the quick-add and sheet drafts, smart-list
-/// selection, modal presentation and optimistic mutations. It has no SwiftUI
-/// and no networking of its own, so the whole state machine is unit tested
-/// against an in-memory `TaskBackend`.
+/// Owns the live task list, the destination and chip selection, the empty
+/// detail pane, create/edit presentation and optimistic mutations. It has no
+/// SwiftUI and no networking of its own, so the whole state machine is unit
+/// tested against an in-memory backend.
 @MainActor
 @Observable
 public final class TaskBoardModel {
@@ -25,37 +25,48 @@ public final class TaskBoardModel {
   public private(set) var errorMessage: String?
   public private(set) var isSaving = false
 
-  /// Shell state: the category tiles, the selected view and the active time tab.
+  /// Last known payload. Every newer array defaults to empty, so an older
+  /// deployment still draws the shell.
   public private(set) var boardSnapshot: BoardSnapshot = .starter
-  public var selectedViewID: String = BoardViewItem.home.id
-  public var selectedSlice: BoardSlice = .tasks
 
-  /// The bottom `+` presents a sheet; it never inserts a form into the board.
-  /// Every create and edit target is owned here so it can be tested without
-  /// SwiftUI.
+  // MARK: Shell state
+
+  /// Tasks is the default destination. The menu is not one of these values.
+  public var selectedDestination: ShellDestination = .tasks
+  public var selectedChip: BoardChip = .all
+  /// The split detail starts empty. Nothing preselects a row on load or after
+  /// a chip or destination change: selection is what marks a row seen.
+  public var selectedRowID: String?
+  /// `nil` reads across the person's groups. The default group is selected
+  /// when groups ship; an older payload leaves this as All.
+  public var selectedGroupID: String?
+  public var activityOnTasks: ActivityOnTasks = .others
+
+  /// On compact width create is pushed with `navigationDestination`. On
+  /// regular width the same draft is presented as a sheet.
+  public var isCreateRouteActive = false
   public private(set) var presentedSheet: BoardSheet?
-  /// The grid button presents the category dashboard full screen, not as a
-  /// sidebar column.
-  public private(set) var showsDashboard = false
 
   /// Locally authored entities for mechanics whose backend mutations are still
-  /// planned. Tasks, categories and views still go through `TaskBackend`.
+  /// planned. Tasks still go through `TaskBackend`.
   public private(set) var localEntities: [BoardEntity] = []
 
-  /// Incremented when `+` is tapped. Kept for the title focus inside the sheet.
+  /// Incremented when the create button is tapped. Kept for title focus.
   public private(set) var composerFocusRequest = 0
 
-  /// Sidebar selection. Persisted by the app layer, not by this model.
+  /// Retained for the pure grouping helpers; the chip picker replaced it as
+  /// the visible filter control.
   public var selectedList: TaskList = .all
   public var draftTitle = ""
   public var draftDueDate: Date?
 
-  @ObservationIgnored private let backend: any TaskBackend
+  @ObservationIgnored private let backend: any TaskBackend & ShellBackend
   @ObservationIgnored private var updatesTask: Task<Void, Never>?
   @ObservationIgnored private var connectionTask: Task<Void, Never>?
   @ObservationIgnored private var boardTask: Task<Void, Never>?
+  @ObservationIgnored private var shellTask: Task<Void, Never>?
 
-  public init(backend: any TaskBackend) {
+  public init(backend: any TaskBackend & ShellBackend) {
     self.backend = backend
   }
 
@@ -99,12 +110,55 @@ public final class TaskBoardModel {
       do {
         for try await snapshot in self.backend.boardSliceUpdates() {
           guard !Task.isCancelled else { return }
-          self.boardSnapshot = snapshot
+          self.applyBoardSlice(snapshot)
         }
       } catch {
-        // Keep the last snapshot. A board failure must not blank the dashboard.
+        // Keep the last snapshot. A board failure must not blank the shell.
       }
     }
+
+    // The other destinations read their own string-named functions. A missing
+    // function yields an empty array, never a fallback screen.
+    shellTask = Task { [weak self] in
+      guard let self else { return }
+      await self.loadShellRecords()
+    }
+  }
+
+  /// Best-effort reads for Groups, Invites, Routings, Categories and Resources.
+  /// Each call is independent so one missing deployment function cannot hide
+  /// the records that do exist.
+  private func loadShellRecords() async {
+    async let groups = try? backend.groupsList()
+    async let invites = try? backend.invitesList()
+    async let routings = try? backend.routingsList()
+    async let categories = try? backend.categoriesList()
+    async let resources = try? backend.resourcesList()
+
+    let loadedGroups = await groups
+    let loadedInvites = await invites
+    let loadedRoutings = await routings
+    let loadedCategories = await categories
+    let loadedResources = await resources
+
+    if let loadedGroups { boardSnapshot.groups = loadedGroups }
+    if let loadedInvites { boardSnapshot.invites = loadedInvites }
+    if let loadedRoutings { boardSnapshot.routings = loadedRoutings }
+    if let loadedCategories { boardSnapshot.categories = loadedCategories }
+    if let loadedResources { boardSnapshot.resources = loadedResources }
+  }
+
+  /// `board:slice` owns tasks, messages, questions, progressions, and quests.
+  /// Groups, invites, and the menu lists come from their own queries, so a
+  /// later slice must not wipe them.
+  private func applyBoardSlice(_ snapshot: BoardSnapshot) {
+    var merged = snapshot
+    merged.groups = boardSnapshot.groups
+    merged.invites = boardSnapshot.invites
+    merged.routings = boardSnapshot.routings
+    merged.categories = boardSnapshot.categories
+    merged.resources = boardSnapshot.resources
+    boardSnapshot = merged
   }
 
   /// Stops live updates and clears everything user-specific.
@@ -115,6 +169,8 @@ public final class TaskBoardModel {
     connectionTask = nil
     boardTask?.cancel()
     boardTask = nil
+    shellTask?.cancel()
+    shellTask = nil
 
     tasks = []
     phase = .idle
@@ -126,10 +182,13 @@ public final class TaskBoardModel {
     draftTitle = ""
     draftDueDate = nil
     boardSnapshot = .starter
-    selectedViewID = BoardViewItem.home.id
-    selectedSlice = .tasks
+    selectedDestination = .tasks
+    selectedChip = .all
+    selectedRowID = nil
+    selectedGroupID = nil
+    activityOnTasks = .others
+    isCreateRouteActive = false
     presentedSheet = nil
-    showsDashboard = false
     localEntities = []
     composerFocusRequest = 0
   }
@@ -142,6 +201,8 @@ public final class TaskBoardModel {
     connectionTask = nil
     boardTask?.cancel()
     boardTask = nil
+    shellTask?.cancel()
+    shellTask = nil
     start()
   }
 
@@ -178,83 +239,122 @@ public final class TaskBoardModel {
 
   // MARK: - Shell
 
-  /// The selected category, falling back to Home if the payload removed it.
-  public var selectedView: BoardViewItem {
-    boardSnapshot.views.first { $0.id == selectedViewID } ?? .home
-  }
-
-  /// Tiles on the full-screen dashboard: one per category plus the add tile.
-  /// A source of truth separate from navigation means the dashboard can never
-  /// accidentally become a sidebar column.
-  public var dashboardTiles: [DashboardTile] {
-    var tiles = boardSnapshot.views.map { view in
-      DashboardTile(
-        id: view.id,
-        title: view.title,
-        icon: view.icon,
-        color: view.color
-      )
-    }
-    if !tiles.contains(where: { $0.title == "Add category" }) {
-      tiles.append(
-        DashboardTile(
-          id: "dashboard-add-category",
-          title: "Add category",
-          icon: "square-dashed",
-          color: Appearance.fallbackColor,
-          isAddTile: true
-        )
-      )
-    }
-    return tiles
-  }
-
-  /// Mixed rows for the active tab. Empty sections are dropped by the domain.
+  /// Mixed rows for the active chip. Empty sections are dropped by the domain.
   public func boardSections(now: Date = .now, calendar: Calendar = .current) -> [BoardSection] {
-    boardSnapshot.sections(tasks: tasks, slice: selectedSlice, now: now, calendar: calendar)
+    boardSnapshot.sections(
+      tasks: tasks,
+      chip: selectedChip,
+      activity: activityOnTasks,
+      groupID: selectedGroupID,
+      now: now,
+      calendar: calendar
+    )
   }
 
-  /// The bottom `+` presents the task sheet. For a time slice the planned day
-  /// is prefilled with that period's first day, as it was for the old quick add.
+  /// One row list for any destination. The list never chooses a row for the
+  /// detail column; only an explicit tap sets `selectedRowID`.
+  public func rows(
+    for destination: ShellDestination,
+    chip: BoardChip,
+    now: Date = .now,
+    calendar: Calendar = .current
+  ) -> [BoardRow] {
+    switch destination {
+    case .tasks:
+      return boardSections(now: now, calendar: calendar).flatMap(\.rows)
+    case .messages:
+      return boardSnapshot.alerts.map(BoardRow.alert)
+    case .groups:
+      return boardSnapshot.groups.map(BoardRow.group)
+        + boardSnapshot.invites.map(BoardRow.invite)
+    case .categories:
+      return boardSnapshot.categories.map(BoardRow.category)
+    case .resources:
+      return boardSnapshot.resources.map(BoardRow.resource)
+    }
+  }
+
+  public var rows: [BoardRow] {
+    rows(for: selectedDestination, chip: selectedChip)
+  }
+
+  /// The detail column reads "Select an item." until this is non-nil.
+  public var selectedRow: BoardRow? {
+    rows.first { $0.id == selectedRowID }
+  }
+
+  public var detailTitle: String? { selectedRow?.title }
+
+  /// Changing destination or chip clears the selection. This is what keeps a
+  /// row from being marked read just because the window got wider or a filter
+  /// changed.
+  public func selectDestination(_ destination: ShellDestination) {
+    selectedDestination = destination
+    selectedRowID = nil
+    isCreateRouteActive = false
+  }
+
+  public func selectChip(_ chip: BoardChip) {
+    selectedChip = chip
+    selectedRowID = nil
+  }
+
+  public func selectGroup(_ groupID: String?) {
+    selectedGroupID = groupID
+    selectedRowID = nil
+  }
+
+  /// Unseen counts for `.badge()`. A zero is never shown by the view.
+  public func badgeCount(for destination: ShellDestination) -> Int {
+    rows(for: destination, chip: selectedChip).count { $0.isUnseen }
+  }
+
+  public func badgeCount(for chip: BoardChip) -> Int {
+    rows(for: .tasks, chip: chip).count { $0.isUnseen }
+  }
+
+  /// Opening a row is the only act that marks it seen. A failed write leaves
+  /// the NEW mark in place.
+  public func selectRow(_ row: BoardRow) async {
+    selectedRowID = row.id
+    switch row {
+    case let .task(task):
+      // Selecting is not editing. It only marks the row seen; the detail pane
+      // has its own explicit Edit button.
+      await open(task)
+    case let .alert(alert):
+      await markAlertSeen(alert)
+    case .invite, .question:
+      // Invites and questions have no mark-seen mutation. Accept, decline, and
+      // answer are the writes that clear NEW, and only after they succeed.
+      break
+    default:
+      break
+    }
+  }
+
+  /// The create button pushes on compact width and presents on regular width.
+  /// For a time chip the planned day is prefilled with that period's first day.
   public func beginTask(now: Date = .now, calendar: Calendar = .current) {
-    draftDueDate = selectedSlice == .tasks ? nil : selectedSlice.anchor(now: now, calendar: calendar)
+    draftDueDate = selectedChip.anchor(now: now, calendar: calendar)
     composerFocusRequest += 1
     presentedSheet = .createTask
+    isCreateRouteActive = true
   }
 
   // MARK: - Modals
 
   public func present(_ sheet: BoardSheet) {
     presentedSheet = sheet
+    if sheet == .createTask { isCreateRouteActive = true }
   }
 
   public func dismissSheet() {
     presentedSheet = nil
+    isCreateRouteActive = false
   }
 
-  public func openDashboard() {
-    showsDashboard = true
-    presentedSheet = nil
-  }
-
-  public func closeDashboard() {
-    showsDashboard = false
-  }
-
-  /// Picking a category tile selects it and closes the dashboard. It never
-  /// adds a sidebar column to the navigation stack.
-  public func selectDashboardTile(_ tile: DashboardTile) {
-    if tile.isAddTile {
-      showsDashboard = false
-      presentedSheet = .category(nil)
-      return
-    }
-    selectedViewID = tile.id
-    showsDashboard = false
-  }
-
-  /// Opening a task presents the editor and is the only place that marks it
-  /// seen. A failed `markSeen` leaves NEW on the row.
+  /// Editing from a detail pane still uses a sheet, but never auto-opens one.
   public func openTask(_ task: TaskItem) async {
     presentedSheet = .editTask(task.id)
     await open(task)
@@ -381,7 +481,8 @@ public final class TaskBoardModel {
     defer { isSaving = false }
 
     let day = draft.plannedOn.map { calendar.startOfDay(for: $0) }
-      ?? selectedSlice.anchor(now: now, calendar: calendar)
+      ?? selectedChip.anchor(now: now, calendar: calendar)
+      ?? calendar.startOfDay(for: now)
     do {
       try await backend.createRecurrence(
         title: trimmed,
@@ -449,13 +550,13 @@ public final class TaskBoardModel {
     }
 
     inFlight.insert(task.id)
-    replace(original.withSeen())
     do {
       try await backend.markSeen(id: task.id)
+      // NEW clears only after the write succeeds. A failed open leaves the
+      // row exactly as it was.
       replace(original.withSeen())
       errorMessage = nil
     } catch {
-      replace(original)
       errorMessage = Self.message(for: error)
     }
     inFlight.remove(task.id)
@@ -527,7 +628,7 @@ public final class TaskBoardModel {
     now: Date = .now,
     calendar: Calendar = .current
   ) async {
-    let day = selectedSlice.anchor(now: now, calendar: calendar)
+    let day = selectedChip.anchor(now: now, calendar: calendar) ?? calendar.startOfDay(for: now)
     do {
       try await backend.createRecurrence(
         title: title,
@@ -541,9 +642,177 @@ public final class TaskBoardModel {
     }
   }
 
+  /// Settings writes `users:setActivityOnTasks { value }`. The default is
+  /// `others`; History always ignores this setting.
+  public func setActivityOnTasks(_ value: ActivityOnTasks) async {
+    let previous = activityOnTasks
+    activityOnTasks = value
+    do {
+      try await backend.setActivityOnTasks(value)
+      errorMessage = nil
+    } catch {
+      activityOnTasks = previous
+      errorMessage = Self.message(for: error)
+    }
+  }
+
+  /// Reading a message sets `seenAt` only after the write succeeds, and leaves
+  /// the record in History.
+  public func markAlertSeen(_ alert: BoardAlert) async {
+    guard let index = boardSnapshot.alerts.firstIndex(where: { $0.id == alert.id }) else { return }
+    do {
+      try await backend.markAlertSeen(id: alert.id)
+      boardSnapshot.alerts[index].seenAt = Date()
+      errorMessage = nil
+    } catch {
+      errorMessage = Self.message(for: error)
+    }
+  }
+
+  /// The row's primary action. The type mark itself is never a button.
+  public func performPrimaryAction(on row: BoardRow) async {
+    switch row {
+    case let .task(task):
+      await toggle(task)
+    case let .alert(alert):
+      await markAlertSeen(alert)
+    case let .question(question):
+      answerQuestion(question, optionID: question.options.first?.id ?? "")
+    case let .invite(invite):
+      await acceptInvite(invite)
+    default:
+      selectedRowID = row.id
+    }
+  }
+
+  private func inviteFor(_ row: BoardRow) -> BoardInvite? {
+    guard case let .invite(invite) = row else { return nil }
+    return invite
+  }
+
+  public func acceptInvite(inviteFor row: BoardRow) async {
+    guard let invite = inviteFor(row) else { return }
+    await acceptInvite(invite)
+  }
+
+  public func declineInvite(inviteFor row: BoardRow) async {
+    guard let invite = inviteFor(row) else { return }
+    await declineInvite(invite)
+  }
+
+  /// Accepting or declining also sets `seenAt`; the invite leaves the open
+  /// board but stays in the group's log.
+  public func acceptInvite(_ invite: BoardInvite) async {
+    guard let index = boardSnapshot.invites.firstIndex(where: { $0.id == invite.id }) else { return }
+    let previous = boardSnapshot.invites[index]
+    boardSnapshot.invites[index].status = "accepted"
+    boardSnapshot.invites[index].seenAt = Date()
+    do {
+      try await backend.acceptInvite(id: invite.id)
+      errorMessage = nil
+    } catch {
+      boardSnapshot.invites[index] = previous
+      errorMessage = Self.message(for: error)
+    }
+  }
+
+  public func declineInvite(_ invite: BoardInvite) async {
+    guard let index = boardSnapshot.invites.firstIndex(where: { $0.id == invite.id }) else { return }
+    let previous = boardSnapshot.invites[index]
+    boardSnapshot.invites[index].status = "declined"
+    boardSnapshot.invites[index].seenAt = Date()
+    do {
+      try await backend.declineInvite(id: invite.id)
+      errorMessage = nil
+    } catch {
+      boardSnapshot.invites[index] = previous
+      errorMessage = Self.message(for: error)
+    }
+  }
+
+  public func createGroup(name: String) async {
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    let preview = BoardGroup(id: "group-pending", name: trimmed)
+    boardSnapshot.groups.append(preview)
+    do {
+      try await backend.createGroup(name: trimmed)
+      boardSnapshot.groups.removeAll { $0.id == preview.id }
+      errorMessage = nil
+    } catch {
+      boardSnapshot.groups.removeAll { $0.id == preview.id }
+      errorMessage = Self.message(for: error)
+    }
+  }
+
+  public func createInvite(groupId: String, email: String) async {
+    guard !groupId.isEmpty, !email.isEmpty else { return }
+    let preview = BoardInvite(id: "invite-pending", groupId: groupId, email: email)
+    boardSnapshot.invites.append(preview)
+    do {
+      try await backend.createInvite(groupId: groupId, email: email)
+      boardSnapshot.invites.removeAll { $0.id == preview.id }
+      errorMessage = nil
+    } catch {
+      boardSnapshot.invites.removeAll { $0.id == preview.id }
+      errorMessage = Self.message(for: error)
+    }
+  }
+
+  /// Cron is an explicit trigger and `createTask` an explicit execution. The
+  /// cadence never implies a recurrence behavior.
+  public func createRouting(name: String, cadence: String, title: String) async {
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    let preview = BoardRouting(
+      id: "routing-pending",
+      name: trimmed,
+      trigger: "cron",
+      cadence: cadence,
+      executionKind: "createTask",
+      title: title
+    )
+    boardSnapshot.routings.append(preview)
+    do {
+      try await backend.createRouting(name: trimmed, cadence: cadence, title: title)
+      boardSnapshot.routings.removeAll { $0.id == preview.id }
+      errorMessage = nil
+    } catch {
+      boardSnapshot.routings.removeAll { $0.id == preview.id }
+      errorMessage = Self.message(for: error)
+    }
+  }
+
+  /// Marks a message seen without removing it. History keeps every record.
   public func dismissAlert(_ alert: BoardAlert) {
-    boardSnapshot.alerts.removeAll { $0.id == alert.id }
+    guard let index = boardSnapshot.alerts.firstIndex(where: { $0.id == alert.id }) else { return }
+    boardSnapshot.alerts[index].seenAt = Date()
     backend.dismissAlert(id: alert.id)
+  }
+
+  /// Composes a message from Messages. The record stays in `alerts`; a failed
+  /// write removes the local preview so History never shows an unsent record.
+  public func createMessage(title: String, body: String) async {
+    let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+
+    let preview = BoardAlert(
+      id: "message-\(UUID().uuidString)",
+      title: trimmed,
+      body: body,
+      author: "self",
+      seenAt: Date()
+    )
+    boardSnapshot.alerts.append(preview)
+    do {
+      try await backend.createAlert(title: trimmed, body: body)
+      // An in-memory backend has already replaced the snapshot with its own
+      // record; a Convex mutation has not, so the preview stays until reload.
+      errorMessage = nil
+    } catch {
+      boardSnapshot.alerts.removeAll { $0.id == preview.id }
+      errorMessage = Self.message(for: error)
+    }
   }
 
   public func answerQuestion(_ question: BoardQuestion, optionID: String) {

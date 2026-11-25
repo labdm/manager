@@ -85,9 +85,33 @@ private struct AlertRecord: Decodable {
   let id: String
   let title: String?
   let body: String?
+  let author: String?
+  @OptionalConvexFloat var seenAt: Double?
+
+  private enum CodingKeys: String, CodingKey {
+    case id, title, body, author
+    case source
+    case seenAt
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = try container.decodeIfPresent(String.self, forKey: .id) ?? ""
+    title = try container.decodeIfPresent(String.self, forKey: .title)
+    body = try container.decodeIfPresent(String.self, forKey: .body)
+    author = try container.decodeIfPresent(String.self, forKey: .author)
+      ?? container.decodeIfPresent(String.self, forKey: .source)
+    seenAt = try container.decode(OptionalConvexFloat<Double>.self, forKey: .seenAt).wrappedValue
+  }
 
   var alert: BoardAlert {
-    BoardAlert(id: id, title: title ?? "", body: body ?? "")
+    BoardAlert(
+      id: id,
+      title: title ?? "",
+      body: body ?? "",
+      author: author ?? "",
+      seenAt: seenAt.map { DueDateMath.date(fromMilliseconds: $0) }
+    )
   }
 }
 
@@ -96,13 +120,28 @@ private struct QuestionRecord: Decodable {
   let prompt: String?
   let options: [OptionRecord]?
   @OptionalConvexFloat var answeredAt: Double?
+  @OptionalConvexFloat var seenAt: Double?
+
+  private enum CodingKeys: String, CodingKey {
+    case id, prompt, options, answeredAt, seenAt
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = try container.decodeIfPresent(String.self, forKey: .id) ?? ""
+    prompt = try container.decodeIfPresent(String.self, forKey: .prompt)
+    options = try container.decodeIfPresent([OptionRecord].self, forKey: .options)
+    answeredAt = try container.decode(OptionalConvexFloat<Double>.self, forKey: .answeredAt).wrappedValue
+    seenAt = try container.decode(OptionalConvexFloat<Double>.self, forKey: .seenAt).wrappedValue
+  }
 
   var question: BoardQuestion {
     BoardQuestion(
       id: id,
       prompt: prompt ?? "",
       options: (options ?? []).map(\.option),
-      answeredAt: answeredAt.map { DueDateMath.date(fromMilliseconds: $0) }
+      answeredAt: answeredAt.map { DueDateMath.date(fromMilliseconds: $0) },
+      seenAt: seenAt.map { DueDateMath.date(fromMilliseconds: $0) }
     )
   }
 }
@@ -249,7 +288,9 @@ extension ConvexTaskBackend {
   /// they update the cached board payload the same way the in-memory source
   /// does, so the band and prompt clear immediately.
   public func dismissAlert(id: String) {
-    boardSnapshot.alerts.removeAll { $0.id == id }
+    if let index = boardSnapshot.alerts.firstIndex(where: { $0.id == id }) {
+      boardSnapshot.alerts[index].seenAt = Date()
+    }
   }
 
   public func answerQuestion(id: String, optionID: String) {
