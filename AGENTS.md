@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Manager is Dmytro Afonin's ADHD-first, gamified life manager — not just another checkbox list. Architecture: [docs/architecture.md](docs/architecture.md). Web and desktop UI layout: [docs/ui.md](docs/ui.md).
+Manager is Dmytro Afonin's ADHD-first, gamified life manager — not just another checkbox list. Architecture: [docs/architecture.md](docs/architecture.md). Shipped web and desktop chrome: [docs/ui.md](docs/ui.md). The next shell, after owner review: the Layout evolution section of [docs/plan.md](docs/plan.md).
 
 This tree is the Convex backend, the shared React UI, the static web app, the Tauri desktop client, the MCP server, and the native Apple and Android clients.
 
@@ -30,9 +30,10 @@ Use these terms consistently in code, schema, docs and UI. The Convex schema cur
 | progression | A known-size track: N steps, or a meter such as pages. |
 | quest | A chain of tasks. Steps may be known up front or appended when the current step ends. |
 | category | A slice of life. Household, health, work, and whatever the user adds. |
-| space | People plus the entities attached to it. Attach and detach. Not a required parent. Has a Lucide icon and a color. |
-| view | A left-rail slice. Home, an installed template, a computed query (New, high priority, today), or a custom list. Not a shared space. |
-| alert | A note from an agent or another person. No checkbox and no done state. Reading it clears it from the band. |
+| space | An organization. The screen says **group**. Every person has a default group, created with them, with the same rules as any other group. Every item has exactly one `groupId`. Schema name stays `spaces`. Members have a role; `admin` includes `canInvite`. |
+| view | A saved slice. Tasks filters (New, high priority, today) or a category in the Categories tab. Not a side rail and not a shared space. |
+| alert | A message or an activity record. The screen says **message**. The table stays `alerts`. No checkbox and no done state. History shows every record. The Tasks page shows the subset chosen in Settings. The default is other people and agents, not your own actions. |
+| routing | A trigger plus an execution. Cron, or an entity state change, then a create, a progression log, a resource change, or a message. Idempotent per period or per write. |
 | question | A prompt with options. Answering can create the next task. Not a task itself. |
 | pin | A sort override on a view. Does not change priority or date. Include and exclude are membership overrides on a computed view. |
 | appearance | `icon` is a Lucide name. `color` is a palette token. Both are strings. Unknown values fall back. Used on views, events, categories, and spaces. |

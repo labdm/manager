@@ -76,9 +76,9 @@ Replace: at most one open occurrence. On a new period, the previous open row bec
 
 **Attachment.** `subjectType`, `subjectId`, `targetType`, `targetId`, `role` `primary` or `extra`. Subjects: task, progression, quest, event, category. Targets: category, event, quest, progression, space. This is the only link. No `primaryCategoryId` column beside it. Life-sized lists do not need a second source of truth. If a slice profile is slow, a denormalized hint can be added later as a cache, not as the write path.
 
-**Shared space.** `name`, `icon?`, `color?`, members (`owner`, `editor`, `viewer`), attachments. Personal tasks do not require one. `canRead` starts as "owner matches" in M1. Every later query uses that helper, so sharing extends the helper instead of rewriting each list.
+**Shared space.** The screen says group. `name`, `icon?`, `color?`, members (`owner`, `admin`, `editor`, `viewer`), `canInvite` on the membership. Admin includes `canInvite`. Owner is an admin. Every person has one default group, created with the user, same rules as any other group. Every item has exactly one `groupId`. `canRead` starts as "owner matches" in M1, before the column exists. From groups on, every query uses the same helper and the same group path. There is no group-less item.
 
-**View.** A left-rail entry. `title`, `icon?`, `color?`, `kind` (`home`, `template`, `computed`, `custom`), optional `filter` document, `deletedAt?`. Home is built in and cannot be deleted. A template view is backed by a category. A computed view is a saved query and stores no task copies. Seeds: New (`sparkles`), High priority (`flame`), Today (`sun`). A custom view is an empty rail entry you fill by hand.
+**View.** A saved slice. `title`, `icon?`, `color?`, `kind` (`home`, `template`, `computed`, `custom`), optional `filter` document, `deletedAt?`. Home is the Tasks feed and cannot be deleted. A template view is backed by a category and opens from the Categories tab. A computed view is a saved query and stores no task copies. Seeds: New (`sparkles`), High priority (`flame`), Today (`sun`), shown as Tasks filters. A custom view is a filter you fill by hand. The layout evolution section is where these sit on screen.
 
 **Alert.** Not a task. `title`, `body?`, `source` (`agent` or `member`), `seenAt?`, `deletedAt?`. No `done`. The Home band shows alerts with no `seenAt`. Opening one sets `seenAt` and drops it from the band. The row stays in a log. Alerts do not sit in the checkbox list.
 
@@ -86,11 +86,11 @@ Replace: at most one open occurrence. On a new period, the previous open row bec
 
 **Pin and overrides.** `viewPins` is a view id plus a subject. Pinned rows sort above the rest of that view. A pin does not change priority, date, or deadline. `viewOverrides` is `include` or `exclude` for a subject on a computed view. The query is "matches the filter, or is included" and "is not excluded". Exclude hides a row from Today without deleting it. Guidance: one pin is a spotlight. The core allows more.
 
-**Layout.** Home's horizontal tabs are Tasks, Daily, Weekly, Monthly, plus a create button. Tasks means no time filter inside the view. Daily, Weekly, and Monthly are the day, week, and month events. Active seasons can appear as further tabs. Changing tabs does not change which row types exist. The column, top to bottom: unread alerts, open questions, pinned rows, then tasks, progression bars, and quest steppers. A layout document can still move facets between axes. "All" is a query mode, not a stored event.
+**Layout.** Tasks filters are All, Daily, Weekly, and Monthly, plus Events when a named event applies. Daily, Weekly, and Monthly are the day, week, and month events. "All" is a query mode, not a stored event. The same row types exist on every filter. Order in the feed: pinned rows, then actionable rows (open tasks, unseen messages, unanswered questions, pending invites, progression tracks). Read messages stay on the Messages screen. The screen arrangement is the layout evolution section.
 
 ### Web shell
 
-The web and desktop shell puts those tabs in a fixed bottom glass bar instead of a side rail. The grid button opens a full-screen dashboard of view, category, event, progression, and resource tiles; it is a page takeover, not a drawer. Creation and editing happen in one sheet: a centered dialog at 800px and up, a fixed bottom sheet below that. The board behind it does not reflow. A task sheet chooses its look (`check`, `row`, `card`) and its series (`none`, `replace`, `stack`) explicitly; cadence (`daily`, `weekly`, `monthly`, `every 14 days`) never implies a behavior. Appearance is picked from a searchable Lucide grid with palette swatches and a live preview, never typed. Sheet writes go through `makeFunctionReference`; a missing deployment shows its error in the sheet. Details: [docs/ui.md](ui.md).
+Shipped chrome (bottom bar Tasks, Daily, Weekly, Monthly, Grid, and +, plus the category dashboard and `check` / `row` / `card` looks) is recorded in [docs/ui.md](ui.md). The layout evolution section replaces that chrome. Keep the mutation pattern: writes go through `makeFunctionReference`, and a missing deployment shows its error on the detail screen. A task still chooses its series (`none`, `replace`, `stack`) explicitly; cadence (`daily`, `weekly`, `monthly`, `every 14 days`) never implies a behavior. Appearance stays a searchable Lucide grid with palette swatches and a live preview.
 
 **Presentation pack.** A string id plus a token bag (accent, icon, copy overrides such as `limitedLabel`). Clients register components. Unknown ids use the default shell and still apply tokens. No pack id is branched on inside `taskService`.
 
@@ -157,19 +157,11 @@ Priority seeds: `low`, `normal`, `high`, `urgent`. Omitted means `normal` / 10.
 
 ## Board
 
-The default shell matches the Home sketch.
+The feed draws one row anatomy, specified in the layout evolution section. A NEW mark sits on a row when an agent or another member created it and `seenAt` is absent. A progression is its own row (a bar such as `Finish the book`, 150/300) and can also be the bar slot on a linked task. A quest step wears an exclamation beside the title. Unread messages and unanswered questions are rows on Tasks. A waiting quest stays on Tasks with no date, so it cannot vanish.
 
-Left rail: **Home** (`house`, `sky`), then computed views you turn on (New, High priority, Today), then any template you installed from **Find more**. Find more searches the catalog. Each hit is a template: a category, a suggested icon and color, starter tasks, and an optional frame. Installing copies it onto the rail. You can change the icon and color, edit the tasks, or rebuild the frame. You can also create a custom view with no template.
+Find more installs a category template (icon, color, starter tasks, optional frame) into the Categories tab. You can change the icon and color, edit the tasks, or rebuild the frame.
 
-Top of the main column: Tasks, Daily, Weekly, Monthly, and +. Tasks is the view with no time filter. The other three attach the slice to the day, week, or month event. + creates a row in the current slice.
-
-The column draws mixed rows. A task is a checkbox row. A NEW mark sits on the title when an agent or another person created it and you have not opened it. A progression is a bar (`Finish the book`, 150/300). A quest is a stepper (Step 1, Step 2, an empty next). Unread alerts sit in a band above the checkboxes. An open question sits under the band and above the pins.
-
-A task in two views shows in both. The UI may say so. Saving the extra is allowed. A waiting quest stays on Home even with no date, so it cannot vanish.
-
-Season-forward is still a layout document: seasons on the rail, categories across the top. Same records. Card versus row: hint on the record, else the category hint, else row when the slice is long.
-
-A Winter pack may replace the empty state and the card frame. The icon and color still apply when the frame is missing. `taskService` does not mention Winter or Lucide.
+A task in two views shows in both. Saving the extra is allowed. Seasons stay events. A Winter pack may replace the empty state. The icon and color still apply when a frame is missing. `taskService` does not mention Winter or Lucide. Stored presentation `card` is ignored; the board draws the row.
 
 ## User flows
 
@@ -242,25 +234,187 @@ There is no public REST API. There is no new backend.
 
 **M2 — Replace and stack.** The dish test (one open row after a missed day, previous outcome superseded) and the journal test (three open rows). Idempotent mint. Cron persists overdue. `open` boolean and index. Out: the Home shell.
 
-**M3 — Home shell.** Views, day/week/month events, attachments, icon and color, Tasks / Daily / Weekly / Monthly, Find more installing one template, computed views New, High priority, and Today, pin and include/exclude. Web, desktop, Apple, and Android all show the column. Out: quests, alerts, sharing.
+**M3 — Home shell.** Views, day/week/month events, attachments, icon and color, Find more installing one template, computed views New, High priority, and Today, pin and include/exclude. The screen for this data is layout milestone R3, not a left rail and not Tasks / Daily / Weekly / Monthly tabs. Out: quests, messages, sharing.
 
-**M4 — Progressions.** A page meter and a step track drawn in the column, as a bar.
+**M4 — Progressions.** A page meter and a step track drawn as a row, with a bar. On screen this is layout milestone R6. A state change that logs progress goes through a routing (R2).
 
-**M5 — Quests and questions.** Waiting becomes a question with options. A locked known sequence still works with no question. An answer can append the next task.
+**M5 — Quests and questions.** Waiting becomes a question with options. A locked known sequence still works with no question. An answer can append the next task. On screen this is layout milestone R6. State changes that automate the next step go through a routing (R2).
 
-**M6 — Alerts.** Agent summaries in the band. Reading clears the band and keeps the log. No checkbox.
+**M6 — Alerts.** The product word is message. The record stays the shipped `alerts` table. Reading clears the Tasks-page row and keeps History. No checkbox. On screen this is layout milestone R5.
 
-**M7 — Shared spaces.** Create, invite, attach, detach, icon and color. One-hop visibility. A test that Money does not leak through a season. NEW applies to rows another member creates. `canRead` grows here.
+**M7 — Shared spaces.** The product word is group. Every person has a default group, and every item has exactly one. Create, invite, attach, detach, icon and color. `canInvite` is the invite permission, and admin has it. One-hop visibility. A test that Money does not leak through a season. NEW applies to rows another member creates. `canRead` grows here. On screen this is layout milestone R4. Shipping it creates the default group for existing users and sets `groupId` on existing items.
 
-**M8 — Longer events, Winter, seeds.** Month, quarter, year, custom. Winter installed as a season with its own icon, color, and one frame. A new account can enable the catalog. The harness notes grow with each milestone.
+**M8 — Longer events, Winter, seeds.** Month, quarter, year, custom. Winter installed as a season with its own icon, color, and one frame. A new account can enable the catalog. The harness notes grow with each milestone. Seasons stay events and show up through the Events chip and the Events menu page.
 
-**Horizon.** Achievements queried from completions, progressions, quests, and missed or superseded rows. Social play beyond a space. Paid inference and a connected mailbox, with MCP still there for people who bring a harness. Native push, calendar, reminders, and alarms driven by `plannedTime`, `deadlineAt`, and `remindAt`.
+**Horizon.** Achievements queried from completions, progressions, quests, and missed or superseded rows, as the Achievements menu page (layout milestone R7). Social play beyond a group. Paid inference and a connected mailbox, with MCP still there for people who bring a harness. Native push, calendar, reminders, and alarms driven by `plannedTime`, `deadlineAt`, and `remindAt`.
+
+M1 and M2 stay as written. Layout milestones R1–R7 below are the shell and the routing engine. They do not rebuild M1 or M2.
+
+## Layout evolution
+
+Status: revised 2026-11-24 after owner review of navigation, history, groups, invites, and routings. Implementation waits until this revision is accepted. This section replaces the Home rail, the shipped bottom bar (Tasks, Daily, Weekly, Monthly, Grid, +), the category dashboard, and card presentation. Apple, Android, web, and desktop share the destinations and use each platform's own navigation controls. [docs/ui.md](ui.md) remains the check for the shipped build until this shell lands.
+
+Two drafts were compared. One put Inbox, Calendar, Resources, Achievements, and Menu on the bar. The other put Tasks, Messages, Groups, Categories, and Resources on the bar and kept Settings as a button. The review settled on the five destinations below. The sketch's bottom chips were tasks, categories, resources, achievements, and setting, beside a long menu that repeated several of them. Each item now has one door.
+
+### Primary navigation
+
+The menu is a button on every width. It is not a tab. Nothing in the menu is also a primary destination.
+
+| Destination | Role |
+|---|---|
+| Tasks | Default mixed feed. Open tasks, unseen messages, unanswered questions, and pending invites. Activity rows on this page follow a setting. The default shows activity from other people and from agents, and hides your own. Your own tasks still show. Filters: All, Daily, Weekly, Monthly, Events, plus saved filters New, High priority, and Today. |
+| Messages | Composer, people, agents, and History. History lists every activity record, including your own. The Tasks-page setting does not apply here. |
+| Groups | One organization: members, invites, and the items that belong to it. Hidden until groups ship. The switcher then lists the person's groups, with the default group selected. |
+| Categories | Life slices, topics, icons, colors, templates, and custom views. Find more lives here. |
+| Resources | The resource ledger and effects. |
+
+Until Groups ships, the bar is Tasks, Messages, Categories, Resources, and the menu button. Achievements does not fill the empty slot.
+
+Any filter chip can show a badge. The badge counts unseen items in that slice. It is not reserved for Daily or Events.
+
+Phone uses the platform tab bar. A wider window uses the platform rail or split view for the same destinations, with the menu button available from the toolbar. The menu list is not pinned open, and it is not a second copy of the tab bar.
+
+### Menu
+
+The button is always on screen: the list header on phone and medium, the bottom of the rail on a large screen. The menu list itself is not pinned open.
+
+**Achievements · Contacts · Events · Routings · Profile · Settings · Docs · Contact us · Desktop app · Changelog**
+
+Settings holds notifications, sharing, swipe actions, which changes become activity records, and which of those records appear on the Tasks page. The Tasks-page default is other people and agents. History ignores that setting and shows every record. Profile holds the Clerk account fields. Events is where seasons and named events are created. The Events chip on Tasks stays a filter. Contacts is where people are viewed and invited. Achievements is the stats page. The Routings menu page lists automations; the engine itself is milestone R2, not a last-step screen.
+
+Dashboard is removed. A stored `card` presentation is ignored.
+
+### Why these five
+
+Achievements stays in the menu. It is a query over completions, tracks, and quests, and that query waits until those records are in use. Stats open from the menu onto their own page. The empty detail pane does not become a stats dashboard. Achievements can take a primary slot later only by a separate decision.
+
+Messages is a destination because a read alert already leaves the board and stays in a log. The shipped record is `alerts`. The Tasks page shows the rows that still need attention, including the activity subset from Settings. History, inside Messages, shows every activity record. A summary is a message. It is never a task.
+
+Groups is a destination because members and invites need a home. A group is an organization. The relationship is group, then items. An item belongs to exactly one group. The default group is an ordinary group created with the person. It can be renamed. It cannot be deleted, because a person always has one. The header switcher selects one group, or All. All reads across groups the person belongs to. It does not attach an item to two groups. Creating an item writes it into the selected group, which starts as the default group. Joining another group adds membership. It does not move existing items and does not remove the default group.
+
+Categories stays a destination because the sketch put it on the bar and a category is a slice of life. Icons, colors, and templates are edited there.
+
+Calendar stays off the bar. Daily, Weekly, and Monthly chips are the day, week, and month slices. Expanding a day is that chip's detail. A later calendar page can be pushed from the Events chip. It is not one of the five.
+
+### Platform chrome
+
+The sketch is the guidance for what is on screen. Each platform uses its own navigation components so we do not maintain a second design system. Liquid Glass and Material blur stay on bars and buttons. Rows stay opaque: a glass row hides the title, which `ManagerGlass` in the Apple client already avoids.
+
+**Web and desktop.** `packages/ui` is hand-written CSS (`tasks.css`, `home.css`, `sheets.css`). Tailwind and shadcn are not in the repo. The first shell change adds both to `packages/ui`, which the web app and the Tauri client share. Theme tokens are shadcn CSS variables, so a later theme edits tokens. Product rows stay our component. Tabs, buttons, menus, badges, dialogs, and the menu list come from shadcn. Phone web is one route at a time. A wide window is a list beside a detail pane built from the same components. There is no custom glass rail.
+
+**Apple.** System `TabView` on the phone, with `.badge()` for unseen counts. The system draws the tab bar. Regular width uses `NavigationSplitView` with no initial selection and the detail column reading "Select an item." Compact width pushes detail and create with `navigationDestination`. The menu is a toolbar button that pushes a list. Glass stays on the buttons we already style in `ManagerGlass`. We do not wrap the split view in a glass container, and we do not paint glass on rows.
+
+**Android.** Material 3 is already the theme (`compose-bom` 2026.09). Compact width uses the navigation bar. From 600dp the same destinations move to a navigation rail, and the bar is not shown at the same time. Expanded width is the rail plus a list-detail layout whose detail starts empty. The menu is a modal navigation drawer, because it has more destinations than a bar can hold. It is not a permanent drawer. Rows use list items. Create is a full-screen route. Accept and Decline stay on the row.
+
+### Shell
+
+**Phone.** One screen. Tasks is the default. The header has the menu button, the group switcher, and a create button. Filter chips sit under the header and swipe sideways. Any chip can wear a badge. Tapping a row opens its detail. Create opens the new-task flow, a pushed screen on the phone. A message is composed on Messages. An invite is sent from Groups. A question comes from a quest flow.
+
+**Medium (foldable, iPad).** List plus detail, using the platform split. The detail starts empty: "Select an item." Nothing is preselected on load or after a filter change. Selection is the act that marks a row seen.
+
+**Large.** The platform rail or split, the list (switcher and chips), and the detail of the row the user opened. The list does not auto-open a row. Auto-selection would mark it read.
+
+**Fourth region.** Only after the user opens a secondary page such as Achievements. Prefer a pushed screen or the system inspector over a custom fourth column. It never holds an automatically selected row, the menu, or an unread band.
+
+### Row
+
+One row. Slots are fixed and omitted when they do not apply.
+
+| Slot | Content |
+|---|---|
+| 1 | `NEW` when an agent or another member created the row and `seenAt` is absent |
+| 2 | Category icon, tinted with the category color, or a neutral fallback |
+| 3 | Type mark: task, message, question, invite, or progression. The mark is not a button |
+| 4 | Progress, such as `8 / 15`, on a progression or a task linked to one |
+| 5 | Primary action |
+| 6 | People glyph when the row is attached to a group. On an invite, the source group |
+| 7 | Due: planned day, planned time, deadline countdown, or overdue. Tasks only |
+| 8 | Resource badge `+1` or `-1`. Never on an invite |
+
+The title follows the leading marks. Body text sits under the title. A quest exclamation sits beside the title when the row is a quest step or is linked to a quest. An event header is a section divider, not a row.
+
+| Type | Primary action | Also | Due | Progress | Quest mark | Resource |
+|---|---|---|---|---|---|---|
+| Task | Done | Mark as read while NEW. Swipe actions come from Settings | `plannedOn`, `plannedTime`, `deadlineAt` | When linked to a progression | When it is a quest step | Yes |
+| Message | Mark as read | Reply on Messages | No | No | When linked | Yes |
+| Question | Answer, which opens the options | Mark as read | No | No | Yes | Only through the answer's effect |
+| Invite | Accept, with Decline beside it | Mark as read | No | No | No | No |
+| Progression | Done or Log when a task backs it | Meter logging on the detail | Only what a linked task carries | Yes | When linked | Yes |
+
+An invite has no due, progression, quest, or resource. It belongs to the group that sent it.
+
+`check`, `row`, and `card` all draw as this row. Catalog templates that say "card" keep the hint in data; the board ignores it.
+
+### Mark read
+
+`NEW` means an agent or another member created the row and `seenAt` is absent. A missing origin reads as self. A self-created row sets `origin: self` and `seenAt` immediately. Opening the detail calls `markSeen` and clears NEW only after that mutation succeeds. A failed open leaves NEW. A blank `plannedOn` or `deadlineAt` does not clear it. Messages, questions, and invites use the same `seenAt`. Answering a question or accepting or declining an invite also sets `seenAt`. Mark as read stays available before that decision. Marking a task read is a different action from marking it done.
+
+Medium and large screens start with an empty detail pane for this reason. A preselected first row would clear NEW without the user opening it.
+
+### Records
+
+| Product word | Record | What changes |
+|---|---|---|
+| Task | `tasks` | `ownerId` stays. `dueAt` stays the one-release alias of `plannedOn`. `groupId` is required once groups ship. Exactly one group. |
+| Message | shipped `alerts` | The screen says Message. The table stays `alerts`. R5 adds a kind, an author, and links to a task, quest, progression, or event. Low-stock notes stay rows in this table. There is no second table and no `done`. |
+| Question | shipped `questions` | Reuse. `seenAt` is already there. Answer effect can append a quest step or create a task. |
+| Invite | new `invites` | Group id, invitee, status, origin, `seenAt`, `deletedAt`. Accept creates membership. No due, progression, quest, or resource fields. |
+| Group | planned `spaces` / `spaceMembers` | The screen says Group. The schema name stays space. A member has a role and a `canInvite` flag. `admin` includes `canInvite`. Owner is an admin. M1 shipped without the column. R4 creates each person's default group and backfills `groupId` on existing items, then the column is required. Visibility stays one hop. |
+| Event | `events` | Unchanged. Day, week, month, season, and limited roles stay one table. |
+| Category | `categories` | Unchanged. Icon, color, and template-driven styles. |
+| Progression, quest | `progressions`, `quests`, `questSteps` | Unchanged mechanics. They supply the bar and the quest exclamation. A task can be both. State-change effects run through a routing once R2 exists. |
+| Routing | new `routings` | Trigger plus execution. See Routings below. |
+
+MCP stays thin and calls the same Convex mutations. No public REST. `create_alert` remains the tool that writes a message until R5 adds the extra fields. `pnpm build:api` still follows any MCP change.
+
+### Routings
+
+A routing is a small automation: a trigger, then an execution. It is how daily and weekly series, progression updates, and resource changes share one engine. It is milestone R2, before progressions and quests grow more automations. The menu page that lists routings can follow the engine. The engine does not wait for Achievements.
+
+Two triggers are in the first slice:
+
+- **Cron.** The common case. A daily or weekly task series, and a day or week boundary, are cron routings. The series still chooses `replace` or `stack`. Cadence does not become a new behavior.
+- **Entity state change.** Completing, reopening, or deleting a task. A resource quantity crossing `lowAt`. A quest step completing. The execution can create an entity, log a progression, apply or reverse a resource change, write a message, or append a quest step.
+
+The idempotency key is part of the record. A cron routing uses `routingId` plus the period start. A state routing uses `routingId` plus the subject id plus the revision of the write that fired it. A repeated cron tick or a retried mutation must not run the execution twice.
+
+This matches machinery that already ships. `convex/crons.ts` runs `recurrences.reconcileAll` every five minutes and mints one occurrence per recurrence per period. Completing a task applies its resource delta once, and reopening reverses it once. R2 adds the `routings` table and runs new automations through it. The recurrences table and the resource-on-complete path stay until a routing can express them. Replace and stack are not rewritten. Later triggers, such as a webhook or a location, wait until these two are in use.
+
+### Achievements
+
+Achievements stays a menu page. It is the last layout milestone, after progressions and quests exist, so the numbers are real. The page shows completed tasks, missed tasks, superseded tasks, progression current against target, and quests active against quests completed. A zero is a zero. There is no streak, level, or rank in this milestone. Presentation packs can skin the page later. Opening the page is what shows it. The empty detail pane does not.
+
+### Layout milestones
+
+These sit on top of M1–M8. Implementation waits until this revision is accepted.
+
+| Milestone | Issue | In scope | Out of scope |
+|---|---|---|---|
+| R1 — Row-first shell | [LAB-152](https://linear.app/labdm/issue/LAB-152) | Tailwind and shadcn in `packages/ui`, then the destinations, menu, chips, one row, and platform navigation above. Any chip can badge. Empty detail on medium and large. No preselection. Messages lists existing alerts. Categories and Resources list existing records. Remove the grid dashboard and the card look. | Schema changes, groups, invites, the routing table, achievements |
+| R2 — Routings | [LAB-157](https://linear.app/labdm/issue/LAB-157) | `routings` with cron and state-change triggers, the executions listed above, and the idempotency key. Menu page can list them. Existing recurrence reconcile and once-only resource effects keep working. | Rewriting replace and stack. New trigger types. Achievements |
+| R3 — Categories, views, and event filters | [LAB-151](https://linear.app/labdm/issue/LAB-151) | Categories tab with icons, colors, and templates. New, High priority, and Today as Tasks filters. Pins and include/exclude. Events chip. Replaces the data half of M3 ([LAB-146](https://linear.app/labdm/issue/LAB-146)). | Groups, the message composer, invites, quests |
+| R4 — Groups and invites | [LAB-154](https://linear.app/labdm/issue/LAB-154) | `spaces`, a default group for every person, required `groupId` on every item after backfill, `canInvite`, admin includes that permission, `invites`, accept and decline, the group switcher, one-hop visibility, NEW on member-created rows. The Groups destination appears. Same code path for the default group and any later group. Replaces M7 ([LAB-142](https://linear.app/labdm/issue/LAB-142)). | A second group on one item, a group-less item, a special personal code path, achievements |
+| R5 — Messages and history | [LAB-156](https://linear.app/labdm/issue/LAB-156) | Kind, author, and links on `alerts`. Composer. History shows every activity record. Tasks shows the settings subset, defaulting to other people and agents. Replaces M6 ([LAB-143](https://linear.app/labdm/issue/LAB-143)). | Turning a summary into a task. A second table |
+| R6 — Progressions, quests, and questions in the row | [LAB-153](https://linear.app/labdm/issue/LAB-153) | Bars, quest exclamation, question options, answer effects, a task that is both a quest step and a progression, Mark as read beside Done. State-change effects go through a routing. Replaces M4 ([LAB-148](https://linear.app/labdm/issue/LAB-148)) and M5 ([LAB-147](https://linear.app/labdm/issue/LAB-147)). | New task facts, achievement queries |
+| R7 — Achievements | [LAB-155](https://linear.app/labdm/issue/LAB-155) | The Achievements page with the counts listed above. | Streaks, levels, ranks, social play beyond groups, paid inference, native fan-out |
+
+Index: [LAB-150](https://linear.app/labdm/issue/LAB-150). M1 stays [LAB-145](https://linear.app/labdm/issue/LAB-145) and stays open. M2 stays [LAB-144](https://linear.app/labdm/issue/LAB-144). M8 ([LAB-141](https://linear.app/labdm/issue/LAB-141)) still covers longer events, Winter, and the catalog.
+
+### Settled, and one assumption
+
+Settled: History shows every activity record. The Tasks page shows a subset, defaulting to other people and agents, not your own actions. Every person has a default group. Every item belongs to exactly one group. There is no group-less item and no separate personal behavior. `canInvite` is the invite permission, and the admin role has it. Accepting an invite creates membership only, with no starter rows. Chip badges can appear on any chip. Routings are the automation engine and land in R2. Achievements shows the five counts above and nothing gamified beyond that.
 
 ## What we deliberately did not take
 
-- A required personal space and a backfill in M1.
+- Putting `groupId` on tasks during M1. Groups ship later. When they ship, every person gets a default group and existing items are backfilled. That backfill is R4, not an M1 rewrite.
 - `carry_forward` as a third overdue policy. Doing nothing is `none`.
 - Gacha tier names (SSR, crimson pulse) on the task row. Packs may paint `urgent` that way.
 - A batch tool as the only way to create a plan.
 - Indexing a missing `deletedAt` and hoping.
 - Capping a stack backlog in the schema. The pack may collapse it.
+- A primary destination repeated as a menu row.
+- Preselecting a row when the window gets wider. Selection marks the row seen.
+- A second message table beside `alerts`.
+- Renaming `spaces` in the schema. The screen says Group.
+- Membership of an item in more than one group.
+- A routing engine that replaces replace and stack instead of calling them.
