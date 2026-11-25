@@ -25,6 +25,10 @@ class InMemoryTaskBackend(
 
     private val store = MutableStateFlow(initial.map { Stored(it, deletedAt = null) })
     private val connection = MutableStateFlow(ConnectionStatus.CONNECTED)
+    private val groups = MutableStateFlow(listOf(GroupItem("default", "Personal", isDefault = true)))
+    private val invites = MutableStateFlow(emptyList<InviteItem>())
+    private val routings = MutableStateFlow(emptyList<RoutingItem>())
+    private val boardSlice = MutableStateFlow(BoardSnapshot())
     private var nextId = initial.size
 
     /** What the sheets asked for, recorded so the state machine can be tested. */
@@ -33,6 +37,14 @@ class InMemoryTaskBackend(
     val createdSeries = mutableListOf<SeriesBehavior>()
     val createdCadences = mutableListOf<SeriesCadence>()
     val recurrenceCadences = mutableListOf<String>()
+    val groupsCreated = mutableListOf<Triple<String, String, String>>()
+    val invitesCreated = mutableListOf<Pair<String, String>>()
+    val acceptedInvites = mutableListOf<String>()
+    val declinedInvites = mutableListOf<String>()
+    val routingsCreated = mutableListOf<Triple<String, String, String>>()
+    val markedAlertIds = mutableListOf<String>()
+    var failWrites = false
+    var activityOnTasks: ActivityOnTasks = ActivityOnTasks.OTHERS
 
     /** Rows the list shows: open rows plus done rows, minus soft-deleted ones. */
     val allTasks: List<TaskItem>
@@ -317,6 +329,85 @@ class InMemoryTaskBackend(
         store.value = store.value.map {
             if (it.item.id == id && it.deletedAt == null) it.copy(deletedAt = timestamp) else it
         }
+    }
+
+    override fun boardSliceUpdates(): Flow<BoardSnapshot> = boardSlice.asStateFlow()
+
+    override fun groupUpdates(): Flow<List<GroupItem>> = groups.asStateFlow()
+
+    override fun inviteUpdates(): Flow<List<InviteItem>> = invites.asStateFlow()
+
+    override fun routingUpdates(): Flow<List<RoutingItem>> = routings.asStateFlow()
+
+    override suspend fun createGroup(name: String, icon: String, color: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        groupsCreated += Triple(trimmed, icon, color)
+        groups.value = groups.value + GroupItem(
+            id = "local-group-${groups.value.size + 1}",
+            name = trimmed,
+            icon = Appearance.icon(icon),
+            color = Appearance.color(color),
+        )
+    }
+
+    override suspend fun createInvite(groupId: String, invitee: String) {
+        invitesCreated += groupId to invitee
+        invites.value = invites.value + InviteItem(
+            id = "local-invite-${invites.value.size + 1}",
+            groupId = groupId,
+            groupName = groups.value.firstOrNull { it.id == groupId }?.name ?: groupId,
+            title = "Invitation to ${groups.value.firstOrNull { it.id == groupId }?.name ?: "group"}",
+            body = invitee,
+        )
+    }
+
+    override suspend fun acceptInvite(id: String) {
+        if (failWrites) error("Could not accept the invite")
+        acceptedInvites += id
+        invites.value = invites.value.filterNot { it.id == id }
+    }
+
+    override suspend fun declineInvite(id: String) {
+        if (failWrites) error("Could not decline the invite")
+        declinedInvites += id
+        invites.value = invites.value.filterNot { it.id == id }
+    }
+
+    override suspend fun createRouting(name: String, cadence: String, title: String) {
+        if (failWrites) error("Could not create the routing")
+        routingsCreated += Triple(name, cadence, title)
+        routings.value = routings.value + RoutingItem(
+            id = "local-routing-${routings.value.size + 1}",
+            title = name,
+            trigger = "cron",
+            execution = "$cadence · $title",
+        )
+    }
+
+    override suspend fun setActivityOnTasks(value: ActivityOnTasks) {
+        if (failWrites) error("Could not save the setting")
+        activityOnTasks = value
+    }
+
+    override suspend fun markAlertSeen(id: String) {
+        if (failWrites) error("Could not mark the message as read")
+        markedAlertIds += id
+        boardSlice.value = boardSlice.value.copy(
+            alerts = boardSlice.value.alerts.map { alert ->
+                if (alert.id == id && alert.seenAt == null) alert.copy(seenAt = now()) else alert
+            },
+        )
+    }
+
+    /** Test/preview hook for a board slice without a deployment. */
+    fun emitBoard(snapshot: BoardSnapshot) {
+        boardSlice.value = snapshot
+    }
+
+    /** Test/preview hook for a pending invite. */
+    fun emitInvite(invite: InviteItem) {
+        invites.value = invites.value + invite
     }
 
     /** Trash hides a row; a done row is listable for the Done tab; a superseded or missed row left the open board. */

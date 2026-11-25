@@ -18,6 +18,17 @@ object ConvexFunction {
     const val SET_DONE = "tasks:setDone"
     const val REMOVE = "tasks:remove"
     const val CREATE_RECURRENCE = "recurrences:create"
+    const val BOARD_SLICE = "board:slice"
+    const val GROUPS_LIST = "groups:list"
+    const val GROUPS_CREATE = "groups:create"
+    const val INVITES_LIST = "invites:list"
+    const val INVITES_CREATE = "invites:create"
+    const val INVITES_ACCEPT = "invites:accept"
+    const val INVITES_DECLINE = "invites:decline"
+    const val ALERTS_READ = "alerts:read"
+    const val ROUTINGS_LIST = "routings:list"
+    const val ROUTINGS_CREATE = "routings:create"
+    const val SET_ACTIVITY_ON_TASKS = "users:setActivityOnTasks"
 }
 
 /**

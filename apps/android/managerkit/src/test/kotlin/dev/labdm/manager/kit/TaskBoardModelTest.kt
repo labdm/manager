@@ -421,6 +421,10 @@ class TaskBoardModelTest {
             seenCalls += id
         }
 
+        override suspend fun markAlertSeen(id: String) {
+            if (failMutations) error("markAlertSeen failed")
+        }
+
         override suspend fun updateTask(id: String, draft: TaskDraft) {
             if (failMutations) error("update failed")
             updateCalls += id to draft
