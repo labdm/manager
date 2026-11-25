@@ -161,7 +161,8 @@ function primaryButton(name: string) {
 
 async function openMenu(user: ReturnType<typeof userEvent.setup>, label: string) {
   await user.click(screen.getAllByRole("button", { name: "Menu" })[0]);
-  await user.click(await screen.findByRole("menuitem", { name: label }));
+  const drawer = await screen.findByRole("dialog", { name: "Menu" });
+  await user.click(within(drawer).getByRole("button", { name: label }));
 }
 
 beforeEach(() => {
@@ -204,26 +205,26 @@ describe("shell navigation", () => {
   it("opens every destination from the sidebar and the phone bar", async () => {
     const user = userEvent.setup();
     render(<Shell />);
-    expect(await screen.findByRole("heading", { name: "Tasks" })).toBeTruthy();
+    expect(await screen.findByRole("region", { name: "Tasks" })).toBeTruthy();
     expect(screen.queryByRole("tab", { name: "Menu" })).toBeNull();
 
     for (const label of DESTINATIONS) {
       await user.click(destinationButton(label));
-      expect(screen.getByRole("heading", { name: label })).toBeTruthy();
+      expect(screen.getByRole("region", { name: label })).toBeTruthy();
       expect(destinationButton(label).getAttribute("aria-current")).toBe("page");
       expect(screen.getAllByRole("button", { name: CREATE_LABEL[label] }).length).toBeGreaterThan(0);
       expect(screen.getByText("Select an item.")).toBeTruthy();
 
       await user.click(primaryButton(label));
       expect(primaryButton(label).getAttribute("aria-current")).toBe("page");
-      expect(screen.getByRole("heading", { name: label })).toBeTruthy();
+      expect(screen.getByRole("region", { name: label })).toBeTruthy();
     }
   });
 
   it("opens every menu page", async () => {
     const user = userEvent.setup();
     render(<Shell />);
-    await screen.findByRole("heading", { name: "Tasks" });
+    await screen.findByRole("region", { name: "Tasks" });
 
     for (const label of MENU) {
       await openMenu(user, label);
@@ -273,14 +274,15 @@ describe("shell navigation", () => {
   it("switches the group and can return to all groups", async () => {
     const user = userEvent.setup();
     render(<Shell />);
-    await screen.findByRole("heading", { name: "Tasks" });
+    await screen.findByRole("region", { name: "Tasks" });
+    expect(screen.getByRole("button", { name: "Group switcher" }).textContent).toContain("Groups");
 
     await user.click(screen.getByRole("button", { name: "Group switcher" }));
     await user.click(await screen.findByRole("menuitem", { name: /Personal/ }));
     await waitFor(() =>
       expect(mutation(boardSliceRef)).toHaveBeenCalledWith(expect.objectContaining({ groupId: "g1" }))
     );
-    expect(screen.getAllByText("Personal").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Group switcher" }).textContent).toContain("Personal");
 
     await user.click(screen.getByRole("button", { name: "Group switcher" }));
     await user.click(await screen.findByRole("menuitem", { name: "All" }));
@@ -289,6 +291,7 @@ describe("shell navigation", () => {
       expect(last.groupId).toBeUndefined();
       expect(last.tab).toBe("tasks");
     });
+    expect(screen.getByRole("button", { name: "Group switcher" }).textContent).toContain("Groups");
   });
 
   it("clears the selection when the destination changes and keeps read messages on Messages", async () => {
@@ -302,7 +305,7 @@ describe("shell navigation", () => {
 
     await user.click(screen.getByLabelText("Open Water the plants"));
     await user.click(destinationButton("Messages"));
-    expect(screen.getByRole("heading", { name: "Messages" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Messages" })).toBeTruthy();
     expect(screen.getByText("Select an item.")).toBeTruthy();
     expect(screen.getByText("Note to self")).toBeTruthy();
     expect(screen.getByText("Landlord wrote")).toBeTruthy();
@@ -313,7 +316,7 @@ describe("shell item actions", () => {
   it("creates a task", async () => {
     const user = userEvent.setup();
     render(<Shell />);
-    await screen.findByRole("heading", { name: "Tasks" });
+    await screen.findByRole("region", { name: "Tasks" });
     await user.click(screen.getByRole("button", { name: "Create task" }));
     const form = screen.getByLabelText("New task");
     await user.type(within(form).getByLabelText("Title"), "Take the bins out");
@@ -431,7 +434,7 @@ describe("shell item actions", () => {
   it("creates a category, a resource, and an invite", async () => {
     const user = userEvent.setup();
     render(<Shell />);
-    await screen.findByRole("heading", { name: "Tasks" });
+    await screen.findByRole("region", { name: "Tasks" });
 
     await user.click(destinationButton("Categories"));
     expect(await screen.findByText("Home")).toBeTruthy();
@@ -467,7 +470,7 @@ describe("shell item actions", () => {
   it("saves the Tasks activity setting and creates a routing", async () => {
     const user = userEvent.setup();
     render(<Shell />);
-    await screen.findByRole("heading", { name: "Tasks" });
+    await screen.findByRole("region", { name: "Tasks" });
 
     await openMenu(user, "Settings");
     await user.click(screen.getByRole("button", { name: "None" }));

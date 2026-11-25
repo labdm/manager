@@ -98,7 +98,9 @@ describe("signed-in shell", () => {
     const user = userEvent.setup();
     render(<Shell />);
 
-    expect(await screen.findByRole("heading", { name: "Tasks" })).toBeTruthy();
+    expect(await screen.findByRole("region", { name: "Tasks" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Tasks" })).toBeNull();
+    expect(screen.queryByText("All groups")).toBeNull();
     expect(screen.getByText("Select an item.")).toBeTruthy();
     const row = await screen.findByLabelText("Open Water the plants");
 
@@ -113,15 +115,44 @@ describe("signed-in shell", () => {
     );
   });
 
-  it("opens Settings from the menu", async () => {
+  it("opens Settings from the left menu drawer and closes the drawer", async () => {
     const user = userEvent.setup();
     render(<Shell />);
 
     await user.click(screen.getAllByRole("button", { name: "Menu" })[0]);
-    await user.click(await screen.findByRole("menuitem", { name: "Settings" }));
+    const drawer = await screen.findByRole("dialog", { name: "Menu" });
+    expect(within(drawer).queryByRole("menuitem", { name: "Settings" })).toBeNull();
+    await user.click(within(drawer).getByRole("button", { name: "Settings" }));
 
+    expect(screen.queryByRole("dialog", { name: "Menu" })).toBeNull();
     expect(screen.getByRole("region", { name: "Settings" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Others" })).toBeTruthy();
+  });
+
+  it("renders the account control beside Profile in the menu drawer", async () => {
+    const user = userEvent.setup();
+    render(<Shell account={<button type="button">Account</button>} />);
+
+    expect(screen.queryByRole("button", { name: "Account" })).toBeNull();
+    await user.click(screen.getAllByRole("button", { name: "Menu" })[0]);
+    const drawer = await screen.findByRole("dialog", { name: "Menu" });
+
+    const profile = within(drawer).getByRole("button", { name: "Profile" });
+    const account = within(drawer).getByRole("button", { name: "Account" });
+    expect(profile.contains(account)).toBe(false);
+    expect(profile.nextElementSibling?.contains(account)).toBe(true);
+  });
+
+  it("opens the same drawer from the phone menu button", async () => {
+    const user = userEvent.setup();
+    render(<Shell />);
+
+    const buttons = screen.getAllByRole("button", { name: "Menu" });
+    expect(buttons).toHaveLength(2);
+    await user.click(buttons[1]);
+
+    const drawer = await screen.findByRole("dialog", { name: "Menu" });
+    expect(within(drawer).getByRole("button", { name: "Settings" })).toBeTruthy();
   });
 
   it("submits a task title from create", async () => {

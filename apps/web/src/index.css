@@ -3,10 +3,17 @@
   background: #f3efe4;
 }
 
-body {
-  margin: 0;
+html,
+body,
+#root {
+  height: 100%;
 }
 
-#root {
-  min-height: 100vh;
+html:has(.shell-frame),
+html:has(.shell-frame) body {
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
 }

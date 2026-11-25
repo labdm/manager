@@ -1,20 +1,36 @@
 /* Layout only. Visual components and product rows use Tailwind/shadcn. */
 
 .shell-frame {
-  height: 100dvh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: row;
+  height: var(--shell-height, 100svh);
   overflow: hidden;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .sidebar {
   width: 16rem;
-  height: 100dvh;
+  height: 100%;
   flex-shrink: 0;
   border-right: 1px solid var(--border);
-  position: sticky;
-  top: 0;
 }
 
-.shell-body,
+.shell-main {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.shell-body {
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .shell-panes,
 .list-pane,
 .detail-pane {
@@ -25,6 +41,11 @@
 .detail-pane {
   border-left: 1px solid var(--border);
   overflow: hidden;
+}
+
+/* Radix sizes its scrollbar with a table. A block child keeps the pane bounded. */
+[data-radix-scroll-area-viewport] > div {
+  display: block !important;
 }
 
 .destination-row {
@@ -38,6 +59,7 @@
 
 .shell-main > .destination-bar {
   display: flex;
+  flex-shrink: 0;
 }
 
 .destination-button {
@@ -49,9 +71,20 @@
 }
 
 @media (max-width: 767px) {
+  .shell-panes {
+    flex-direction: column;
+  }
+
   .shell-panes[data-pane="list"] .detail-pane,
   .shell-panes[data-pane="detail"] .list-pane {
     display: none;
+  }
+
+  .shell-panes .list-pane,
+  .shell-panes .detail-pane {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
   }
 }
 

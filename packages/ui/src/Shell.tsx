@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { useConvex, useMutation } from "convex/react";
 import {
   ArrowLeft,
@@ -24,7 +31,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
 import { ScrollArea } from "./components/ui/scroll-area";
@@ -34,6 +40,7 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
+  SheetTrigger,
 } from "./components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs";
 import {
@@ -127,6 +134,27 @@ function errorMessage(caught: unknown, fallback: string): string {
   return caught instanceof Error ? caught.message : fallback;
 }
 
+/** iOS Safari's toolbars change the visible viewport after load. */
+function useVisibleViewportHeight(): number | null {
+  const [height, setHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    const viewport = typeof window === "undefined" ? null : window.visualViewport;
+    if (!viewport) return;
+
+    const update = () => setHeight(Math.round(viewport.height));
+    update();
+    viewport.addEventListener("resize", update);
+    viewport.addEventListener("scroll", update);
+    return () => {
+      viewport.removeEventListener("resize", update);
+      viewport.removeEventListener("scroll", update);
+    };
+  }, []);
+
+  return height;
+}
+
 const DESTINATION_ICONS: Record<Destination, typeof ListChecks> = {
   tasks: ListChecks,
   messages: MessageCircle,
@@ -136,17 +164,21 @@ const DESTINATION_ICONS: Record<Destination, typeof ListChecks> = {
 };
 
 function MenuButton({
+  account,
   onSelect,
   className,
   bottom = false,
 }: {
+  account?: ReactNode;
   onSelect: (page: MenuPage) => void;
   className?: string;
   bottom?: boolean;
 }) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
         <Button
           type="button"
           variant={bottom ? "ghost" : "outline"}
@@ -157,16 +189,37 @@ function MenuButton({
           <MenuIcon aria-hidden="true" />
           {bottom ? <span>Menu</span> : null}
         </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align={bottom ? "start" : "end"} side={bottom ? "top" : "bottom"}>
-        <DropdownMenuLabel>Manager</DropdownMenuLabel>
-        {MENU_ITEMS.map((item) => (
-          <DropdownMenuItem key={item.id} onSelect={() => onSelect(item.id)}>
-            {item.label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </SheetTrigger>
+      <SheetContent
+        side="left"
+        aria-label="Menu"
+        className="w-[min(20rem,85vw)] gap-4 p-4 sm:max-w-xs"
+      >
+        <SheetHeader>
+          <SheetTitle>Menu</SheetTitle>
+        </SheetHeader>
+        <nav className="flex flex-col gap-1" aria-label="Menu pages">
+          {MENU_ITEMS.map((item) => (
+            <div key={item.id} className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                className="min-w-0 flex-1 justify-start"
+                onClick={() => {
+                  onSelect(item.id);
+                  setOpen(false);
+                }}
+              >
+                {item.label}
+              </Button>
+              {item.id === "profile" && account ? (
+                <div className="flex shrink-0 items-center">{account}</div>
+              ) : null}
+            </div>
+          ))}
+        </nav>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -357,6 +410,7 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
   const [menuPage, setMenuPage] = useState<MenuPage | null>(null);
   const [locallySeen, setLocallySeen] = useState<ReadonlySet<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState<FeedRow | null>(null);
+  const visibleViewportHeight = useVisibleViewportHeight();
 
   const loadBoard = useCallback(async () => {
     try {
@@ -853,12 +907,14 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
   }
 
   const pane = form || menuPage || selected ? "detail" : "list";
+  const shellStyle = visibleViewportHeight
+    ? ({ "--shell-height": `${visibleViewportHeight}px` } as CSSProperties)
+    : undefined;
 
   return (
-    <div className="shell-frame min-h-dvh bg-background text-foreground">
+    <div className="shell-frame bg-background text-foreground" style={shellStyle}>
       <aside className="sidebar hidden lg:flex" aria-label="Primary navigation">
-        <p className="px-4 py-4 text-lg font-semibold">Manager</p>
-        <nav className="flex flex-col gap-1 px-2" aria-label="Destinations">
+        <nav className="flex flex-col gap-1 px-2 pt-3" aria-label="Destinations">
           {DESTINATIONS.map((item) => {
             const Icon = DESTINATION_ICONS[item.id];
             return (
@@ -877,25 +933,27 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
           })}
         </nav>
         <div className="mt-auto border-t p-2">
-          <MenuButton onSelect={openMenuPage} bottom />
+          <MenuButton account={account} onSelect={openMenuPage} bottom />
         </div>
       </aside>
 
-      <div className="shell-main flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-2 border-b px-3 py-2">
-          <div className="min-w-0">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground lg:hidden">Manager</p>
-            <p className="truncate text-sm font-semibold">
-              {selectedGroup ? selectedGroup.name : "All groups"}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <MenuButton onSelect={openMenuPage} className="lg:hidden" />
+      <div className="shell-main flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
+          <MenuButton account={account} onSelect={openMenuPage} className="lg:hidden" />
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button type="button" variant="outline" size="sm" aria-label="Group switcher">
-                  Groups
-                  <ChevronDown aria-hidden="true" />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  aria-label="Group switcher"
+                  className="max-w-[12rem]"
+                >
+                  <span className="truncate">
+                    {selectedGroup ? selectedGroup.name : "Groups"}
+                  </span>
+                  <ChevronDown aria-hidden="true" className="shrink-0" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -908,20 +966,20 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
-            {account ? <div className="flex items-center">{account}</div> : null}
-            <Button
-              type="button"
-              size="icon"
-              aria-label={createByDestination[destination].label}
-              onClick={() => openForm(createByDestination[destination].form)}
-            >
-              <Plus aria-hidden="true" />
-            </Button>
           </div>
+          <Button
+            type="button"
+            size="icon"
+            className="shrink-0"
+            aria-label={createByDestination[destination].label}
+            onClick={() => openForm(createByDestination[destination].form)}
+          >
+            <Plus aria-hidden="true" />
+          </Button>
         </header>
 
         {destination === "tasks" ? (
-          <div className="chip-row border-b px-3 py-2">
+          <div className="chip-row shrink-0 border-b px-3 py-2">
             <Tabs value={chip} onValueChange={(value) => chooseChip(value as Chip)}>
               <TabsList className="w-full justify-start overflow-x-auto">
                 {CHIPS.map((item) => {
@@ -938,13 +996,14 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
           </div>
         ) : null}
 
-        <div className="shell-body flex min-h-0 flex-1">
+        <div className="shell-body flex min-h-0 flex-1 overflow-hidden">
           <div className="shell-panes flex min-h-0 w-full" data-pane={pane}>
-            <ScrollArea className="list-pane min-h-0 border-r bg-background">
+            <ScrollArea
+              className="list-pane min-h-0 border-r bg-background"
+              role="region"
+              aria-label={DESTINATIONS.find((item) => item.id === destination)?.label}
+            >
               <div className="pb-4">
-                <h1 className="px-4 py-3 text-lg font-semibold">
-                  {DESTINATIONS.find((item) => item.id === destination)?.label}
-                </h1>
                 {!ready ? <p className="px-4 text-sm text-muted-foreground">Loading…</p> : null}
                 {renderList()}
               </div>
