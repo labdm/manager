@@ -1,6 +1,5 @@
 import { Show, SignInButton, UserButton, useAuth } from "@clerk/react";
-import { HomePage } from "./HomePage";
-import "./tasks.css";
+import { Shell } from "./Shell";
 
 export function TasksPage({
   showDownloadsLink = true,
@@ -9,34 +8,29 @@ export function TasksPage({
 }) {
   const { isLoaded, isSignedIn } = useAuth();
 
+  if (isSignedIn) return <Shell account={<UserButton />} />;
+
   return (
-    <main className="shell home-shell">
-      <header className={isSignedIn ? "signed-in" : undefined}>
-        <div>
-          <p className="mark">Manager</p>
-          {isSignedIn ? null : <h1>Home</h1>}
-        </div>
-        <div className="top-actions">
-          {showDownloadsLink ? (
-            <a className="top-link" href="/download">
-              Downloads
-            </a>
-          ) : null}
-          <Show when="signed-in">
-            <UserButton />
-          </Show>
-        </div>
-      </header>
-      {!isLoaded ? <p className="status">Loading…</p> : null}
+    <main className="flex min-h-dvh flex-col gap-4 bg-background p-6 text-foreground">
+      <div className="flex items-center justify-between">
+        <p className="text-lg font-semibold">Manager</p>
+        {showDownloadsLink ? <a href="/download">Downloads</a> : null}
+      </div>
+      <h1 className="text-2xl font-semibold">Home</h1>
+      {!isLoaded ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       <Show when="signed-out">
-        <section className="panel">
-          <p>Sign in to see your board.</p>
+        <section className="flex flex-col items-start gap-3 rounded-md border bg-card p-4">
+          <p className="text-sm">Sign in to see your board.</p>
           <SignInButton mode="modal">
-            <button type="button">Sign in</button>
+            <button
+              type="button"
+              className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground"
+            >
+              Sign in
+            </button>
           </SignInButton>
         </section>
       </Show>
-      {isSignedIn ? <HomePage /> : null}
     </main>
   );
 }

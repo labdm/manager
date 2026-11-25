@@ -1,5 +1,4 @@
 import type { Id } from "@manager/backend/convex/_generated/dataModel";
-import type { SeriesBehavior, SeriesCadence, TaskLook } from "./sheetTypes";
 
 export type Priority = "low" | "normal" | "high" | "urgent" | string;
 export type OverduePolicy = "none" | "retire" | "escalate";
@@ -30,28 +29,25 @@ export interface TaskItem {
   deletedAt?: number | null;
   recurrenceId?: string | null;
   periodStart?: number | null;
+  /** Stored presentation hints are ignored by the row-first board. */
   presentation?: string | null;
   resourceEffect?: { resourceId: string; delta: number } | null;
 }
 
-export interface TaskDraft {
+export interface TaskDraftInput {
   title: string;
-  notes: string;
-  plannedDay: string; // YYYY-MM-DD
-  plannedTime: string; // HH:mm
-  location: string;
-  deadline: string; // YYYY-MM-DDTHH:mm
-  remindAt: string; // YYYY-MM-DDTHH:mm
-  priority: string;
-  overduePolicy: OverduePolicy;
-  look: TaskLook;
-  series: SeriesBehavior;
-  cadence: SeriesCadence;
-  resourceId: string;
-  resourceDelta: string;
+  notes?: string;
+  plannedDay?: string;
+  plannedTime?: string;
+  location?: string;
+  deadline?: string;
+  remindAt?: string;
+  priority?: string;
+  overduePolicy?: OverduePolicy;
 }
 
 export interface TaskCreatePayload {
+  [key: string]: unknown;
   title: string;
   dueAt?: number;
   plannedOn?: number;
@@ -63,13 +59,9 @@ export interface TaskCreatePayload {
   priority?: string;
   priorityRank?: number;
   overduePolicy?: OverduePolicy;
-  presentation?: TaskLook;
 }
 
-/**
- * `tasks.update` declares optional fields, not nullable ones. Cleared numeric
- * and date fields are omitted; cleared text fields are sent as empty strings.
- */
+/** Convex update args are optional, not nullable; cleared dates are omitted. */
 export interface TaskUpdatePayload {
   id: Id<"tasks">;
   title?: string;
@@ -83,5 +75,4 @@ export interface TaskUpdatePayload {
   priority?: string;
   priorityRank?: number;
   overduePolicy?: OverduePolicy;
-  presentation?: TaskLook;
 }

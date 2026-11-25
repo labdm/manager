@@ -1,12 +1,10 @@
 export { DownloadPage } from "./DownloadPage";
-export { HomeLayout } from "./HomeLayout";
-export { HomePage } from "./HomePage";
+export { Shell } from "./Shell";
 export { TasksPage } from "./TasksPage";
 export { formatDueAt } from "./formatDueAt";
-export * from "./homeCatalog";
 export * from "./homeTypes";
 export * from "./iconCatalog";
-export * from "./sheetFacts";
-export * from "./sheetTypes";
+export * from "./shellFacts";
+export * from "./shellTypes";
 export * from "./taskFacts";
 export * from "./taskTypes";

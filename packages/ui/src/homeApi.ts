@@ -1,241 +1,186 @@
 import { makeFunctionReference } from "convex/server";
-import type { Id } from "@manager/backend/convex/_generated/dataModel";
 import type {
-  CategoryItem,
-  EventItem,
-  ResourceEffectInput,
-  ResourceItem,
-} from "./sheetTypes";
-import type { BoardSlice, BoardSliceArgs, CustomViewInput } from "./homeTypes";
-import type { TaskCreatePayload, TaskUpdatePayload } from "./taskTypes";
-
+  AchievementCounts,
+  AlertItem,
+  BoardSlice,
+  BoardSliceArgs,
+} from "./homeTypes";
+import type { TaskCreatePayload } from "./taskTypes";
+import type {
+  CategoryRecord,
+  GroupItem,
+  InviteItem,
+  ResourceRecord,
+  RoutingItem,
+  ActivityValue,
+} from "./shellTypes";
 
 /**
- * The Home functions are newer than the checked-in generated API. `board.slice`
- * is a mutation because loading the board also mints recurrences and ensures
- * the Home view. Arguments match the Convex handlers: flat pin ids, and
- * `enableComputed` takes `key` (`high`, not `high-priority`).
+ * Every call in the shell uses makeFunctionReference. Some handlers land with
+ * later layout milestones; until then a rejection is shown on the detail pane
+ * rather than hidden behind a local-only edit.
  */
+export const ensureUserRef = makeFunctionReference<"mutation", Record<string, never>, unknown>(
+  "users:ensure"
+);
+
 export const boardSliceRef = makeFunctionReference<
   "mutation",
-  BoardSliceArgs & Record<string, unknown>,
+  BoardSliceArgs,
   BoardSlice
 >("board:slice");
 
-export const installTemplateRef = makeFunctionReference<
+export const markSeenRef = makeFunctionReference<
   "mutation",
-  { slug: string },
-  unknown
->("views:installTemplate");
+  { id: string },
+  { seenAt?: number } | unknown
+>("tasks:markSeen");
 
-export const createCustomViewRef = makeFunctionReference<
+export const toggleTaskRef = makeFunctionReference<
   "mutation",
-  CustomViewInput & Record<string, unknown>,
+  { id: string },
   unknown
->("views:createCustom");
+>("tasks:toggle");
 
-export const enableComputedViewRef = makeFunctionReference<
+export const removeTaskRef = makeFunctionReference<
   "mutation",
-  { key: "new" | "high" | "today" },
+  { id: string },
   unknown
->("views:enableComputed");
+>("tasks:remove");
 
-export const removeViewRef = makeFunctionReference<
-  "mutation",
-  { viewId: string },
-  unknown
->("views:remove");
-
-export interface PinArgs {
-  viewId: string;
-  subjectType: "task";
-  subjectId: Id<"tasks">;
-}
-
-export const pinRef = makeFunctionReference<
-  "mutation",
-  PinArgs & Record<string, unknown>,
-  unknown
->("pins:pin");
-
-export const unpinRef = makeFunctionReference<
-  "mutation",
-  PinArgs & Record<string, unknown>,
-  unknown
->("pins:unpin");
-
-/**
- * Sheet functions. The generated API is checked in before these handlers exist,
- * so every call goes through makeFunctionReference. A deployment without the
- * handler rejects the call and the sheet shows the error; there is no inline
- * form to fall back to.
- */
 export const createTaskRef = makeFunctionReference<
   "mutation",
-  TaskCreatePayload & Record<string, unknown>,
-  { id: Id<"tasks"> }
+  TaskCreatePayload,
+  { id: string }
 >("tasks:create");
 
-export const updateTaskRef = makeFunctionReference<
+export const createRecurrenceRef = makeFunctionReference<
   "mutation",
-  TaskUpdatePayload & Record<string, unknown>,
+  {
+    behavior: "replace" | "stack";
+    cadence: string;
+    timezone: string;
+    title: string;
+    anchorOn?: number;
+  },
   unknown
->("tasks:update");
+>("recurrences:create");
 
-export const setResourceEffectRef = makeFunctionReference<
-  "mutation",
-  ResourceEffectInput & Record<string, unknown>,
-  unknown
->("tasks:setResourceEffect");
+export const listAlertsRef = makeFunctionReference<
+  "query",
+  Record<string, never>,
+  AlertItem[]
+>("alerts:list");
 
-export const createCategoryRef = makeFunctionReference<
+export const createAlertRef = makeFunctionReference<
   "mutation",
-  { name: string; icon?: string; color?: string } & Record<string, unknown>,
+  { title: string; body?: string },
   unknown
->("categories:create");
+>("alerts:create");
+
+export const readAlertRef = makeFunctionReference<
+  "mutation",
+  { id: string },
+  unknown
+>("alerts:read");
+
+export const listGroupsRef = makeFunctionReference<
+  "query",
+  Record<string, never>,
+  { groups: GroupItem[] }
+>("groups:list");
+
+export const createGroupRef = makeFunctionReference<
+  "mutation",
+  { name: string },
+  { id: string }
+>("groups:create");
+
+export const listInvitesRef = makeFunctionReference<
+  "query",
+  Record<string, never>,
+  { invites: InviteItem[] }
+>("invites:list");
+
+export const createInviteRef = makeFunctionReference<
+  "mutation",
+  { groupId: string; email: string },
+  { id: string }
+>("invites:create");
+
+export const acceptInviteRef = makeFunctionReference<
+  "mutation",
+  { inviteId: string },
+  unknown
+>("invites:accept");
+
+export const declineInviteRef = makeFunctionReference<
+  "mutation",
+  { inviteId: string },
+  unknown
+>("invites:decline");
+
+export const listRoutingsRef = makeFunctionReference<
+  "query",
+  Record<string, never>,
+  { routings: RoutingItem[] }
+>("routings:list");
+
+export const createRoutingRef = makeFunctionReference<
+  "mutation",
+  {
+    name: string;
+    trigger: "cron";
+    cadence: "daily" | "weekly" | "monthly";
+    executionKind: "createTask";
+    title: string;
+  },
+  unknown
+>("routings:create");
+
+export const setActivityRef = makeFunctionReference<
+  "mutation",
+  { value: ActivityValue },
+  unknown
+>("users:setActivityOnTasks");
 
 export const listCategoriesRef = makeFunctionReference<
   "query",
   Record<string, never>,
-  CategoryItem[]
+  CategoryRecord[]
 >("categories:list");
 
-export const createEventRef = makeFunctionReference<
+export const createCategoryRef = makeFunctionReference<
   "mutation",
-  {
-    title: string;
-    kind: string;
-    startsAt: number;
-    endsAt: number;
-    icon?: string;
-    color?: string;
-  } & Record<string, unknown>,
+  { name: string; icon?: string; color?: string },
   unknown
->("events:create");
-
-export const listEventsRef = makeFunctionReference<
-  "query",
-  { kind?: string },
-  EventItem[]
->("events:list");
-
-export const createResourceRef = makeFunctionReference<
-  "mutation",
-  {
-    title: string;
-    quantity: number;
-    unit?: string;
-    lowAt?: number;
-    icon?: string;
-    color?: string;
-  } & Record<string, unknown>,
-  unknown
->("resources:create");
+>("categories:create");
 
 export const listResourcesRef = makeFunctionReference<
   "query",
   Record<string, never>,
-  ResourceItem[]
+  ResourceRecord[]
 >("resources:list");
 
-export const createProgressionRef = makeFunctionReference<
+export const createResourceRef = makeFunctionReference<
   "mutation",
-  {
-    title: string;
-    mode?: "steps" | "meter";
-    target: number;
-    unit?: string;
-  } & Record<string, unknown>,
+  { title: string; quantity: number; unit?: string },
   unknown
->("progressions:create");
+>("resources:create");
 
-/**
- * `resourceEffect` is the deployed wire shape for a series' stock effect.
- * `resourceId` / `resourceDelta` are accepted in the type for older drafts;
- * the sheet always sends the nested object.
- */
-export interface CreateRecurrenceArgs {
-  behavior: "replace" | "stack";
-  cadence: string;
-  timezone: string;
-  title: string;
-  notes?: string;
-  plannedTime?: number;
-  location?: string;
-  priority?: string;
-  priorityRank?: number;
-  overduePolicy?: string;
-  presentation?: string;
-  anchorOn?: number;
-  resourceEffect?: { resourceId: string; delta: number };
-  resourceId?: string;
-  resourceDelta?: number;
-}
+export const listEventsRef = makeFunctionReference<
+  "query",
+  Record<string, never>,
+  unknown[]
+>("events:list");
 
-export const createRecurrenceRef = makeFunctionReference<
-  "mutation",
-  CreateRecurrenceArgs & Record<string, unknown>,
-  unknown
->("recurrences:create");
-
-/**
- * Edit mutations may not exist on an older deployment. Calling one through a
- * sheet surfaces the rejection in that sheet; no inline editor is used.
- */
-export const updateCategoryRef = makeFunctionReference<
-  "mutation",
-  { id: string; name?: string; icon?: string; color?: string } & Record<
-    string,
-    unknown
-  >,
-  unknown
->("categories:update");
-
-export const updateEventRef = makeFunctionReference<
-  "mutation",
-  {
-    id: string;
-    title?: string;
-    kind?: string;
-    startsAt?: number;
-    endsAt?: number;
-    icon?: string;
-    color?: string;
-  } & Record<string, unknown>,
-  unknown
->("events:update");
-
-export const updateViewRef = makeFunctionReference<
-  "mutation",
-  { viewId: string; title?: string; icon?: string; color?: string } & Record<
-    string,
-    unknown
-  >,
-  unknown
->("views:update");
-
-export const updateProgressionRef = makeFunctionReference<
-  "mutation",
-  {
-    id: string;
-    title?: string;
-    mode?: string;
-    target?: number;
-    unit?: string;
-  } & Record<string, unknown>,
-  unknown
->("progressions:update");
-
-export const updateResourceRef = makeFunctionReference<
-  "mutation",
-  {
-    id: string;
-    title?: string;
-    unit?: string;
-    quantity?: number;
-    lowAt?: number;
-    icon?: string;
-    color?: string;
-  } & Record<string, unknown>,
-  unknown
->("resources:update");
+/** `board:slice` may carry counts; the Achievements page falls back to zeros. */
+export const ZERO_ACHIEVEMENTS: AchievementCounts = {
+  completedTasks: 0,
+  missedTasks: 0,
+  supersededTasks: 0,
+  progressionCurrent: 0,
+  progressionTarget: 0,
+  questsActive: 0,
+  questsCompleted: 0,
+};
