@@ -53406,7 +53406,17 @@ var KNOWN_TOOL_ERRORS = [
   "Invalid target",
   "Invalid gate",
   "Invalid quest status",
-  "Recurrence not found"
+  "Recurrence not found",
+  "Default group not found",
+  "Group not found",
+  "Group write denied",
+  "Invite permission required",
+  "Invalid email",
+  "Invite not found",
+  "Invite already answered",
+  "Name is required",
+  "Invalid cadence",
+  "Invalid anchorOn"
 ];
 function misconfigured(message) {
   return Response.json({ error: message }, { status: 503, headers: NO_STORE });
@@ -53428,6 +53438,66 @@ function knownError(error62, fallback) {
     if (message.includes(known)) return known;
   }
   return fallback;
+}
+var routingTriggerSchema = external_exports.union([
+  external_exports.object({
+    type: external_exports.literal("cron"),
+    cadence: external_exports.enum(["daily", "weekly", "monthly"]),
+    timezone: external_exports.string(),
+    anchorOn: external_exports.number()
+  }),
+  external_exports.object({
+    type: external_exports.literal("state"),
+    subjectType: external_exports.enum(["task", "resource", "questStep"]),
+    event: external_exports.enum(["completed", "reopened", "deleted", "low"])
+  })
+]);
+var routingExecutionSchema = external_exports.union([
+  external_exports.object({
+    type: external_exports.literal("createTask"),
+    title: external_exports.string(),
+    notes: external_exports.string().optional(),
+    plannedOn: external_exports.number().optional()
+  }),
+  external_exports.object({
+    type: external_exports.literal("logProgress"),
+    progressionId: external_exports.string(),
+    amount: external_exports.number()
+  }),
+  external_exports.object({
+    type: external_exports.literal("createMessage"),
+    title: external_exports.string(),
+    body: external_exports.string().optional()
+  }),
+  external_exports.object({
+    type: external_exports.literal("resourceDelta"),
+    resourceId: external_exports.string(),
+    delta: external_exports.number()
+  }),
+  external_exports.object({
+    type: external_exports.literal("addQuestStep"),
+    questId: external_exports.string(),
+    title: external_exports.string(),
+    gate: external_exports.string().optional()
+  })
+]);
+function routingExecutionBody(execution) {
+  if (execution.type === "logProgress") {
+    return {
+      ...execution,
+      progressionId: execution.progressionId
+    };
+  }
+  if (execution.type === "resourceDelta") {
+    return {
+      ...execution,
+      resourceId: execution.resourceId
+    };
+  }
+  if (execution.type === "addQuestStep") {
+    return { ...execution, questId: execution.questId };
+  }
+  return execution;
 }
 function convexClient() {
   return new ConvexHttpClient(convexDeploymentUrl());
@@ -53713,9 +53783,11 @@ function mcpHandler(resourceUrl) {
           title: "Get Home slice",
           description: "Returns the Home rail, the current tab's tasks, progressions, quests, alerts and questions for a timezone.",
           inputSchema: external_exports.object({
-            tab: external_exports.enum(["tasks", "daily", "weekly", "monthly"]),
+            tab: external_exports.enum(["tasks", "daily", "weekly", "monthly", "events"]),
             viewId: external_exports.string().optional(),
-            timezone: external_exports.string()
+            timezone: external_exports.string(),
+            groupId: external_exports.string().optional(),
+            eventId: external_exports.string().optional()
           })
         },
         async (args, ctx) => {
@@ -53727,7 +53799,9 @@ function mcpHandler(resourceUrl) {
                 ...signed.proof,
                 tab: args.tab,
                 viewId: args.viewId,
-                timezone: args.timezone
+                timezone: args.timezone,
+                groupId: args.groupId,
+                eventId: args.eventId
               })
             );
           } catch (error62) {
@@ -54160,10 +54234,116 @@ function mcpHandler(resourceUrl) {
           }
         }
       );
+      server.registerTool(
+        "create_group",
+        {
+          title: "Create group",
+          description: "Creates a group for the signed-in user. The default Personal group already exists and stays the fallback for new items.",
+          inputSchema: external_exports.object({
+            name: external_exports.string(),
+            icon: external_exports.string().optional(),
+            color: external_exports.string().optional()
+          })
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.createGroupTool, {
+                ...signed.proof,
+                ...args
+              })
+            );
+          } catch (error62) {
+            return toolError(knownError(error62, "Could not create group"));
+          }
+        }
+      );
+      server.registerTool(
+        "invite",
+        {
+          title: "Invite to group",
+          description: "Sends an invite to an email for a group. Only an owner, admin, or member with canInvite may invite.",
+          inputSchema: external_exports.object({
+            groupId: external_exports.string().optional(),
+            email: external_exports.string(),
+            origin: external_exports.enum(["self", "agent", "member"]).optional()
+          })
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.inviteTool, {
+                ...signed.proof,
+                groupId: args.groupId,
+                email: args.email,
+                origin: args.origin
+              })
+            );
+          } catch (error62) {
+            return toolError(knownError(error62, "Could not invite"));
+          }
+        }
+      );
+      server.registerTool(
+        "create_routing",
+        {
+          title: "Create routing",
+          description: "Creates a cron or state-change routing with a typed execution. Cron keys are idempotent per period; state keys use the caller's revision.",
+          inputSchema: external_exports.object({
+            name: external_exports.string(),
+            groupId: external_exports.string().optional(),
+            trigger: routingTriggerSchema,
+            execution: routingExecutionSchema
+          })
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpBoard.createRoutingTool, {
+                ...signed.proof,
+                name: args.name,
+                groupId: args.groupId,
+                trigger: args.trigger,
+                execution: routingExecutionBody(args.execution)
+              })
+            );
+          } catch (error62) {
+            return toolError(knownError(error62, "Could not create routing"));
+          }
+        }
+      );
+      server.registerTool(
+        "list_routings",
+        {
+          title: "List routings",
+          description: "Lists the signed-in user's live cron and state routings.",
+          inputSchema: external_exports.object({})
+        },
+        async (_args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(
+                api.mcpBoard.listRoutingsTool,
+                signed.proof
+              )
+            );
+          } catch (error62) {
+            return toolError(knownError(error62, "Could not list routings"));
+          }
+        }
+      );
     },
     {
       serverInfo: { name: "manager", version: "0.1.0" },
-      instructions: "Manager user MCP. Sign in once with Clerk OAuth; the client refreshes the access token. whoami reads users.role in Convex. create_task, update_task, list_tasks, complete_task, reopen_task, and delete_task use the tasks table; a task may render as check, row or card. create_recurrence is real: choose replace for dishes (one open occurrence, older ones superseded) or stack for a journal (every period stays open), with daily, weekly, biweekly (14 days) or monthly cadence; behavior is required. Resources track stock: create_resource and list_resources read it, set_task_resource_effect attaches an effect to a task, and completing that task applies the delta once while reopening reverses it. Low stock becomes an alert, never a task. Views, attachments, pins, include/exclude, progressions, quests, questions and alerts are available through get_slice and the matching create tools. Never copy a planned day into a deadline, never copy a deadline into a planned day, and do not create a task for a summary: write an alert instead.",
+      instructions: "Manager user MCP. Sign in once with Clerk OAuth; the client refreshes the access token. whoami reads users.role in Convex. create_task, update_task, list_tasks, complete_task, reopen_task, and delete_task use the tasks table; a task may render as check, row or card. create_recurrence is real: choose replace for dishes (one open occurrence, older ones superseded) or stack for a journal (every period stays open), with daily, weekly, biweekly (14 days) or monthly cadence; behavior is required. Resources track stock: create_resource and list_resources read it, set_task_resource_effect attaches an effect to a task, and completing that task applies the delta once while reopening reverses it. Low stock becomes an alert, never a task. Views, attachments, pins, include/exclude, progressions, quests, questions and alerts are available through get_slice and the matching create tools. Groups and invites use create_group and invite; automations use create_routing and list_routings. Never copy a planned day into a deadline, never copy a deadline into a planned day, and do not create a task for a summary: write an alert instead.",
       maxSubscriptions: 0
     }
   );

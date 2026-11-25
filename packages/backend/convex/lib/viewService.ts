@@ -1,5 +1,10 @@
 import type { DatabaseReader, DatabaseWriter } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import {
+  assertCanWriteGroup,
+  readableDocs,
+  resolveGroupId,
+} from "./groupService";
 import { normalizeTitle } from "./taskFields";
 
 export const HOME_VIEW = {
@@ -53,23 +58,26 @@ export async function ownerViews(
   db: DatabaseReader,
   ownerId: Id<"users">,
 ): Promise<Doc<"views">[]> {
-  const views = await db
-    .query("views")
-    .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-    .collect();
+  const views = await readableDocs(db, ownerId, "views");
   return views.filter((view) => view.deletedAt === undefined);
 }
 
-/** Home exists for every user. It is never deleted. */
+/** Home exists for every group the person can read. It is never deleted. */
 export async function ensureHome(
   db: DatabaseWriter,
   ownerId: Id<"users">,
+  groupId?: Id<"spaces">,
 ): Promise<Doc<"views">> {
+  const resolved = await resolveGroupId(db, ownerId, groupId);
   const views = await ownerViews(db, ownerId);
-  const home = views.find((view) => view.kind === "home");
+  const home = views.find(
+    (view) => view.kind === "home" && view.groupId === resolved,
+  );
   if (home) return home;
+  await assertCanWriteGroup(db, ownerId, resolved);
   const id = await db.insert("views", {
     ownerId,
+    groupId: resolved,
     title: HOME_VIEW.title,
     icon: HOME_VIEW.icon,
     color: HOME_VIEW.color,
@@ -85,20 +93,24 @@ export async function installTemplate(
   db: DatabaseWriter,
   ownerId: Id<"users">,
   slug: string,
+  groupId?: Id<"spaces">,
 ): Promise<Doc<"views">> {
   const template = TEMPLATES.find((row) => row.slug === slug);
   if (!template) throw new Error("Unknown template");
+  const resolved = await resolveGroupId(db, ownerId, groupId);
+  await assertCanWriteGroup(db, ownerId, resolved);
 
-  const categories = await db
-    .query("categories")
-    .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-    .collect();
+  const categories = await readableDocs(db, ownerId, "categories");
   let category = categories.find(
-    (row) => row.slug === slug && row.deletedAt === undefined,
+    (row) =>
+      row.slug === slug &&
+      row.groupId === resolved &&
+      row.deletedAt === undefined,
   );
   if (!category) {
     const categoryId = await db.insert("categories", {
       ownerId,
+      groupId: resolved,
       name: template.name,
       slug: template.slug,
       hidden: false,
@@ -114,12 +126,16 @@ export async function installTemplate(
 
   const views = await ownerViews(db, ownerId);
   const existing = views.find(
-    (view) => view.kind === "template" && view.categoryId === category!._id,
+    (view) =>
+      view.kind === "template" &&
+      view.groupId === resolved &&
+      view.categoryId === category!._id,
   );
   if (existing) return existing;
 
   const viewId = await db.insert("views", {
     ownerId,
+    groupId: resolved,
     title: template.name,
     icon: template.icon,
     color: template.color,
@@ -135,10 +151,13 @@ export async function installTemplate(
 export async function createCustomView(
   db: DatabaseWriter,
   ownerId: Id<"users">,
-  input: { title: string; icon?: string; color?: string },
+  input: { title: string; icon?: string; color?: string; groupId?: Id<"spaces"> },
 ): Promise<Doc<"views">> {
+  const groupId = await resolveGroupId(db, ownerId, input.groupId);
+  await assertCanWriteGroup(db, ownerId, groupId);
   const viewId = await db.insert("views", {
     ownerId,
+    groupId,
     title: normalizeTitle(input.title),
     icon: input.icon,
     color: input.color,
@@ -154,14 +173,20 @@ export async function enableComputedView(
   db: DatabaseWriter,
   ownerId: Id<"users">,
   key: string,
+  groupId?: Id<"spaces">,
 ): Promise<Doc<"views">> {
   if (!isComputedKey(key)) throw new Error("Invalid computed key");
+  const resolved = await resolveGroupId(db, ownerId, groupId);
+  await assertCanWriteGroup(db, ownerId, resolved);
   const views = await ownerViews(db, ownerId);
-  const existing = views.find((view) => view.computedKey === key);
+  const existing = views.find(
+    (view) => view.computedKey === key && view.groupId === resolved,
+  );
   if (existing) return existing;
   const seed = COMPUTED_VIEWS[key];
   const viewId = await db.insert("views", {
     ownerId,
+    groupId: resolved,
     title: seed.title,
     icon: seed.icon,
     color: seed.color,
@@ -181,9 +206,10 @@ export async function removeView(
   viewId: Id<"views">,
 ): Promise<{ success: true; id: Id<"views"> }> {
   const view = await db.get(viewId);
-  if (!view || view.ownerId !== ownerId || view.deletedAt !== undefined) {
+  if (!view || view.deletedAt !== undefined) {
     throw new Error("View not found");
   }
+  await assertCanWriteGroup(db, ownerId, view.groupId);
   if (view.kind === "home") throw new Error("Home cannot be deleted");
   await db.patch(viewId, { deletedAt: Date.now() });
   return { success: true, id: viewId };

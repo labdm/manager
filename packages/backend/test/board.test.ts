@@ -19,7 +19,7 @@ import {
   installTemplate,
   removeView,
 } from "../convex/lib/viewService";
-import { fakeDb } from "./fakeDb";
+import { fakeDb, seedUser } from "./fakeDb";
 
 const OWNER = "user_1" as Id<"users">;
 const TZ = "Europe/Berlin";
@@ -38,6 +38,7 @@ function slice(db: ReturnType<typeof fakeDb>, tab: "tasks" | "daily" | "weekly" 
 describe("Home shell", () => {
   it("ensures Home and previous/current/next day, week and month events", async () => {
     const db = fakeDb();
+    await seedUser(db, OWNER);
     const result = await slice(db);
 
     expect(result.rail).toEqual([
@@ -63,6 +64,7 @@ describe("Home shell", () => {
 
   it("installs each template once and filters by its category", async () => {
     const db = fakeDb();
+    await seedUser(db, OWNER);
     const writer = db.asWriter();
     const home = await ensureHome(writer, OWNER);
     const view = await installTemplate(writer, OWNER, "household");
@@ -97,6 +99,7 @@ describe("Home shell", () => {
 
   it("seeds computed views and applies include/exclude", async () => {
     const db = fakeDb();
+    await seedUser(db, OWNER);
     const writer = db.asWriter();
     const fresh = await enableComputedView(writer, OWNER, "new");
     const high = await enableComputedView(writer, OWNER, "high");
@@ -153,6 +156,7 @@ describe("Home shell", () => {
 
   it("sorts pinned tasks first and includes period tasks on rhythm tabs", async () => {
     const db = fakeDb();
+    await seedUser(db, OWNER);
     const writer = db.asWriter();
     const home = await ensureHome(writer, OWNER);
     await createTask(writer, OWNER, { title: "First" });
@@ -192,6 +196,7 @@ describe("Home shell", () => {
 
   it("renders progressions, unlocks quest steps, and drains alerts/questions", async () => {
     const db = fakeDb();
+    await seedUser(db, OWNER);
     const writer = db.asWriter();
     const meter = await createProgression(writer, OWNER, {
       title: "Read one book",
@@ -234,7 +239,14 @@ describe("Home shell", () => {
     expect(before.quests[0].steps.map((step) => step.gate)).toEqual(["available", "locked"]);
     expect(before.quests[0].waiting).toBe(false);
     expect(before.alerts).toEqual([
-      { id: expect.any(String), title: "Flight is Thursday", body: "Gate B" },
+      {
+        id: expect.any(String),
+        title: "Flight is Thursday",
+        body: "Gate B",
+        kind: "note",
+        authorOrigin: "agent",
+        seenAt: undefined,
+      },
     ]);
     expect(before.questions[0].options).toEqual([{ id: "glass", label: "Buy glass" }]);
 
@@ -252,6 +264,7 @@ describe("Home shell", () => {
 
   it("Home stays unique across repeated slices", async () => {
     const db = fakeDb();
+    await seedUser(db, OWNER);
     await slice(db);
     await slice(db);
     await slice(db, "daily");

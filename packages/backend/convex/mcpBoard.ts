@@ -3,6 +3,8 @@ import { mutation } from "./_generated/server";
 import { proofArgs, requireMcpUser } from "./mcpTasks";
 import { boardSlice } from "./lib/boardService";
 import { attach, detach, pin, unpin, setOverride, clearOverride } from "./lib/linkService";
+import { createGroup } from "./lib/groupService";
+import { createInvite } from "./lib/inviteService";
 import { applyOverdueForOwner } from "./lib/overdueService";
 import {
   createAlert,
@@ -15,11 +17,76 @@ import {
 } from "./lib/phase2Service";
 import { createRecurrence, listRecurrences, reconcileOwner } from "./lib/recurrenceService";
 import * as resourceService from "./lib/resourceService";
+import { createRouting, listRoutings } from "./lib/routingService";
+import { routingExecution, routingTrigger } from "./schema";
 import {
   createCustomView,
   enableComputedView,
   installTemplate,
 } from "./lib/viewService";
+
+export const createGroupTool = mutation({
+  args: {
+    ...proofArgs,
+    name: v.string(),
+    icon: v.optional(v.string()),
+    color: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireMcpUser(ctx, args);
+    return await createGroup(ctx.db, user._id, {
+      name: args.name,
+      icon: args.icon,
+      color: args.color,
+    });
+  },
+});
+
+export const inviteTool = mutation({
+  args: {
+    ...proofArgs,
+    groupId: v.optional(v.id("spaces")),
+    email: v.string(),
+    origin: v.optional(
+      v.union(v.literal("self"), v.literal("agent"), v.literal("member")),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireMcpUser(ctx, args);
+    return await createInvite(ctx.db, user._id, {
+      groupId: args.groupId,
+      email: args.email,
+      origin: args.origin,
+    });
+  },
+});
+
+export const createRoutingTool = mutation({
+  args: {
+    ...proofArgs,
+    name: v.string(),
+    trigger: routingTrigger,
+    execution: routingExecution,
+    groupId: v.optional(v.id("spaces")),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireMcpUser(ctx, args);
+    return await createRouting(ctx.db, user._id, {
+      name: args.name,
+      trigger: args.trigger,
+      execution: args.execution,
+      groupId: args.groupId,
+    });
+  },
+});
+
+export const listRoutingsTool = mutation({
+  args: proofArgs,
+  handler: async (ctx, args) => {
+    const user = await requireMcpUser(ctx, args);
+    return await listRoutings(ctx.db, user._id);
+  },
+});
 
 export const createRecurrenceTool = mutation({
   args: {
@@ -75,9 +142,12 @@ export const getSlice = mutation({
       v.literal("daily"),
       v.literal("weekly"),
       v.literal("monthly"),
+      v.literal("events"),
     ),
     viewId: v.optional(v.id("views")),
     timezone: v.string(),
+    groupId: v.optional(v.id("spaces")),
+    eventId: v.optional(v.id("events")),
   },
   handler: async (ctx, args) => {
     const user = await requireMcpUser(ctx, args);
@@ -85,6 +155,8 @@ export const getSlice = mutation({
       tab: args.tab,
       viewId: args.viewId,
       timezone: args.timezone,
+      groupId: args.groupId,
+      eventId: args.eventId,
     });
   },
 });

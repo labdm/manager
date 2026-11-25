@@ -1,6 +1,8 @@
+import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
+import { createDefaultGroup, defaultGroupForUser } from "./lib/groupService";
 
 /**
  * Clerk user ids (`user_…`) or full tokenIdentifiers from `ADMIN_CLERK_USER_IDS`.
@@ -52,14 +54,17 @@ export async function upsertUserByTokenIdentifier(
   const email = details?.email ?? undefined;
 
   if (existing) {
-    const patch: { name?: string; email?: string; role?: "admin" } = {};
+    const patch: Partial<Doc<"users">> = {};
     if (name && name !== existing.name) patch.name = name;
     if (email && email !== existing.email) patch.email = email;
     if (promote && existing.role !== "admin") patch.role = "admin";
+    if (existing.activityOnTasks === undefined) patch.activityOnTasks = "others";
 
     if (Object.keys(patch).length > 0) {
       await ctx.db.patch(existing._id, patch);
     }
+    // The default group is created with the user. No lazy group-less path.
+    await defaultGroupForUser(ctx.db, existing._id);
     return {
       ...existing,
       ...patch,
@@ -72,7 +77,9 @@ export async function upsertUserByTokenIdentifier(
     name,
     email,
     role: promote ? "admin" : "user",
+    activityOnTasks: "others",
   });
+  await createDefaultGroup(ctx.db, id);
   const created = await ctx.db.get(id);
   if (!created) throw new Error("Could not create user");
   return created;
@@ -120,6 +127,18 @@ export const me = query({
       return null;
     }
     return await findUserByTokenIdentifier(ctx, identity.tokenIdentifier);
+  },
+});
+
+/** Which activity records appear on the Tasks page. History ignores this. */
+export const setActivityOnTasks = mutation({
+  args: {
+    value: v.union(v.literal("others"), v.literal("all"), v.literal("none")),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    await ctx.db.patch(user._id, { activityOnTasks: args.value });
+    return { ...user, activityOnTasks: args.value };
   },
 });
 

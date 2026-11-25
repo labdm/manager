@@ -1,4 +1,6 @@
+import type { Doc, Id } from "../convex/_generated/dataModel";
 import type { DatabaseReader, DatabaseWriter } from "../convex/_generated/server";
+import { createDefaultGroup } from "../convex/lib/groupService";
 
 type Row = {
   _id: string;
@@ -30,6 +32,16 @@ class QueryStub {
       Object.entries(this.filters).every(([field, value]) => row[field] === value),
     );
   }
+
+  first(): Row | null {
+    return this.collect()[0] ?? null;
+  }
+
+  unique(): Row | null {
+    const rows = this.collect();
+    if (rows.length > 1) throw new Error("Expected at most one row");
+    return rows[0] ?? null;
+  }
 }
 
 export class FakeDb {
@@ -53,6 +65,16 @@ export class FakeDb {
       _creationTime: this.counter,
     });
     return id;
+  }
+
+  /** Test-only insert with a stable id, for fixture users with Clerk-style ids. */
+  seed(table: string, id: string, value: Record<string, unknown>): void {
+    this.counter += 1;
+    this.rows.set(id, {
+      ...value,
+      _id: id,
+      _creationTime: this.counter,
+    });
   }
 
   async patch(id: string, value: Record<string, unknown>): Promise<void> {
@@ -85,4 +107,27 @@ export class FakeDb {
 
 export function fakeDb(): FakeDb {
   return new FakeDb();
+}
+
+/** Every test user is provisioned the same way as `users.upsert`. */
+export async function seedUser(
+  db: FakeDb,
+  userId: Id<"users">,
+  input: { email?: string; role?: Doc<"users">["role"]; name?: string } = {},
+): Promise<{ user: Doc<"users">; group: Doc<"spaces"> }> {
+  const writer = db.asWriter();
+  db.seed("users", String(userId), {
+    tokenIdentifier: `test|${String(userId)}`,
+    name: input.name,
+    email: input.email,
+    role: input.role ?? "user",
+    activityOnTasks: "others",
+  });
+  const group = await createDefaultGroup(writer, userId, 1);
+  const user = await db.get(userId);
+  if (!user) throw new Error("User not found");
+  return {
+    user: user as unknown as Doc<"users">,
+    group,
+  };
 }

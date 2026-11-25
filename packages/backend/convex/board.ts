@@ -10,9 +10,12 @@ export const slice = mutation({
       v.literal("daily"),
       v.literal("weekly"),
       v.literal("monthly"),
+      v.literal("events"),
     ),
     viewId: v.optional(v.id("views")),
     timezone: v.string(),
+    groupId: v.optional(v.id("spaces")),
+    eventId: v.optional(v.id("events")),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);

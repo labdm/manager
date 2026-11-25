@@ -1,5 +1,6 @@
 import type { DatabaseWriter } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import { assertCanWriteGroup, readableGroupIds } from "./groupService";
 import { SUBJECT_TYPES, TARGET_TYPES } from "./viewService";
 
 function assertSubjectType(type: string): void {
@@ -8,6 +9,46 @@ function assertSubjectType(type: string): void {
 
 function assertTargetType(type: string): void {
   if (!TARGET_TYPES.has(type)) throw new Error("Invalid target type");
+}
+
+const GROUPED_TABLES: Record<string, "tasks" | "progressions" | "quests" | "events" | "categories"> = {
+  task: "tasks",
+  progression: "progressions",
+  quest: "quests",
+  event: "events",
+  category: "categories",
+};
+
+async function groupForRef(
+  db: DatabaseWriter,
+  type: string,
+  id: string,
+): Promise<Id<"spaces"> | null> {
+  if (type === "space") return id as Id<"spaces">;
+  const table = GROUPED_TABLES[type];
+  if (!table) return null;
+  const row = (await db.get(id as never)) as { groupId?: Id<"spaces"> } | null;
+  return row?.groupId ?? null;
+}
+
+/** Links cannot bridge groups. One group per item, visibility one hop. */
+async function assertSameGroup(
+  db: DatabaseWriter,
+  ownerId: Id<"users">,
+  subjectType: string,
+  subjectId: string,
+  targetType: string,
+  targetId: string,
+): Promise<Id<"spaces">> {
+  const subjectGroup = await groupForRef(db, subjectType, subjectId);
+  const targetGroup = await groupForRef(db, targetType, targetId);
+  if (!subjectGroup || !targetGroup || subjectGroup !== targetGroup) {
+    throw new Error("Invalid attachment group");
+  }
+  const groups = await readableGroupIds(db, ownerId);
+  if (!groups.has(String(subjectGroup))) throw new Error("Invalid attachment group");
+  await assertCanWriteGroup(db, ownerId, subjectGroup);
+  return subjectGroup;
 }
 
 export async function attach(
@@ -27,6 +68,14 @@ export async function attach(
   if (role !== "primary" && role !== "extra") {
     throw new Error("Invalid role");
   }
+  await assertSameGroup(
+    db,
+    ownerId,
+    input.subjectType,
+    input.subjectId,
+    input.targetType,
+    input.targetId,
+  );
   const id = await db.insert("attachments", {
     ownerId,
     subjectType: input.subjectType,
@@ -66,13 +115,30 @@ async function ownedView(
   return view;
 }
 
+/** A pin or override cannot name a row the caller cannot read. */
+async function assertVisibleSubject(
+  db: DatabaseWriter,
+  ownerId: Id<"users">,
+  view: Doc<"views">,
+  subjectType: string,
+  subjectId: string,
+): Promise<void> {
+  const groupId = await groupForRef(db, subjectType, subjectId);
+  if (!groupId) throw new Error("Invalid subject group");
+  const groups = await readableGroupIds(db, ownerId);
+  if (!groups.has(String(groupId)) || String(view.groupId) !== String(groupId)) {
+    throw new Error("Invalid subject group");
+  }
+}
+
 export async function pin(
   db: DatabaseWriter,
   ownerId: Id<"users">,
   input: { viewId: Id<"views">; subjectType: string; subjectId: string },
 ): Promise<Doc<"viewPins">> {
-  await ownedView(db, ownerId, input.viewId);
+  const view = await ownedView(db, ownerId, input.viewId);
   assertSubjectType(input.subjectType);
+  await assertVisibleSubject(db, ownerId, view, input.subjectType, input.subjectId);
   const rows = await db
     .query("viewPins")
     .withIndex("by_owner_view", (q) =>
@@ -130,8 +196,9 @@ export async function setOverride(
     mode: string;
   },
 ): Promise<Doc<"viewOverrides">> {
-  await ownedView(db, ownerId, input.viewId);
+  const view = await ownedView(db, ownerId, input.viewId);
   assertSubjectType(input.subjectType);
+  await assertVisibleSubject(db, ownerId, view, input.subjectType, input.subjectId);
   if (input.mode !== "include" && input.mode !== "exclude") {
     throw new Error("Invalid override mode");
   }

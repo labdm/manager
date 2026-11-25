@@ -2,6 +2,11 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { findCurrentUser, requireUser } from "./users";
+import {
+  assertCanWriteGroup,
+  readableDocs,
+  resolveGroupId,
+} from "./lib/groupService";
 import { assertEpoch, normalizeTitle } from "./lib/taskFields";
 
 function optionalString(value: string | undefined): string | undefined {
@@ -15,10 +20,7 @@ export const list = query({
   handler: async (ctx, args) => {
     const user = await findCurrentUser(ctx);
     if (!user) return [];
-    const rows = await ctx.db
-      .query("events")
-      .withIndex("by_owner", (q) => q.eq("ownerId", user._id))
-      .collect();
+    const rows = await readableDocs(ctx.db, user._id, "events");
     return rows
       .filter(
         (row) =>
@@ -37,6 +39,7 @@ export const create = mutation({
     endsAt: v.number(),
     icon: v.optional(v.string()),
     color: v.optional(v.string()),
+    groupId: v.optional(v.id("spaces")),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
@@ -45,8 +48,11 @@ export const create = mutation({
     assertEpoch(args.startsAt, "startsAt");
     assertEpoch(args.endsAt, "endsAt");
     if (args.endsAt < args.startsAt) throw new Error("Invalid endsAt");
+    const groupId = await resolveGroupId(ctx.db, user._id, args.groupId);
+    await assertCanWriteGroup(ctx.db, user._id, groupId);
     return await ctx.db.insert("events", {
       ownerId: user._id,
+      groupId,
       title: normalizeTitle(args.title),
       kind,
       startsAt: args.startsAt,
@@ -71,9 +77,8 @@ export const update = mutation({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const row = await ctx.db.get(args.id);
-    if (!row || row.ownerId !== user._id || row.deletedAt !== undefined) {
-      throw new Error("Event not found");
-    }
+    if (!row || row.deletedAt !== undefined) throw new Error("Event not found");
+    await assertCanWriteGroup(ctx.db, user._id, row.groupId);
     const patch: Partial<Doc<"events">> = {};
     const title = optionalString(args.title);
     if (title !== undefined) patch.title = normalizeTitle(title);
@@ -105,9 +110,8 @@ export const remove = mutation({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const row = await ctx.db.get(args.id);
-    if (!row || row.ownerId !== user._id || row.deletedAt !== undefined) {
-      throw new Error("Event not found");
-    }
+    if (!row || row.deletedAt !== undefined) throw new Error("Event not found");
+    await assertCanWriteGroup(ctx.db, user._id, row.groupId);
     await ctx.db.patch(args.id, { deletedAt: Date.now() });
     return { success: true, id: args.id };
   },
