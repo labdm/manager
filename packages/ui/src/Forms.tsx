@@ -312,6 +312,105 @@ export function RoutingForm({
   );
 }
 
+export function ProgressionForm({
+  onSubmit,
+  onCancel,
+  error,
+}: {
+  onSubmit: (title: string, target: number, unit: string) => Promise<void> | void;
+  onCancel: () => void;
+  error?: string | null;
+}) {
+  const [title, setTitle] = useState("");
+  const [target, setTarget] = useState("");
+  const [unit, setUnit] = useState("");
+  return (
+    <FormFrame title="New progression" onCancel={onCancel} error={error}>
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const parsed = Number(target);
+          if (!title.trim() || !Number.isFinite(parsed) || parsed <= 0) return;
+          void onSubmit(title.trim(), parsed, unit.trim());
+        }}
+      >
+        <Field label="Title">
+          <Input value={title} onChange={(event) => setTitle(event.target.value)} />
+        </Field>
+        <Field label="Target">
+          <Input type="number" value={target} onChange={(event) => setTarget(event.target.value)} />
+        </Field>
+        <Field label="Unit">
+          <Input value={unit} onChange={(event) => setUnit(event.target.value)} />
+        </Field>
+        <Button type="submit">Create progression</Button>
+      </form>
+    </FormFrame>
+  );
+}
+
+export function ProgressionLogForm({ onLog }: { onLog: (amount: number) => void }) {
+  const [amount, setAmount] = useState("1");
+  return (
+    <form
+      className="flex flex-wrap items-end gap-2"
+      aria-label="Log progress"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const parsed = Number(amount);
+        if (!Number.isFinite(parsed) || parsed === 0) return;
+        onLog(parsed);
+      }}
+    >
+      <Field label="Amount">
+        <Input type="number" value={amount} onChange={(event) => setAmount(event.target.value)} />
+      </Field>
+      <Button type="submit">Log</Button>
+    </form>
+  );
+}
+
+export function QuestStepForm({
+  tasks,
+  onAdd,
+}: {
+  tasks: ReadonlyArray<{ id: string; title: string }>;
+  onAdd: (taskId: string) => void;
+}) {
+  const [taskId, setTaskId] = useState(tasks[0]?.id ?? "");
+  if (!tasks.length) {
+    return <p className="text-sm text-muted-foreground">Create a task before adding a step.</p>;
+  }
+  return (
+    <form
+      className="flex flex-col gap-3"
+      aria-label="Add quest step"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (taskId) onAdd(taskId);
+      }}
+    >
+      <Field label="Step task">
+        <select
+          className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          value={taskId}
+          onChange={(event) => setTaskId(event.target.value)}
+        >
+          {tasks.map((task) => (
+            <option key={task.id} value={task.id}>
+              {task.title}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Button type="submit" className="self-start">
+        Add step
+      </Button>
+    </form>
+  );
+}
+
 export function ActivityControl({
   value,
   onChange,

@@ -174,6 +174,36 @@ export const listEventsRef = makeFunctionReference<
   unknown[]
 >("events:list");
 
+export const createProgressionRef = makeFunctionReference<
+  "mutation",
+  { title: string; target: number; unit?: string },
+  unknown
+>("progressions:create");
+
+export const logProgressionRef = makeFunctionReference<
+  "mutation",
+  { progressionId: string; amount: number },
+  unknown
+>("progressions:log");
+
+export const createQuestRef = makeFunctionReference<
+  "mutation",
+  { title: string },
+  unknown
+>("quests:create");
+
+export const addQuestStepRef = makeFunctionReference<
+  "mutation",
+  { questId: string; taskId: string },
+  unknown
+>("quests:addStep");
+
+export const answerQuestionRef = makeFunctionReference<
+  "mutation",
+  { questionId: string; optionId: string },
+  unknown
+>("questions:answer");
+
 /** `board:slice` may carry counts; the Achievements page falls back to zeros. */
 export const ZERO_ACHIEVEMENTS: AchievementCounts = {
   completedTasks: 0,

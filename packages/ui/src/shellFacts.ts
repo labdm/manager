@@ -1,4 +1,4 @@
-import type { AchievementCounts, AlertItem, BoardSlice, BoardTask, QuestionItem } from "./homeTypes";
+import type { AchievementCounts, AlertItem, BoardSlice, BoardTask, QuestItem, QuestionItem } from "./homeTypes";
 import { ZERO_ACHIEVEMENTS } from "./homeApi";
 import type { Chip, FeedRow, GroupItem, InviteItem, ActivityValue, TaskFormDraft } from "./shellTypes";
 import { formatInstant, formatPlannedDay, isOverdue, isTaskNew, mapDraftToCreatePayload } from "./taskFacts";
@@ -111,6 +111,8 @@ export function questionToRow(question: QuestionItem): FeedRow {
     action: "Answer",
     groupMark: Boolean(question.groupId),
     questMark: true,
+    questionId: question.id,
+    options: question.options,
   };
 }
 
@@ -150,6 +152,20 @@ export function progressionToRow(progression: {
     groupMark: false,
     questMark: Boolean(progression.questMark),
     progressionId: progression.id,
+  };
+}
+
+export function questToRow(quest: QuestItem): FeedRow {
+  const stepTitles = quest.steps.map((step) => step.title).filter(Boolean);
+  return {
+    id: `quest:${quest.id}`,
+    type: "quest",
+    title: quest.title,
+    body: stepTitles.length ? stepTitles.join(" · ") : quest.waiting ? "Waiting" : quest.status,
+    action: "Add step",
+    questMark: true,
+    questId: quest.id,
+    steps: quest.steps.map((step) => ({ id: step.id, title: step.title, done: step.done })),
   };
 }
 
