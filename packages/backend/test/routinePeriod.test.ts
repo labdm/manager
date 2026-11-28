@@ -11,7 +11,15 @@ import {
   taskSection,
 } from "../convex/lib/routinePeriod";
 import type { Id } from "../convex/_generated/dataModel";
-import { createTask, listTasks, setTaskDone, setTaskWaiting, toggleTask } from "../convex/lib/taskService";
+import {
+  createTask,
+  listTasks,
+  setTaskDone,
+  setTaskWaiting,
+  syncRoutineDoneFlags,
+  toggleTask,
+  updateTask,
+} from "../convex/lib/taskService";
 import { boardSlice } from "../convex/lib/boardService";
 import { fakeDb, seedUser } from "./fakeDb";
 
@@ -158,5 +166,35 @@ describe("completion records reset a routine without a cron", () => {
     expect(home.tasks.map((task) => task.title)).not.toContain("Water plants");
     expect(daily.tasks.map((task) => task.title)).toContain("Water plants");
     expect(daily.tasks.map((task) => task.title)).not.toContain("Write the quest");
+  });
+
+  it("stores a routine change and the next reminder instant", async () => {
+    const db = await board();
+    const created = await createTask(db.asWriter(), OWNER, { title: "Write the quest" });
+    const updated = await updateTask(db.asWriter(), OWNER, created.id, {
+      routineKind: "daily",
+      timezone: ZONE,
+      remindMinutes: 9 * 60,
+    });
+    expect(updated.routineKind).toBe("daily");
+    expect(updated.section).toBe("daily");
+    expect(updated.remindMinutes).toBe(9 * 60);
+    expect(updated.remindAt).toBeGreaterThan(Date.now() - 1000);
+  });
+
+  it("clears the stored done flag when the period rolls", async () => {
+    const db = await board();
+    const created = await createTask(db.asWriter(), OWNER, {
+      title: "Dishes",
+      routineKind: "daily",
+      timezone: ZONE,
+    });
+    await setTaskDone(db.asWriter(), OWNER, created.id, true, now);
+    expect(db.all("tasks").find((row) => row.title === "Dishes")?.done).toBe(true);
+    const tomorrow = addPeriods("daily", now, 1, ZONE);
+    await syncRoutineDoneFlags(db.asWriter(), OWNER, tomorrow);
+    expect(db.all("tasks").find((row) => row.title === "Dishes")?.done).toBe(false);
+    const listed = await listTasks(db.asReader(), OWNER, tomorrow);
+    expect(listed.find((task) => task.title === "Dishes")?.done).toBe(false);
   });
 });

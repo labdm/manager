@@ -198,6 +198,28 @@ async function periodsForTask(
   return new Set(rows.map((row) => row.periodId));
 }
 
+/** Writes the stored done flag to match the current period so other readers are not stuck. */
+export async function syncRoutineDoneFlags(
+  db: DatabaseWriter,
+  ownerId: Id<"users">,
+  now = Date.now(),
+): Promise<void> {
+  const tasks = await readableDocs(db, ownerId, "tasks");
+  const periods = await completionMap(db, ownerId);
+  for (const task of tasks) {
+    if (task.deletedAt !== undefined) continue;
+    const routine = readRoutine(task);
+    if (routine.kind === "none") continue;
+    const current = periodId(routine, now, task.routineTimezone || DEFAULT_TIMEZONE);
+    const done = current !== null && (periods.get(String(task._id))?.has(current) ?? false);
+    if (task.done === done) continue;
+    await db.patch(task._id, {
+      done,
+      completedAt: done ? (task.completedAt ?? now) : undefined,
+    });
+  }
+}
+
 /** Lists all tasks for a given user, sorted by pending first, then newest creation time. */
 export async function listTasks(
   db: DatabaseReader,
@@ -485,6 +507,39 @@ export async function updateTask(
     if (presentation !== undefined) patch.presentation = presentation;
   }
 
+  const nextRoutine = readRoutine({
+    routineKind: input.routineKind ?? task.routineKind,
+    intervalEvery: input.intervalEvery ?? task.intervalEvery,
+    intervalUnit: input.intervalUnit ?? task.intervalUnit,
+    routineAnchor: task.routineAnchor,
+  });
+  const routineTouched =
+    input.routineKind !== undefined ||
+    input.intervalEvery !== undefined ||
+    input.intervalUnit !== undefined ||
+    input.timezone !== undefined;
+  if (routineTouched) {
+    const zone = (input.timezone ?? task.routineTimezone ?? DEFAULT_TIMEZONE).trim();
+    if (nextRoutine.kind === "none") {
+      patch.routineKind = "none";
+      patch.intervalEvery = undefined;
+      patch.intervalUnit = undefined;
+      patch.routineAnchor = undefined;
+      patch.routineTimezone = undefined;
+    } else {
+      patch.routineKind = nextRoutine.kind;
+      patch.routineTimezone = zone;
+      if (nextRoutine.kind === "interval") {
+        patch.intervalEvery = nextRoutine.every;
+        patch.intervalUnit = nextRoutine.unit;
+        patch.routineAnchor = task.routineAnchor ?? Date.now();
+      } else {
+        patch.intervalEvery = undefined;
+        patch.intervalUnit = undefined;
+        patch.routineAnchor = undefined;
+      }
+    }
+  }
   if (input.remindMinutes !== undefined) {
     if (
       !Number.isInteger(input.remindMinutes) ||
@@ -496,6 +551,15 @@ export async function updateTask(
     patch.remindMinutes = input.remindMinutes;
     patch.remindedAt = undefined;
   }
+  if (input.remindAt === undefined && (input.remindMinutes !== undefined || routineTouched)) {
+    const minutes = input.remindMinutes ?? task.remindMinutes;
+    if (minutes !== undefined) {
+      const zone = (patch.routineTimezone ?? task.routineTimezone ?? DEFAULT_TIMEZONE) as string;
+      const anchor = (patch.routineAnchor ?? task.routineAnchor) as number | undefined;
+      patch.remindAt = nextReminderAt(Date.now(), zone, { ...nextRoutine, anchorOn: anchor }, minutes);
+      patch.remindedAt = undefined;
+    }
+  }
   if (input.waiting !== undefined) {
     if (input.waiting && !input.waitingReason?.trim() && !task.waitingReason) {
       throw new Error("Waiting reason is required");
@@ -505,7 +569,7 @@ export async function updateTask(
     if (!input.waiting) patch.waitingReason = undefined;
   }
 
-  const routineDone = input.done !== undefined && readRoutine(task).kind !== "none";
+  const routineDone = input.done !== undefined && nextRoutine.kind !== "none";
   if (input.done !== undefined && !routineDone) {
     patch.done = input.done;
     if (input.done && !task.done) {
@@ -547,8 +611,9 @@ async function finishDone(
   wasDone: boolean,
   done: boolean,
   now: number,
+  periodKey?: string,
 ): Promise<TaskView> {
-  await applyTaskResourceEffects(db, ownerId, task._id, done);
+  await applyTaskResourceEffects(db, ownerId, task._id, done, now, periodKey);
   if (done && !wasDone) await unlockNextQuestStep(db, task._id, ownerId);
   if (done !== wasDone) {
     const event = done ? "completed" : "reopened";
@@ -607,7 +672,7 @@ export async function setTaskDone(
     await db.delete(existing._id);
     await db.patch(task._id, { done: false, completedAt: undefined });
   }
-  return await finishDone(db, ownerId, task, wasDone, done, now);
+  return await finishDone(db, ownerId, task, wasDone, done, now, current);
 }
 
 /** Toggles the completion status of a task. */

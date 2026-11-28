@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /** Registers the app-shell service worker and offers an update when a new one is waiting. */
 export function PwaUpdate() {
   const [waiting, setWaiting] = useState<ServiceWorker | null>(null);
+  const reloadOnControl = useRef(false);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
@@ -20,8 +21,14 @@ export function PwaUpdate() {
         });
       });
     });
+    const onController = () => {
+      if (!reloadOnControl.current) return;
+      window.location.reload();
+    };
+    navigator.serviceWorker.addEventListener("controllerchange", onController);
     return () => {
       cancelled = true;
+      navigator.serviceWorker.removeEventListener("controllerchange", onController);
     };
   }, []);
 
@@ -34,8 +41,8 @@ export function PwaUpdate() {
         type="button"
         className="rounded-md bg-blue-700 px-3 py-1.5 text-white"
         onClick={() => {
+          reloadOnControl.current = true;
           waiting.postMessage("SKIP_WAITING");
-          window.location.reload();
         }}
       >
         Update

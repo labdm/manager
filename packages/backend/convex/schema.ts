@@ -238,6 +238,8 @@ export default defineSchema({
     resourceId: v.id("resources"),
     delta: v.number(),
     applied: v.optional(v.boolean()),
+    /** Period id the current application belongs to. Routines apply once per period. */
+    appliedPeriod: v.optional(v.string()),
     deletedAt: v.optional(v.number()),
   })
     .index("by_owner", ["ownerId"])

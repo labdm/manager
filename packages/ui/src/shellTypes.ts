@@ -30,6 +30,13 @@ export const CHIPS: ReadonlyArray<{ id: Chip; label: string }> = [
   { id: "events", label: "Events" },
 ];
 
+/** Shown on the tab, never on the task. */
+export const CHIP_HINTS: Partial<Record<Chip, string>> = {
+  daily: "Resets at midnight",
+  weekly: "Resets Monday",
+  monthly: "Resets on the 1st",
+};
+
 export type ActivityValue = "others" | "all" | "none";
 
 export const ACTIVITY_OPTIONS: ReadonlyArray<{ id: ActivityValue; label: string }> = [

@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { armReminder } from "./push";
 import { boardSlice, type SliceTab } from "./lib/boardService";
 import { assertMcpRoleProof } from "./lib/mcpRoleSignature";
 import { reconcileOwner } from "./lib/recurrenceService";
@@ -90,6 +91,7 @@ export const list = mutation({
   handler: async (ctx, args) => {
     const user = await requireMcpUser(ctx, args);
     await reconcileOwner(ctx.db, user._id);
+    await taskService.syncRoutineDoneFlags(ctx.db, user._id);
     if (!args.section) return await taskService.listTasks(ctx.db, user._id);
     const tab: SliceTab = args.section === "quests" ? "tasks" : args.section;
     const slice = await boardSlice(ctx.db, user._id, {
@@ -119,7 +121,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireMcpUser(ctx, args);
-    return await taskService.createTask(ctx.db, user._id, {
+    const created = await taskService.createTask(ctx.db, user._id, {
       title: args.title,
       dueAt: args.dueAt,
       notes: args.notes,
@@ -141,6 +143,8 @@ export const create = mutation({
       remindMinutes: args.remindMinutes,
       origin: "agent",
     });
+    await armReminder(ctx, created);
+    return created;
   },
 });
 
@@ -165,7 +169,7 @@ export const update = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireMcpUser(ctx, args);
-    return await taskService.updateTask(ctx.db, user._id, args.id, {
+    const updated = await taskService.updateTask(ctx.db, user._id, args.id, {
       title: args.title,
       notes: args.notes,
       plannedOn: args.plannedOn,
@@ -187,6 +191,10 @@ export const update = mutation({
       waitingReason: args.waitingReason,
       remindMinutes: args.remindMinutes,
     });
+    if (args.remindAt !== undefined || args.remindMinutes !== undefined || args.routineKind !== undefined) {
+      await armReminder(ctx, updated);
+    }
+    return updated;
   },
 });
 

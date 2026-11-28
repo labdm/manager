@@ -7,7 +7,7 @@ import {
   mutation,
   type MutationCtx,
 } from "./_generated/server";
-import { nextReminderAt, readRoutine, DEFAULT_TIMEZONE } from "./lib/routinePeriod";
+import { nextReminderAt, periodId, readRoutine, DEFAULT_TIMEZONE } from "./lib/routinePeriod";
 import { requireUser } from "./users";
 
 export const subscribe = mutation({
@@ -104,6 +104,17 @@ export const removeSubscription = internalMutation({
   },
 });
 
+export async function armReminder(
+  ctx: MutationCtx,
+  task: { id: Id<"tasks">; remindAt?: number },
+): Promise<void> {
+  if (task.remindAt === undefined || task.remindAt <= Date.now()) return;
+  await ctx.scheduler.runAt(task.remindAt, internal.push.deliverOne, {
+    taskId: task.id,
+    remindAt: task.remindAt,
+  });
+}
+
 async function claimReminder(
   ctx: MutationCtx,
   taskId: Id<"tasks">,
@@ -113,15 +124,29 @@ async function claimReminder(
   if (!task || task.deletedAt !== undefined) return false;
   if (task.remindAt !== expectedRemindAt) return false;
   if (task.remindedAt === expectedRemindAt) return false;
-  if (task.done && (task.routineKind === undefined || task.routineKind === "none")) {
-    return false;
+  const routine = readRoutine(task);
+  const zone = task.routineTimezone || DEFAULT_TIMEZONE;
+  const current = routine.kind === "none" ? null : periodId(routine, Date.now(), zone);
+  let alreadyDone = routine.kind === "none" && task.done === true;
+  if (current) {
+    const rows = await ctx.db
+      .query("taskCompletions")
+      .withIndex("by_task_period", (q) => q.eq("taskId", task._id).eq("periodId", current))
+      .collect();
+    alreadyDone = rows.length > 0;
+    const storedDone = rows.length > 0;
+    if (task.done !== storedDone) {
+      await ctx.db.patch(task._id, {
+        done: storedDone,
+        completedAt: storedDone ? task.completedAt : undefined,
+      });
+    }
   }
   await ctx.db.patch(task._id, { remindedAt: expectedRemindAt });
-  const routine = readRoutine(task);
   if (task.remindMinutes !== undefined && routine.kind !== "none") {
     const next = nextReminderAt(
       expectedRemindAt + 1,
-      task.routineTimezone || DEFAULT_TIMEZONE,
+      zone,
       { ...routine, anchorOn: task.routineAnchor },
       task.remindMinutes,
     );
@@ -131,6 +156,7 @@ async function claimReminder(
       remindAt: next,
     });
   }
+  if (alreadyDone) return true;
   await ctx.scheduler.runAfter(0, internal.pushNode.sendToUser, {
     userId: task.ownerId,
     title: task.title,

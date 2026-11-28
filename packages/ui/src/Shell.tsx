@@ -109,6 +109,7 @@ import {
   inviteToRow,
 } from "./shellFacts";
 import {
+  CHIP_HINTS,
   CHIPS,
   DESTINATIONS,
   type ActivityValue,
@@ -384,6 +385,7 @@ export function Shell({
         ...(groupId ? { groupId } : {}),
       });
       setBoard(result ?? emptyBoard());
+      setJustDone(new Set());
     } catch (caught) {
       // Events is a later milestone. A rejected slice is an empty list, not an error.
       if (chip === "events") {
@@ -488,8 +490,15 @@ export function Shell({
       ...(board?.progressions ?? []).map(progressionToRow),
       ...(board?.quests ?? []).map(questToRow),
     ];
-    return mixed.filter((row) => activityVisible(row, activity));
-  }, [activity, board, destination, groups, invites, locallySeen, messageAlerts]);
+    return mixed.filter((row) => {
+      if (!activityVisible(row, activity)) return false;
+      // Quests are one-shot. A daily, weekly, monthly, or interval task stays on its own tab.
+      if (chip === "all" && row.type === "task" && row.routineKind && row.routineKind !== "none") {
+        return false;
+      }
+      return true;
+    });
+  }, [activity, board, chip, destination, groups, invites, locallySeen, messageAlerts]);
 
   const selectedGroup = groups.find((group) => group.id === groupId);
 
@@ -607,12 +616,22 @@ export function Shell({
         return;
       }
       if (row.type === "task" && row.taskId) {
-        if (row.waiting) {
+        const shownDone = Boolean(row.done) || justDone.has(row.id);
+        if (row.waiting && !shownDone) {
           await setWaiting({ id: String(row.taskId), waiting: false });
           await loadBoard();
           return;
         }
-        const completing = !row.done;
+        const completing = !shownDone;
+        if (!completing) {
+          setJustDone((previous) => {
+            const next = new Set(previous);
+            next.delete(row.id);
+            return next;
+          });
+          setUndo(null);
+          setSectionClear(false);
+        }
         const tasksOnly = rows.filter((item) => item.type === "task");
         const remaining = tasksOnly.filter((item) => item.id !== row.id && !item.done && !item.waiting);
         const waitingLeft = tasksOnly.filter((item) => item.id !== row.id && item.waiting && !item.done);
@@ -918,7 +937,9 @@ export function Shell({
                   selected={selected?.id === row.id}
                   celebrating={burst?.id === row.id}
                   onOpen={() => openRow(row)}
-                  onAction={() => void rowAction(row)}
+                  onAction={() =>
+                    void rowAction(justDone.has(row.id) ? { ...row, done: true } : row)
+                  }
                   onSecondary={row.type === "invite" ? () => void declineInvite(row) : undefined}
                 />
             ))}
@@ -1022,7 +1043,7 @@ export function Shell({
                 {CHIPS.map((item) => {
                   const count = chipBadge(board, item.id, rows);
                   return (
-                    <TabsTrigger key={item.id} value={item.id}>
+                    <TabsTrigger key={item.id} value={item.id} title={CHIP_HINTS[item.id]}>
                       {item.label}
                       {count > 0 ? <Badge variant="secondary">{count}</Badge> : null}
                     </TabsTrigger>
@@ -1030,6 +1051,9 @@ export function Shell({
                 })}
               </TabsList>
             </Tabs>
+            {CHIP_HINTS[chip] ? (
+              <p className="px-1 pt-1 text-xs text-muted-foreground">{CHIP_HINTS[chip]}</p>
+            ) : null}
           </div>
         ) : null}
 
@@ -1136,11 +1160,15 @@ export function Shell({
       ) : null}
       {undo ? (
         <div className="undo-toast" role="status">
-          <span>Completed {undo.title}</span>
+          <span className="undo-copy">
+            <span className="undo-kicker">Completed</span>
+            <span className="undo-title">{undo.title}</span>
+          </span>
           <Button
             type="button"
             size="sm"
-            variant="ghost"
+            variant="outline"
+            className="shrink-0"
             onClick={() => {
               const pending = undo;
               setUndo(null);

@@ -281,16 +281,30 @@ async function liveEffectsForTask(
   );
 }
 
-/** Apply (or reverse) every live effect on a task on a done-state transition. */
+/**
+ * Apply or reverse every live effect on a done-state transition.
+ * A routine passes its period id so each period moves stock once.
+ */
 export async function applyTaskResourceEffects(
   db: DatabaseWriter,
   ownerId: Id<"users">,
   taskId: Id<"tasks">,
   done: boolean,
   now = Date.now(),
+  periodId?: string,
 ): Promise<void> {
   const effects = await liveEffectsForTask(db, ownerId, taskId);
   for (const effect of effects) {
+    if (periodId) {
+      if (done && effect.appliedPeriod !== periodId) {
+        await changeQuantity(db, ownerId, effect.resourceId, effect.delta, now);
+        await db.patch(effect._id, { applied: true, appliedPeriod: periodId });
+      } else if (!done && effect.appliedPeriod === periodId) {
+        await changeQuantity(db, ownerId, effect.resourceId, -effect.delta, now);
+        await db.patch(effect._id, { applied: false, appliedPeriod: undefined });
+      }
+      continue;
+    }
     if (done && !effect.applied) {
       await changeQuantity(db, ownerId, effect.resourceId, effect.delta, now);
       await db.patch(effect._id, { applied: true });

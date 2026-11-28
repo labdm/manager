@@ -1,11 +1,10 @@
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { findCurrentUser, requireUser } from "./users";
 import * as taskService from "./lib/taskService";
 import * as resourceService from "./lib/resourceService";
 import { reconcileOwner } from "./lib/recurrenceService";
+import { armReminder } from "./push";
 
 const routineArgs = {
   routineKind: v.optional(
@@ -24,17 +23,6 @@ const routineArgs = {
   waitingReason: v.optional(v.string()),
   remindMinutes: v.optional(v.number()),
 };
-
-async function armReminder(
-  ctx: MutationCtx,
-  task: { id: Id<"tasks">; remindAt?: number },
-): Promise<void> {
-  if (task.remindAt === undefined || task.remindAt <= Date.now()) return;
-  await ctx.scheduler.runAt(task.remindAt, internal.push.deliverOne, {
-    taskId: task.id,
-    remindAt: task.remindAt,
-  });
-}
 
 /** Tasks owned by the signed-in user. Signed-out callers get an empty list. */
 export const list = query({

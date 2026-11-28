@@ -13,7 +13,7 @@ import {
   readableGroupIds,
   resolveGroupId,
 } from "./groupService";
-import { listTasks, taskView, type TaskView } from "./taskService";
+import { listTasks, syncRoutineDoneFlags, taskView, type TaskView } from "./taskService";
 import { listResources, type ResourceView } from "./resourceService";
 import { questViews, type QuestView } from "./questService";
 import { ensureHome, ownerViews, viewSummary } from "./viewService";
@@ -190,6 +190,7 @@ export async function boardSlice(
   const homeGroup = await defaultGroupForUser(db, ownerId);
 
   await reconcileOwner(db, ownerId, now);
+  await syncRoutineDoneFlags(db, ownerId, now);
   const home = await ensureHome(db, ownerId, homeGroup._id);
   const allViews = await ownerViews(db, ownerId);
   const views = selectedGroup

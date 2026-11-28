@@ -85,7 +85,7 @@ export function taskToRow(task: BoardTask, locallySeen: ReadonlySet<string>): Fe
     waiting,
     waitingReason: task.waitingReason,
     routineKind: task.routineKind,
-    hint: streak ?? task.resetHint ?? null,
+    hint: streak,
   };
 }
 
