@@ -1,4 +1,10 @@
+export type { BuildInfo } from "./MenuPages";
+export { MenuButton } from "./AppMenu";
+export type { ShellProfile } from "./AppMenu";
 export { DownloadPage } from "./DownloadPage";
+export { ProductRow } from "./Row";
+export { SectionMeter } from "./SectionMeter";
+export { playCompleteSound, prefersReducedMotion, vibrateComplete } from "./feedback";
 export { Shell } from "./Shell";
 export { TasksPage } from "./TasksPage";
 export { formatDueAt } from "./formatDueAt";

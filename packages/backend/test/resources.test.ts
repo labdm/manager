@@ -62,6 +62,44 @@ describe("task resource effects", () => {
     expect(resourceRows(db)[0].quantity).toBe(2);
   });
 
+  it("applies a routine's stock once per period, including a retry and an attach-while-done", async () => {
+    const db = fakeDb();
+    await seedUser(db, OWNER);
+    const writer = db.asWriter();
+    const resource = await createResource(
+      writer,
+      OWNER,
+      { title: "Soap", unit: "bar", quantity: 5 },
+      ANCHOR,
+    );
+    const task = await createTask(writer, OWNER, {
+      title: "Dishes",
+      routineKind: "daily",
+      timezone: TZ,
+    });
+    await setTaskResourceEffect(writer, OWNER, task.id, resource.id, -1, ANCHOR);
+
+    await setTaskDone(writer, OWNER, task.id, true, ANCHOR);
+    await setTaskDone(writer, OWNER, task.id, true, ANCHOR);
+    expect(resourceRows(db)[0].quantity).toBe(4);
+
+    const next = ANCHOR + 86_400_000;
+    await setTaskDone(writer, OWNER, task.id, true, next);
+    expect(resourceRows(db)[0].quantity).toBe(3);
+
+    const attached = await createTask(writer, OWNER, {
+      title: "Laundry",
+      routineKind: "daily",
+      timezone: TZ,
+    });
+    await setTaskDone(writer, OWNER, attached.id, true, ANCHOR);
+    await setTaskResourceEffect(writer, OWNER, attached.id, resource.id, -1, ANCHOR);
+    await setTaskDone(writer, OWNER, attached.id, true, ANCHOR);
+    expect(resourceRows(db)[0].quantity).toBe(2);
+    await setTaskDone(writer, OWNER, attached.id, false, ANCHOR);
+    expect(resourceRows(db)[0].quantity).toBe(3);
+  });
+
   it("low stock raises one unread resource alert and no task", async () => {
     const db = fakeDb();
     await seedUser(db, OWNER);

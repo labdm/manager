@@ -92,9 +92,41 @@ export function utcFromCivil(
   day: number,
   timezone: string,
 ): number {
-  const guess = Date.UTC(year, month - 1, day);
+  return utcFromZoned(year, month, day, 0, 0, timezone);
+}
+
+/** Epoch ms at a civil date and clock time in `timezone`. */
+export function utcFromZoned(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  timezone: string,
+): number {
+  const guess = Date.UTC(year, month - 1, day, hour, minute, 0);
   const first = guess - offsetAt(guess, timezone);
   return guess - offsetAt(first, timezone);
+}
+
+/** Clock time on the civil day that starts at `dayStart` (local midnight). */
+export function instantOnCivilDay(
+  dayStart: number,
+  minutes: number,
+  timezone: string,
+): number {
+  if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1439) {
+    throw new Error("Invalid remindMinutes");
+  }
+  const parts = partsAt(dayStart, timezone);
+  return utcFromZoned(
+    parts.year,
+    parts.month,
+    parts.day,
+    Math.floor(minutes / 60),
+    minutes % 60,
+    timezone,
+  );
 }
 
 /** Epoch ms at local midnight of the civil day containing `epochMs`. */

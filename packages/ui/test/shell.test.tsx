@@ -108,6 +108,7 @@ describe("signed-in shell", () => {
     const detail = screen.getByLabelText("Detail");
     expect(within(detail).getByText("Water the plants")).toBeTruthy();
 
+    await user.click(screen.getByRole("tab", { name: /^Quests/ }));
     await user.click(screen.getByRole("tab", { name: "Daily" }));
     await waitFor(() => expect(screen.getByText("Select an item.")).toBeTruthy());
     expect(mutation(boardSliceRef)).toHaveBeenCalledWith(
@@ -129,18 +130,26 @@ describe("signed-in shell", () => {
     expect(screen.getByRole("button", { name: "Others" })).toBeTruthy();
   });
 
-  it("renders the account control beside Profile in the menu drawer", async () => {
+  it("shows the profile inline in the menu drawer", async () => {
     const user = userEvent.setup();
-    render(<Shell account={<button type="button">Account</button>} />);
+    const signOut = vi.fn();
+    render(
+      <Shell
+        profile={{ name: "Ada Lovelace", email: "ada@lab.dev" }}
+        onSignOut={signOut}
+        onManageAccount={() => undefined}
+      />,
+    );
 
-    expect(screen.queryByRole("button", { name: "Account" })).toBeNull();
+    expect(screen.queryByText("Ada Lovelace")).toBeNull();
     await user.click(screen.getAllByRole("button", { name: "Menu" })[0]);
     const drawer = await screen.findByRole("dialog", { name: "Menu" });
 
-    const profile = within(drawer).getByRole("button", { name: "Profile" });
-    const account = within(drawer).getByRole("button", { name: "Account" });
-    expect(profile.contains(account)).toBe(false);
-    expect(profile.nextElementSibling?.contains(account)).toBe(true);
+    expect(within(drawer).getByText("Ada Lovelace")).toBeTruthy();
+    expect(within(drawer).getByText("ada@lab.dev")).toBeTruthy();
+    expect(within(drawer).queryByRole("button", { name: "Profile" })).toBeNull();
+    await user.click(within(drawer).getByRole("button", { name: "Sign out" }));
+    expect(signOut).toHaveBeenCalled();
   });
 
   it("opens the same drawer from the phone menu button", async () => {

@@ -1,7 +1,7 @@
 import type { AchievementCounts, AlertItem, BoardSlice, BoardTask, QuestItem, QuestionItem } from "./homeTypes";
 import { ZERO_ACHIEVEMENTS } from "./homeApi";
 import type { Chip, FeedRow, GroupItem, InviteItem, ActivityValue, TaskFormDraft } from "./shellTypes";
-import { formatInstant, formatPlannedDay, isOverdue, isTaskNew, mapDraftToCreatePayload } from "./taskFacts";
+import { formatInstant, formatPlannedDay, isOverdue, isTaskNew, mapDraftToCreatePayload, timeStrToMinutes } from "./taskFacts";
 
 export function resolvedTimezone(): string {
   try {
@@ -56,11 +56,13 @@ function recordIsNew(record: {
 
 export function taskToRow(task: BoardTask, locallySeen: ReadonlySet<string>): FeedRow {
   const isNew = !locallySeen.has(String(task.id)) && isTaskNew(task);
+  const waiting = Boolean(task.waiting);
+  const streak = task.streak && task.streak > 1 ? `${task.streak} in a row` : null;
   return {
     id: `task:${task.id}`,
     type: "task",
     title: task.title,
-    body: task.notes,
+    body: waiting && task.waitingReason ? task.waitingReason : task.notes,
     isNew,
     categoryIcon: task.categoryIcon,
     categoryColor: task.categoryColor,
@@ -68,7 +70,7 @@ export function taskToRow(task: BoardTask, locallySeen: ReadonlySet<string>): Fe
       task.progression?.current != null && task.progression?.target != null
         ? `${task.progression.current} / ${task.progression.target}`
         : null,
-    action: task.done ? null : "Done",
+    action: waiting ? "Unblock" : task.done ? null : "Done",
     groupMark: Boolean((task as { groupId?: string | null }).groupId),
     dueText: dueTextFor(task),
     resourceDelta:
@@ -80,6 +82,10 @@ export function taskToRow(task: BoardTask, locallySeen: ReadonlySet<string>): Fe
     questMark: Boolean(task.questMark),
     taskId: task.id,
     done: task.done,
+    waiting,
+    waitingReason: task.waitingReason,
+    routineKind: task.routineKind,
+    hint: streak,
   };
 }
 
@@ -202,8 +208,25 @@ export function achievementCounts(board: BoardSlice | null): AchievementCounts {
   return counts;
 }
 
-export function taskPayloadFromForm(draft: TaskFormDraft) {
-  return mapDraftToCreatePayload({ title: draft.title, plannedDay: draft.plannedDay });
+export function taskPayloadFromForm(draft: TaskFormDraft, timezone?: string) {
+  const base = mapDraftToCreatePayload({
+    title: draft.title,
+    plannedDay: draft.plannedDay,
+    remindAt: draft.remindAt,
+  });
+  const remindMinutes = timeStrToMinutes(draft.remindTime);
+  return {
+    ...base,
+    timezone,
+    routineKind: draft.routine,
+    ...(draft.routine === "interval"
+      ? { intervalEvery: draft.every, intervalUnit: draft.everyUnit }
+      : {}),
+    ...(draft.waiting
+      ? { waiting: true, waitingReason: draft.waitingReason.trim() }
+      : {}),
+    ...(remindMinutes != null ? { remindMinutes } : {}),
+  };
 }
 
 export function recurrenceArgsFromForm(draft: TaskFormDraft, timezone: string) {

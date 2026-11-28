@@ -75,6 +75,12 @@ const KNOWN_TOOL_ERRORS = [
   "Name is required",
   "Invalid cadence",
   "Invalid anchorOn",
+  "Task is waiting",
+  "Waiting reason is required",
+  "Invalid routine",
+  "Invalid remindMinutes",
+  "No push subscription",
+  "Invalid push subscription",
 ] as const;
 
 function misconfigured(message: string): Response {
@@ -167,6 +173,43 @@ function routingExecutionBody(execution: RoutingExecution) {
   return execution;
 }
 
+const routineShape = {
+  recurrence: z.enum(["none", "daily", "weekly", "monthly", "interval"]).optional(),
+  every: z.number().int().min(1).max(366).optional(),
+  everyUnit: z.enum(["days", "weeks"]).optional(),
+  waiting: z.boolean().optional(),
+  waitingReason: z.string().optional(),
+  remindMinutes: z.number().int().min(0).max(1439).optional(),
+  timezone: z.string().optional(),
+};
+
+function routineBody(args: {
+  recurrence?: "none" | "daily" | "weekly" | "monthly" | "interval";
+  every?: number;
+  everyUnit?: "days" | "weeks";
+  waiting?: boolean;
+  waitingReason?: string;
+  remindMinutes?: number;
+  timezone?: string;
+}) {
+  const interval = args.recurrence === "interval" || args.every !== undefined;
+  return {
+    ...(interval
+      ? {
+          routineKind: "interval" as const,
+          intervalEvery: args.every,
+          intervalUnit: args.everyUnit,
+        }
+      : args.recurrence
+        ? { routineKind: args.recurrence }
+        : {}),
+    ...(args.waiting !== undefined ? { waiting: args.waiting } : {}),
+    ...(args.waitingReason !== undefined ? { waitingReason: args.waitingReason } : {}),
+    ...(args.remindMinutes !== undefined ? { remindMinutes: args.remindMinutes } : {}),
+    ...(args.timezone !== undefined ? { timezone: args.timezone } : {}),
+  };
+}
+
 function convexClient(): ConvexHttpClient {
   return new ConvexHttpClient(convexDeploymentUrl());
 }
@@ -211,14 +254,23 @@ function mcpHandler(resourceUrl: string) {
         {
           title: "List tasks",
           description:
-            "Lists tasks owned by the signed-in user. Does not accept a user id.",
-          inputSchema: z.object({}),
+            "Lists tasks owned by the signed-in user. Does not accept a user id. Pass section to match a board tab: quests, daily, weekly, monthly, or events. Omit section for the full list.",
+          inputSchema: z.object({
+            section: z.enum(["quests", "daily", "weekly", "monthly", "events"]).optional(),
+            timezone: z.string().optional(),
+          }),
         },
-        async (_args, ctx) => {
+        async (args, ctx) => {
           const signed = await signedProof(ctx.http?.authInfo);
           if (signed.kind !== "ok") return toolError(signed.text);
           try {
-            return toolJson(await convexClient().mutation(api.mcpTasks.list, signed.proof));
+            return toolJson(
+              await convexClient().mutation(api.mcpTasks.list, {
+                ...signed.proof,
+                section: args.section,
+                timezone: args.timezone,
+              }),
+            );
           } catch (error) {
             return toolError(knownError(error, "Could not list tasks"));
           }
@@ -230,7 +282,7 @@ function mcpHandler(resourceUrl: string) {
         {
           title: "Create task",
           description:
-            "Creates a task for the signed-in user. A planned day is not a deadline; never copy one into deadlineAt. Do not create a task for a summary: alerts exist for information.",
+            "Creates a task for the signed-in user. recurrence is none (a quest), daily, weekly, monthly, or interval. For interval pass every and everyUnit (days or weeks); every 2 weeks is every=2, everyUnit=weeks. waiting with waitingReason blocks the checkbox. remindAt is an absolute instant; remindMinutes is a time of day for a routine. A planned day is not a deadline. Do not create a task for a summary.",
           inputSchema: z.object({
             title: z.string(),
             notes: z.string().optional(),
@@ -244,6 +296,7 @@ function mcpHandler(resourceUrl: string) {
             priorityRank: z.number().optional(),
             overduePolicy: z.string().optional(),
             presentation: z.enum(["check", "row", "card"]).optional(),
+            ...routineShape,
           }),
         },
         async (args, ctx) => {
@@ -265,6 +318,7 @@ function mcpHandler(resourceUrl: string) {
                 priorityRank: args.priorityRank,
                 overduePolicy: args.overduePolicy,
                 presentation: args.presentation,
+                ...routineBody(args),
               }),
             );
           } catch (error) {
@@ -294,6 +348,7 @@ function mcpHandler(resourceUrl: string) {
             overduePolicy: z.string().optional(),
             presentation: z.enum(["check", "row", "card"]).optional(),
             done: z.boolean().optional(),
+            ...routineShape,
           }),
         },
         async (args, ctx) => {
@@ -317,6 +372,7 @@ function mcpHandler(resourceUrl: string) {
                 overduePolicy: args.overduePolicy,
                 presentation: args.presentation,
                 done: args.done,
+                ...routineBody(args),
               }),
             );
           } catch (error) {
@@ -371,6 +427,64 @@ function mcpHandler(resourceUrl: string) {
             );
           } catch (error) {
             return toolError(knownError(error, "Could not reopen task"));
+          }
+        },
+      );
+
+      server.registerTool(
+        "set_task_waiting",
+        {
+          title: "Set task waiting",
+          description:
+            "Blocks a task until it is unblocked. The reason is shown in the UI. A waiting task cannot be completed.",
+          inputSchema: z.object({
+            id: z.string(),
+            reason: z.string(),
+          }),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpTasks.setWaiting, {
+                ...signed.proof,
+                id: args.id as Id<"tasks">,
+                waiting: true,
+                reason: args.reason,
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not mark the task waiting"));
+          }
+        },
+      );
+
+      server.registerTool(
+        "unblock_task",
+        {
+          title: "Unblock task",
+          description:
+            "Clears the waiting state so the task can be checked. An optional note is appended to the task notes.",
+          inputSchema: z.object({
+            id: z.string(),
+            note: z.string().optional(),
+          }),
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpTasks.setWaiting, {
+                ...signed.proof,
+                id: args.id as Id<"tasks">,
+                waiting: false,
+                reason: args.note,
+              }),
+            );
+          } catch (error) {
+            return toolError(knownError(error, "Could not unblock the task"));
           }
         },
       );

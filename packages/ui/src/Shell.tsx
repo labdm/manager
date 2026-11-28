@@ -2,14 +2,15 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import { useConvex, useMutation } from "convex/react";
 import {
   ArrowLeft,
-  Menu as MenuIcon,
   Plus,
   ListChecks,
   MessageCircle,
@@ -40,7 +41,6 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "./components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs";
 import {
@@ -54,7 +54,12 @@ import {
   RoutingForm,
   TaskForm,
 } from "./Forms";
-import { MenuPageView } from "./MenuPages";
+import { MenuButton, type ShellProfile } from "./AppMenu";
+import { chipAfterSwipe } from "./chipSwipe";
+import { playCompleteSound, prefersReducedMotion, vibrateComplete } from "./feedback";
+import { meterSegments, sectionComplete } from "./meter";
+import { MenuPageView, type BuildInfo } from "./MenuPages";
+import { SectionMeter } from "./SectionMeter";
 import { ProductRow } from "./Row";
 import {
   acceptInviteRef,
@@ -67,7 +72,6 @@ import {
   createInviteRef,
   createProgressionRef,
   createQuestRef,
-  createRecurrenceRef,
   createResourceRef,
   createRoutingRef,
   createTaskRef,
@@ -75,6 +79,7 @@ import {
   ensureUserRef,
   listAlertsRef,
   listCategoriesRef,
+  listEventsRef,
   listGroupsRef,
   listInvitesRef,
   listResourcesRef,
@@ -84,6 +89,7 @@ import {
   readAlertRef,
   removeTaskRef,
   setActivityRef,
+  setWaitingRef,
   toggleTaskRef,
 } from "./homeApi";
 import type { BoardSlice } from "./homeTypes";
@@ -96,7 +102,6 @@ import {
   progressionToRow,
   questToRow,
   questionToRow,
-  recurrenceArgsFromForm,
   resolvedTimezone,
   taskPayloadFromForm,
   taskToRow,
@@ -104,9 +109,9 @@ import {
   inviteToRow,
 } from "./shellFacts";
 import {
+  CHIP_HINTS,
   CHIPS,
   DESTINATIONS,
-  MENU_ITEMS,
   type ActivityValue,
   type AlertRecord,
   type CategoryRecord,
@@ -162,66 +167,6 @@ const DESTINATION_ICONS: Record<Destination, typeof ListChecks> = {
   categories: Shapes,
   resources: Package,
 };
-
-function MenuButton({
-  account,
-  onSelect,
-  className,
-  bottom = false,
-}: {
-  account?: ReactNode;
-  onSelect: (page: MenuPage) => void;
-  className?: string;
-  bottom?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <Button
-          type="button"
-          variant={bottom ? "ghost" : "outline"}
-          size={bottom ? "default" : "icon"}
-          className={cn("justify-start", className)}
-          aria-label="Menu"
-        >
-          <MenuIcon aria-hidden="true" />
-          {bottom ? <span>Menu</span> : null}
-        </Button>
-      </SheetTrigger>
-      <SheetContent
-        side="left"
-        aria-label="Menu"
-        className="w-[min(20rem,85vw)] gap-4 p-4 sm:max-w-xs"
-      >
-        <SheetHeader>
-          <SheetTitle>Menu</SheetTitle>
-        </SheetHeader>
-        <nav className="flex flex-col gap-1" aria-label="Menu pages">
-          {MENU_ITEMS.map((item) => (
-            <div key={item.id} className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                className="min-w-0 flex-1 justify-start"
-                onClick={() => {
-                  onSelect(item.id);
-                  setOpen(false);
-                }}
-              >
-                {item.label}
-              </Button>
-              {item.id === "profile" && account ? (
-                <div className="flex shrink-0 items-center">{account}</div>
-              ) : null}
-            </div>
-          ))}
-        </nav>
-      </SheetContent>
-    </Sheet>
-  );
-}
 
 function Confirmation({
   title,
@@ -366,17 +311,29 @@ function RowDetail({
  * The signed-in shell shared by the web app and the desktop client.
  * Writes go through makeFunctionReference refs in homeApi.
  */
-export function Shell({ account }: { account?: ReactNode } = {}) {
+export function Shell({
+  profile,
+  onSignOut,
+  onManageAccount,
+  buildInfo,
+  vapidPublicKey,
+}: {
+  profile?: ShellProfile;
+  onSignOut?: () => void;
+  onManageAccount?: () => void;
+  buildInfo?: BuildInfo;
+  vapidPublicKey?: string;
+} = {}) {
   const convex = useConvex();
   const ensureUser = useMutation(ensureUserRef);
   const sliceBoard = useMutation(boardSliceRef);
   const markSeen = useMutation(markSeenRef);
   const readAlert = useMutation(readAlertRef);
   const toggleTask = useMutation(toggleTaskRef);
+  const setWaiting = useMutation(setWaitingRef);
   const acceptInvite = useMutation(acceptInviteRef);
   const declineInviteMutation = useMutation(declineInviteRef);
   const createTask = useMutation(createTaskRef);
-  const createRecurrence = useMutation(createRecurrenceRef);
   const createAlert = useMutation(createAlertRef);
   const createGroup = useMutation(createGroupRef);
   const createInvite = useMutation(createInviteRef);
@@ -410,6 +367,14 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
   const [menuPage, setMenuPage] = useState<MenuPage | null>(null);
   const [locallySeen, setLocallySeen] = useState<ReadonlySet<string>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState<FeedRow | null>(null);
+  const [events, setEvents] = useState<Array<{ id: string; title: string; kind?: string }>>([]);
+  const [justDone, setJustDone] = useState<ReadonlySet<string>>(new Set());
+  const [sectionClear, setSectionClear] = useState(false);
+  const [burst, setBurst] = useState<{ id: string; xp: number } | null>(null);
+  const [undo, setUndo] = useState<{ id: string; title: string } | null>(null);
+  const [slide, setSlide] = useState<"left" | "right" | "none">("none");
+  const swipe = useRef<{ x: number; y: number } | null>(null);
+  const openedFromUrl = useRef(false);
   const visibleViewportHeight = useVisibleViewportHeight();
 
   const loadBoard = useCallback(async () => {
@@ -420,6 +385,7 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
         ...(groupId ? { groupId } : {}),
       });
       setBoard(result ?? emptyBoard());
+      setJustDone(new Set());
     } catch (caught) {
       // Events is a later milestone. A rejected slice is an empty list, not an error.
       if (chip === "events") {
@@ -451,6 +417,23 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
       // A function from a later milestone may not be deployed. The screens
       // stay usable and the failure surfaces when the user writes to one.
     }
+    try {
+      const eventsResult = await convex.query(listEventsRef, {});
+      if (Array.isArray(eventsResult)) {
+        setEvents(
+          eventsResult.map((row) => {
+            const event = row as { id?: string; _id?: string; title?: string; kind?: string };
+            return {
+              id: String(event.id ?? event._id ?? event.title ?? ""),
+              title: event.title ?? "Event",
+              kind: event.kind,
+            };
+          }),
+        );
+      }
+    } catch {
+      // events:list may not be deployed yet.
+    }
   }, [convex]);
 
   useEffect(() => {
@@ -477,6 +460,16 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
     void loadQueries();
   }, [ready, loadQueries]);
 
+  useEffect(() => {
+    if (openedFromUrl.current || !board) return;
+    const taskId = new URLSearchParams(window.location.search).get("task");
+    if (!taskId) return;
+    const task = board.tasks.find((item) => String(item.id) === taskId);
+    if (!task) return;
+    openedFromUrl.current = true;
+    openRow(taskToRow(task, locallySeen));
+  }, [board, locallySeen]);
+
   const messageAlerts = useMemo(() => {
     const byId = new Map<string, AlertRecord>();
     for (const alert of board?.alerts ?? []) byId.set(alert.id, alert);
@@ -497,8 +490,15 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
       ...(board?.progressions ?? []).map(progressionToRow),
       ...(board?.quests ?? []).map(questToRow),
     ];
-    return mixed.filter((row) => activityVisible(row, activity));
-  }, [activity, board, destination, groups, invites, locallySeen, messageAlerts]);
+    return mixed.filter((row) => {
+      if (!activityVisible(row, activity)) return false;
+      // Quests are one-shot. A daily, weekly, monthly, or interval task stays on its own tab.
+      if (chip === "all" && row.type === "task" && row.routineKind && row.routineKind !== "none") {
+        return false;
+      }
+      return true;
+    });
+  }, [activity, board, chip, destination, groups, invites, locallySeen, messageAlerts]);
 
   const selectedGroup = groups.find((group) => group.id === groupId);
 
@@ -514,9 +514,28 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
     resetPanes();
   }
 
-  function chooseChip(next: Chip) {
+  function chooseChip(next: Chip, direction?: "left" | "right") {
+    setSlide(direction ?? "none");
     setChip(next);
+    setJustDone(new Set());
+    setSectionClear(false);
+    setBurst(null);
     resetPanes();
+  }
+
+  function onListPointerDown(event: ReactPointerEvent) {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("button, a, input, textarea, select")) return;
+    swipe.current = { x: event.clientX, y: event.clientY };
+  }
+
+  function onListPointerUp(event: ReactPointerEvent) {
+    if (!swipe.current || destination !== "tasks") return;
+    const dx = event.clientX - swipe.current.x;
+    const dy = event.clientY - swipe.current.y;
+    swipe.current = null;
+    const next = chipAfterSwipe(chip, dx, dy);
+    if (next) chooseChip(next, dx < 0 ? "left" : "right");
   }
 
   function openMenuPage(page: MenuPage) {
@@ -597,7 +616,38 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
         return;
       }
       if (row.type === "task" && row.taskId) {
+        const shownDone = Boolean(row.done) || justDone.has(row.id);
+        if (row.waiting && !shownDone) {
+          await setWaiting({ id: String(row.taskId), waiting: false });
+          await loadBoard();
+          return;
+        }
+        const completing = !shownDone;
+        if (!completing) {
+          setJustDone((previous) => {
+            const next = new Set(previous);
+            next.delete(row.id);
+            return next;
+          });
+          setUndo(null);
+          setSectionClear(false);
+        }
+        const tasksOnly = rows.filter((item) => item.type === "task");
+        const remaining = tasksOnly.filter((item) => item.id !== row.id && !item.done && !item.waiting);
+        const waitingLeft = tasksOnly.filter((item) => item.id !== row.id && item.waiting && !item.done);
+        const clears = completing && remaining.length === 0 && waitingLeft.length === 0 && tasksOnly.length > 0;
         await toggleTask({ id: String(row.taskId) });
+        if (completing) {
+          setJustDone((previous) => new Set(previous).add(row.id));
+          setSectionClear(clears);
+          setBurst({ id: row.id, xp: clears ? 25 : 10 });
+          setUndo({ id: String(row.taskId), title: row.title });
+          if (!prefersReducedMotion()) {
+            playCompleteSound();
+            vibrateComplete(clears);
+          }
+          window.setTimeout(() => setBurst(null), 900);
+        }
         await loadBoard();
       } else if (row.type === "message" && row.alertId) {
         await readAlert({ id: row.alertId });
@@ -627,11 +677,7 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
 
   async function submitTask(draft: TaskFormDraft) {
     try {
-      if (draft.series === "none") {
-        await createTask(taskPayloadFromForm(draft));
-      } else {
-        await createRecurrence(recurrenceArgsFromForm(draft, TIMEZONE));
-      }
+      await createTask(taskPayloadFromForm(draft, TIMEZONE));
       setForm(null);
       await loadBoard();
     } catch (caught) {
@@ -877,26 +923,25 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
           </Button>
         ) : null}
         {destination === "tasks" ? (
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => openForm("quest")}>
-              Create quest
-            </Button>
-            <Button type="button" variant="outline" onClick={() => openForm("progression")}>
-              Create progression
-            </Button>
-          </div>
+          <SectionMeter
+            rows={rows.map((row) => (justDone.has(row.id) ? { ...row, done: true, waiting: false } : row))}
+            celebrate={sectionClear || sectionComplete(meterSegments(rows.map((row) => (justDone.has(row.id) ? { ...row, done: true } : row))))}
+          />
         ) : null}
         {rows.length ? (
           <ul className="flex flex-col gap-2">
             {rows.map((row) => (
               <ProductRow
                 key={row.id}
-                row={row}
-                selected={selected?.id === row.id}
-                onOpen={() => openRow(row)}
-                onAction={() => void rowAction(row)}
-                onSecondary={row.type === "invite" ? () => void declineInvite(row) : undefined}
-              />
+                  row={justDone.has(row.id) ? { ...row, done: true, action: null } : row}
+                  selected={selected?.id === row.id}
+                  celebrating={burst?.id === row.id}
+                  onOpen={() => openRow(row)}
+                  onAction={() =>
+                    void rowAction(justDone.has(row.id) ? { ...row, done: true } : row)
+                  }
+                  onSecondary={row.type === "invite" ? () => void declineInvite(row) : undefined}
+                />
             ))}
           </ul>
         ) : (
@@ -913,7 +958,7 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
 
   return (
     <div className="shell-frame bg-background text-foreground" style={shellStyle}>
-      <aside className="sidebar hidden lg:flex" aria-label="Primary navigation">
+      <aside className="sidebar hidden lg:flex lg:flex-col" aria-label="Primary navigation">
         <nav className="flex flex-col gap-1 px-2 pt-3" aria-label="Destinations">
           {DESTINATIONS.map((item) => {
             const Icon = DESTINATION_ICONS[item.id];
@@ -932,14 +977,27 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
             );
           })}
         </nav>
-        <div className="mt-auto border-t p-2">
-          <MenuButton account={account} onSelect={openMenuPage} bottom />
+        <div className="mt-auto flex justify-center border-t p-3">
+          <MenuButton
+            onSelect={openMenuPage}
+            onDestination={chooseDestination}
+            profile={profile}
+            onSignOut={onSignOut}
+            onManageAccount={onManageAccount}
+          />
         </div>
       </aside>
 
       <div className="shell-main flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
-          <MenuButton account={account} onSelect={openMenuPage} className="lg:hidden" />
+          <MenuButton
+            onSelect={openMenuPage}
+            onDestination={chooseDestination}
+            profile={profile}
+            onSignOut={onSignOut}
+            onManageAccount={onManageAccount}
+            className="lg:hidden"
+          />
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -985,7 +1043,7 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
                 {CHIPS.map((item) => {
                   const count = chipBadge(board, item.id, rows);
                   return (
-                    <TabsTrigger key={item.id} value={item.id}>
+                    <TabsTrigger key={item.id} value={item.id} title={CHIP_HINTS[item.id]}>
                       {item.label}
                       {count > 0 ? <Badge variant="secondary">{count}</Badge> : null}
                     </TabsTrigger>
@@ -993,6 +1051,9 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
                 })}
               </TabsList>
             </Tabs>
+            {CHIP_HINTS[chip] ? (
+              <p className="px-1 pt-1 text-xs text-muted-foreground">{CHIP_HINTS[chip]}</p>
+            ) : null}
           </div>
         ) : null}
 
@@ -1002,8 +1063,17 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
               className="list-pane min-h-0 border-r bg-background"
               role="region"
               aria-label={DESTINATIONS.find((item) => item.id === destination)?.label}
+              onPointerDown={onListPointerDown}
+              onPointerUp={onListPointerUp}
+              onPointerCancel={() => {
+                swipe.current = null;
+              }}
             >
-              <div className="pb-4">
+              <div
+                key={destination === "tasks" ? `${chip}-${slide}` : destination}
+                className={cn("pb-4", slide === "left" && "board-slide-left", slide === "right" && "board-slide-right")}
+                style={{ touchAction: "pan-y" }}
+              >
                 {!ready ? <p className="px-4 text-sm text-muted-foreground">Loading…</p> : null}
                 {renderList()}
               </div>
@@ -1021,9 +1091,17 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
                   board={board}
                   activity={activity}
                   routings={routings}
+                  events={events}
+                  resources={resources}
+                  categories={categories}
+                  contacts={invites}
+                  groups={groups}
                   error={error}
+                  buildInfo={buildInfo}
+                  vapidPublicKey={vapidPublicKey}
                   onActivityChange={(value) => void changeActivity(value)}
                   onCreateRouting={(name, cadence, title) => submitRouting(name, cadence, title)}
+                  onCreate={(kind) => openForm(kind)}
                   onBack={resetPanes}
                 />
               ) : form ? (
@@ -1074,6 +1152,39 @@ export function Shell({ account }: { account?: ReactNode } = {}) {
           })}
         </nav>
       </div>
+
+      {burst ? (
+        <div className="xp-float" aria-hidden="true">
+          +{burst.xp} XP
+        </div>
+      ) : null}
+      {undo ? (
+        <div className="undo-toast" role="status">
+          <span className="undo-copy">
+            <span className="undo-kicker">Completed</span>
+            <span className="undo-title">{undo.title}</span>
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="shrink-0"
+            onClick={() => {
+              const pending = undo;
+              setUndo(null);
+              setJustDone((previous) => {
+                const next = new Set(previous);
+                next.delete(`task:${pending.id}`);
+                return next;
+              });
+              setSectionClear(false);
+              void toggleTask({ id: pending.id }).then(() => loadBoard());
+            }}
+          >
+            Undo
+          </Button>
+        </div>
+      ) : null}
 
       {confirmDelete ? (
         <Confirmation

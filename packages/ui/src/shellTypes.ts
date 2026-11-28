@@ -10,40 +10,32 @@ export const DESTINATIONS: ReadonlyArray<{ id: Destination; label: string; icon:
   { id: "resources", label: "Resources", icon: "package" },
 ];
 
-export type MenuPage =
-  | "achievements"
-  | "contacts"
-  | "events"
-  | "routings"
-  | "profile"
-  | "settings"
-  | "docs"
-  | "contact-us"
-  | "desktop-app"
-  | "changelog";
+export type MenuPage = "achievements" | "manage" | "settings" | "about" | "changelog";
 
 export const MENU_ITEMS: ReadonlyArray<{ id: MenuPage; label: string }> = [
   { id: "achievements", label: "Achievements" },
-  { id: "contacts", label: "Contacts" },
-  { id: "events", label: "Events" },
-  { id: "routings", label: "Routings" },
-  { id: "profile", label: "Profile" },
+  { id: "manage", label: "Manage" },
   { id: "settings", label: "Settings" },
-  { id: "docs", label: "Docs" },
-  { id: "contact-us", label: "Contact us" },
-  { id: "desktop-app", label: "Desktop app" },
+  { id: "about", label: "About" },
   { id: "changelog", label: "Changelog" },
 ];
 
 export type Chip = "all" | "daily" | "weekly" | "monthly" | "events";
 
 export const CHIPS: ReadonlyArray<{ id: Chip; label: string }> = [
-  { id: "all", label: "All" },
+  { id: "all", label: "Quests" },
   { id: "daily", label: "Daily" },
   { id: "weekly", label: "Weekly" },
   { id: "monthly", label: "Monthly" },
   { id: "events", label: "Events" },
 ];
+
+/** Shown on the tab, never on the task. */
+export const CHIP_HINTS: Partial<Record<Chip, string>> = {
+  daily: "Resets at midnight",
+  weekly: "Resets Monday",
+  monthly: "Resets on the 1st",
+};
 
 export type ActivityValue = "others" | "all" | "none";
 
@@ -80,6 +72,10 @@ export interface FeedRow {
   steps?: ReadonlyArray<{ id: string; title: string; done: boolean }>;
   done?: boolean;
   origin?: string | null;
+  waiting?: boolean;
+  waitingReason?: string | null;
+  routineKind?: string | null;
+  hint?: string | null;
 }
 
 export interface GroupItem {
@@ -152,4 +148,11 @@ export interface TaskFormDraft {
   plannedDay: string;
   series: "none" | "replace" | "stack";
   cadence: "daily" | "weekly" | "monthly" | "every 14 days";
+  routine: "none" | "daily" | "weekly" | "monthly" | "interval";
+  every: number;
+  everyUnit: "days" | "weeks";
+  waiting: boolean;
+  waitingReason: string;
+  remindAt: string;
+  remindTime: string;
 }

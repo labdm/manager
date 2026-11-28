@@ -38,6 +38,8 @@ import type * as mcpBoard from "../mcpBoard.js";
 import type * as mcpTasks from "../mcpTasks.js";
 import type * as overrides from "../overrides.js";
 import type * as pins from "../pins.js";
+import type * as push from "../push.js";
+import type * as pushNode from "../pushNode.js";
 import type * as progressions from "../progressions.js";
 import type * as questions from "../questions.js";
 import type * as quests from "../quests.js";
@@ -85,6 +87,8 @@ declare const fullApi: ApiFromModules<{
   mcpTasks: typeof mcpTasks;
   overrides: typeof overrides;
   pins: typeof pins;
+  push: typeof push;
+  pushNode: typeof pushNode;
   progressions: typeof progressions;
   questions: typeof questions;
   quests: typeof quests;

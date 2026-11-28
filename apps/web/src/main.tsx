@@ -5,6 +5,7 @@ import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { webConfigError } from "./config";
+import { PreviewPage } from "./preview";
 import { router } from "./router";
 
 const convexUrl = import.meta.env.VITE_CONVEX_URL;
@@ -13,7 +14,9 @@ const configError = webConfigError({ convexUrl, clerkPublishableKey });
 const root = document.getElementById("root");
 if (!root) throw new Error("Root element missing");
 
-if (configError || !convexUrl || !clerkPublishableKey) {
+if (import.meta.env.DEV && window.location.pathname === "/preview") {
+  createRoot(root).render(<PreviewPage />);
+} else if (configError || !convexUrl || !clerkPublishableKey) {
   createRoot(root).render(
     <main className="shell">
       <h1>Manager</h1>

@@ -13,4 +13,8 @@ crons.interval(
 // Routings share the same tick. Each cron routing is idempotent per period.
 crons.interval("run due routings", { minutes: 5 }, internal.routings.runDue);
 
+// Reminders are also scheduled at their instant. This pass catches anything
+// the scheduler missed and is idempotent per remindAt.
+crons.interval("deliver due reminders", { minutes: 5 }, internal.push.deliverDue);
+
 export default crons;

@@ -59,6 +59,13 @@ export function TaskForm({
     plannedDay: "",
     series: "none",
     cadence: "daily",
+    routine: "none",
+    every: 2,
+    everyUnit: "weeks",
+    waiting: false,
+    waitingReason: "",
+    remindAt: "",
+    remindTime: "",
   });
   const [pending, setPending] = useState(false);
 
@@ -90,39 +97,80 @@ export function TaskForm({
             onChange={(event) => setDraft({ ...draft, plannedDay: event.target.value })}
           />
         </Field>
-        <fieldset className="flex flex-col gap-2">
-          <legend className="text-sm font-medium">Series</legend>
-          {(["none", "replace", "stack"] as const).map((value) => (
-            <label key={value} className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="series"
-                value={value}
-                checked={draft.series === value}
-                onChange={() => setDraft({ ...draft, series: value })}
-              />
-              {value === "none"
-                ? "None — one task"
-                : value === "replace"
-                  ? "Replace — one open occurrence"
-                  : "Stack — one open occurrence per period"}
-            </label>
-          ))}
-        </fieldset>
-        <Field label="Cadence">
+        <Field label="Recurrence">
           <select
             className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-            value={draft.cadence}
+            value={draft.routine}
             onChange={(event) =>
-              setDraft({ ...draft, cadence: event.target.value as TaskFormDraft["cadence"] })
+              setDraft({ ...draft, routine: event.target.value as TaskFormDraft["routine"] })
             }
           >
+            <option value="none">Quest — does not repeat</option>
             <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
             <option value="monthly">Monthly</option>
-            <option value="every 14 days">Every 14 days</option>
+            <option value="interval">Every N days or weeks</option>
           </select>
         </Field>
+        {draft.routine === "interval" ? (
+          <div className="flex gap-2">
+            <Field label="Every">
+              <Input
+                type="number"
+                min={1}
+                max={366}
+                value={draft.every}
+                onChange={(event) => setDraft({ ...draft, every: Number(event.target.value) })}
+              />
+            </Field>
+            <Field label="Unit">
+              <select
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={draft.everyUnit}
+                onChange={(event) =>
+                  setDraft({ ...draft, everyUnit: event.target.value as TaskFormDraft["everyUnit"] })
+                }
+              >
+                <option value="days">days</option>
+                <option value="weeks">weeks</option>
+              </select>
+            </Field>
+          </div>
+        ) : null}
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={draft.waiting}
+            onChange={(event) => setDraft({ ...draft, waiting: event.target.checked })}
+          />
+          Waiting until unblocked
+        </label>
+        {draft.waiting ? (
+          <Field label="Waiting reason">
+            <Input
+              value={draft.waitingReason}
+              onChange={(event) => setDraft({ ...draft, waitingReason: event.target.value })}
+              placeholder="Waiting for the accountant"
+            />
+          </Field>
+        ) : null}
+        {draft.routine === "none" ? (
+          <Field label="Remind at">
+            <Input
+              type="datetime-local"
+              value={draft.remindAt}
+              onChange={(event) => setDraft({ ...draft, remindAt: event.target.value })}
+            />
+          </Field>
+        ) : (
+          <Field label="Remind at">
+            <Input
+              type="time"
+              value={draft.remindTime}
+              onChange={(event) => setDraft({ ...draft, remindTime: event.target.value })}
+            />
+          </Field>
+        )}
         <Button type="submit" disabled={pending}>
           Create task
         </Button>

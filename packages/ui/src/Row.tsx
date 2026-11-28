@@ -1,4 +1,17 @@
-import { CircleHelp, Flag, ListChecks, Mail, MessageCircle, Users, ChartNoAxesColumn } from "lucide-react";
+import {
+  CalendarDays,
+  CalendarRange,
+  CircleHelp,
+  Flag,
+  ListChecks,
+  Mail,
+  MessageCircle,
+  Repeat,
+  Sun,
+  Swords,
+  Users,
+  ChartNoAxesColumn,
+} from "lucide-react";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { resolveLucideIcon } from "./iconCatalog";
@@ -15,17 +28,30 @@ const TYPE_ICONS: Record<RowType, typeof ListChecks> = {
   quest: Flag,
 };
 
+const ROUTINE_ICONS = {
+  none: Swords,
+  daily: Sun,
+  weekly: CalendarDays,
+  monthly: CalendarRange,
+  interval: Repeat,
+} as const;
+
 export interface ProductRowProps {
   row: FeedRow;
   selected: boolean;
   onOpen: () => void;
   onAction: () => void;
   onSecondary?: () => void;
+  celebrating?: boolean;
 }
 
 /** The only board row. A stored `card` hint is ignored. */
-export function ProductRow({ row, selected, onOpen, onAction, onSecondary }: ProductRowProps) {
+export function ProductRow({ row, selected, onOpen, onAction, onSecondary, celebrating }: ProductRowProps) {
   const TypeIcon = TYPE_ICONS[row.type];
+  const RoutineIcon =
+    row.type === "task"
+      ? ROUTINE_ICONS[(row.routineKind as keyof typeof ROUTINE_ICONS) ?? "none"] ?? Swords
+      : null;
   const CategoryIcon = row.categoryIcon ? resolveLucideIcon(row.categoryIcon) : null;
 
   return (
@@ -43,10 +69,25 @@ export function ProductRow({ row, selected, onOpen, onAction, onSecondary }: Pro
           }
         }}
         className={cn(
-          "flex w-full items-start gap-2 rounded-md border border-border bg-card p-3 text-left shadow-sm transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          selected && "border-primary bg-accent/50"
+          "relative flex w-full items-start gap-2 rounded-xl border border-border bg-card p-3 text-left shadow-sm transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          selected && "border-primary bg-accent/50",
+          row.waiting && "bg-muted/70 text-muted-foreground",
+          celebrating && !row.waiting && "task-complete",
         )}
       >
+        {row.type === "task" ? (
+          <button
+            type="button"
+            aria-label={row.waiting ? `Waiting ${row.title}` : row.done ? `Completed ${row.title}` : `Complete ${row.title}`}
+            aria-pressed={Boolean(row.done)}
+            disabled={row.waiting}
+            className={cn("task-check mt-0.5", row.done && "task-check-done", celebrating && "task-check-pop")}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (!row.waiting) onAction();
+            }}
+          />
+        ) : null}
         {row.isNew ? <Badge aria-label="New">NEW</Badge> : null}
         {CategoryIcon ? (
           <span
@@ -59,8 +100,8 @@ export function ProductRow({ row, selected, onOpen, onAction, onSecondary }: Pro
           </span>
         ) : null}
         <span className="flex size-6 shrink-0 items-center justify-center text-muted-foreground">
-          <TypeIcon className="size-4" aria-hidden="true" />
-          <span className="sr-only">{row.type}</span>
+          {RoutineIcon ? <RoutineIcon className="size-4" aria-hidden="true" /> : <TypeIcon className="size-4" aria-hidden="true" />}
+          <span className="sr-only">{row.routineKind ?? row.type}</span>
         </span>
         {row.progress ? (
           <span className="shrink-0 self-center text-xs font-medium tabular-nums text-muted-foreground">
@@ -76,6 +117,7 @@ export function ProductRow({ row, selected, onOpen, onAction, onSecondary }: Pro
           {row.body ? (
             <span className="mt-0.5 block truncate text-xs text-muted-foreground">{row.body}</span>
           ) : null}
+          {row.hint ? <span className="mt-0.5 block truncate text-xs text-muted-foreground">{row.hint}</span> : null}
         </span>
 
         <span className="flex shrink-0 flex-col items-end gap-1">

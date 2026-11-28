@@ -53416,7 +53416,13 @@ var KNOWN_TOOL_ERRORS = [
   "Invite already answered",
   "Name is required",
   "Invalid cadence",
-  "Invalid anchorOn"
+  "Invalid anchorOn",
+  "Task is waiting",
+  "Waiting reason is required",
+  "Invalid routine",
+  "Invalid remindMinutes",
+  "No push subscription",
+  "Invalid push subscription"
 ];
 function misconfigured(message) {
   return Response.json({ error: message }, { status: 503, headers: NO_STORE });
@@ -53499,6 +53505,29 @@ function routingExecutionBody(execution) {
   }
   return execution;
 }
+var routineShape = {
+  recurrence: external_exports.enum(["none", "daily", "weekly", "monthly", "interval"]).optional(),
+  every: external_exports.number().int().min(1).max(366).optional(),
+  everyUnit: external_exports.enum(["days", "weeks"]).optional(),
+  waiting: external_exports.boolean().optional(),
+  waitingReason: external_exports.string().optional(),
+  remindMinutes: external_exports.number().int().min(0).max(1439).optional(),
+  timezone: external_exports.string().optional()
+};
+function routineBody(args) {
+  const interval = args.recurrence === "interval" || args.every !== void 0;
+  return {
+    ...interval ? {
+      routineKind: "interval",
+      intervalEvery: args.every,
+      intervalUnit: args.everyUnit
+    } : args.recurrence ? { routineKind: args.recurrence } : {},
+    ...args.waiting !== void 0 ? { waiting: args.waiting } : {},
+    ...args.waitingReason !== void 0 ? { waitingReason: args.waitingReason } : {},
+    ...args.remindMinutes !== void 0 ? { remindMinutes: args.remindMinutes } : {},
+    ...args.timezone !== void 0 ? { timezone: args.timezone } : {}
+  };
+}
 function convexClient() {
   return new ConvexHttpClient(convexDeploymentUrl());
 }
@@ -53538,14 +53567,23 @@ function mcpHandler(resourceUrl) {
         "list_tasks",
         {
           title: "List tasks",
-          description: "Lists tasks owned by the signed-in user. Does not accept a user id.",
-          inputSchema: external_exports.object({})
+          description: "Lists tasks owned by the signed-in user. Does not accept a user id. Pass section to match a board tab: quests, daily, weekly, monthly, or events. Omit section for the full list.",
+          inputSchema: external_exports.object({
+            section: external_exports.enum(["quests", "daily", "weekly", "monthly", "events"]).optional(),
+            timezone: external_exports.string().optional()
+          })
         },
-        async (_args, ctx) => {
+        async (args, ctx) => {
           const signed = await signedProof(ctx.http?.authInfo);
           if (signed.kind !== "ok") return toolError(signed.text);
           try {
-            return toolJson(await convexClient().mutation(api.mcpTasks.list, signed.proof));
+            return toolJson(
+              await convexClient().mutation(api.mcpTasks.list, {
+                ...signed.proof,
+                section: args.section,
+                timezone: args.timezone
+              })
+            );
           } catch (error62) {
             return toolError(knownError(error62, "Could not list tasks"));
           }
@@ -53555,7 +53593,7 @@ function mcpHandler(resourceUrl) {
         "create_task",
         {
           title: "Create task",
-          description: "Creates a task for the signed-in user. A planned day is not a deadline; never copy one into deadlineAt. Do not create a task for a summary: alerts exist for information.",
+          description: "Creates a task for the signed-in user. recurrence is none (a quest), daily, weekly, monthly, or interval. For interval pass every and everyUnit (days or weeks); every 2 weeks is every=2, everyUnit=weeks. waiting with waitingReason blocks the checkbox. remindAt is an absolute instant; remindMinutes is a time of day for a routine. A planned day is not a deadline. Do not create a task for a summary.",
           inputSchema: external_exports.object({
             title: external_exports.string(),
             notes: external_exports.string().optional(),
@@ -53568,7 +53606,8 @@ function mcpHandler(resourceUrl) {
             priority: external_exports.string().optional(),
             priorityRank: external_exports.number().optional(),
             overduePolicy: external_exports.string().optional(),
-            presentation: external_exports.enum(["check", "row", "card"]).optional()
+            presentation: external_exports.enum(["check", "row", "card"]).optional(),
+            ...routineShape
           })
         },
         async (args, ctx) => {
@@ -53589,7 +53628,8 @@ function mcpHandler(resourceUrl) {
                 priority: args.priority,
                 priorityRank: args.priorityRank,
                 overduePolicy: args.overduePolicy,
-                presentation: args.presentation
+                presentation: args.presentation,
+                ...routineBody(args)
               })
             );
           } catch (error62) {
@@ -53616,7 +53656,8 @@ function mcpHandler(resourceUrl) {
             priorityRank: external_exports.number().optional(),
             overduePolicy: external_exports.string().optional(),
             presentation: external_exports.enum(["check", "row", "card"]).optional(),
-            done: external_exports.boolean().optional()
+            done: external_exports.boolean().optional(),
+            ...routineShape
           })
         },
         async (args, ctx) => {
@@ -53639,7 +53680,8 @@ function mcpHandler(resourceUrl) {
                 priorityRank: args.priorityRank,
                 overduePolicy: args.overduePolicy,
                 presentation: args.presentation,
-                done: args.done
+                done: args.done,
+                ...routineBody(args)
               })
             );
           } catch (error62) {
@@ -53692,6 +53734,60 @@ function mcpHandler(resourceUrl) {
             );
           } catch (error62) {
             return toolError(knownError(error62, "Could not reopen task"));
+          }
+        }
+      );
+      server.registerTool(
+        "set_task_waiting",
+        {
+          title: "Set task waiting",
+          description: "Blocks a task until it is unblocked. The reason is shown in the UI. A waiting task cannot be completed.",
+          inputSchema: external_exports.object({
+            id: external_exports.string(),
+            reason: external_exports.string()
+          })
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpTasks.setWaiting, {
+                ...signed.proof,
+                id: args.id,
+                waiting: true,
+                reason: args.reason
+              })
+            );
+          } catch (error62) {
+            return toolError(knownError(error62, "Could not mark the task waiting"));
+          }
+        }
+      );
+      server.registerTool(
+        "unblock_task",
+        {
+          title: "Unblock task",
+          description: "Clears the waiting state so the task can be checked. An optional note is appended to the task notes.",
+          inputSchema: external_exports.object({
+            id: external_exports.string(),
+            note: external_exports.string().optional()
+          })
+        },
+        async (args, ctx) => {
+          const signed = await signedProof(ctx.http?.authInfo);
+          if (signed.kind !== "ok") return toolError(signed.text);
+          try {
+            return toolJson(
+              await convexClient().mutation(api.mcpTasks.setWaiting, {
+                ...signed.proof,
+                id: args.id,
+                waiting: false,
+                reason: args.note
+              })
+            );
+          } catch (error62) {
+            return toolError(knownError(error62, "Could not unblock the task"));
           }
         }
       );
