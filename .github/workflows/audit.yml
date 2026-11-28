@@ -7,6 +7,10 @@ on:
   schedule:
     - cron: "17 5 * * 1"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -16,15 +20,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 12.21.0
+      - uses: ./.github/actions/setup-pnpm
 
       # Non-blocking while existing advisories are being worked off.
-      # Set continue-on-error to false once audits are clean everywhere.
+      # Do not require this check. The step is allowed to fail.
       - name: Scan dependencies (high+)
         continue-on-error: true
         run: |

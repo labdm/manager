@@ -1,18 +1,12 @@
 "use node";
 
-import { createRequire } from "node:module";
+// Static import so `convex deploy` bundles this package. `createRequire`
+// left a runtime `require("web-push")` that the Convex Node analyzer could
+// not resolve (`Cannot find module 'web-push'`).
+import { sendNotification, setVapidDetails } from "web-push";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
-
-const require = createRequire(import.meta.url);
-const webpush = require("web-push") as {
-  setVapidDetails: (subject: string, publicKey: string, privateKey: string) => void;
-  sendNotification: (
-    subscription: { endpoint: string; keys: { p256dh: string; auth: string } },
-    payload?: string | null,
-  ) => Promise<unknown>;
-};
 
 function statusCode(error: unknown): number {
   if (typeof error === "object" && error !== null && "statusCode" in error) {
@@ -37,12 +31,12 @@ export const sendToUser = internalAction({
     if (!publicKey || !privateKey || !subject) {
       return { sent: 0, skipped: "vapid_not_configured" as const };
     }
-    webpush.setVapidDetails(subject, publicKey, privateKey);
+    setVapidDetails(subject, publicKey, privateKey);
     const subs = await ctx.runQuery(internal.push.listForUser, { userId: args.userId });
     let sent = 0;
     for (const sub of subs) {
       try {
-        await webpush.sendNotification(
+        await sendNotification(
           {
             endpoint: sub.endpoint,
             keys: { p256dh: sub.p256dh, auth: sub.auth },

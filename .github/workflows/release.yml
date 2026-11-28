@@ -10,14 +10,23 @@ on:
         required: true
         type: string
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
 # Every target builds into its own artifact in parallel. `publish` is the only
 # job that touches the GitHub release, so a failed build cannot leave a partial
 # public release behind.
+#
+# This workflow does not run on pull requests. The check name below must not
+# be a required status check (`version` and `version check` blocked merges
+# because the job never reported on a pull request).
 jobs:
   version:
+    name: release-version
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}

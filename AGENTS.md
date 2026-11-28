@@ -135,10 +135,14 @@ A merge is not shipped until the next release exists. CI artifacts are not the p
 
 CI and Apple workflows upload per-commit artifacts for inspection. The release workflow builds web, each Apple target, each desktop target and Android as parallel jobs; a final `publish` job downloads those artifacts and creates or updates the GitHub release once, so a failed build cannot leave a partial public release. Actions are pinned to Node 24-compatible majors: `actions/checkout@v7`, `actions/setup-node@v7`, `actions/setup-java@v5`, `pnpm/action-setup@v6`, `actions/upload-artifact@v7`, `actions/download-artifact@v7`.
 
+## CI
+
+Pull requests and pushes to `main` run the workflows in [docs/ci.md](docs/ci.md). Require `lint`, `typecheck`, `test`, and `build`. The job `check` passes only when those four do, so a ruleset that still requires `check` keeps working. Do not require `version`, `version check`, or `release-version`. The Release workflow does not run on pull requests, so a required check with one of those names never appears and blocks the merge.
+
 ## Deployment
 
-Vercel project `manager` (team labdm), domain https://manager.labdm.dev. The project root is the repository. `scripts/vercel-build.sh` is the build. When `CONVEX_DEPLOY_KEY` is set, that script deploys Convex and then builds the web app. No production keys belong in the repo.
+Vercel project `manager` (team labdm), domain https://manager.labdm.dev. The project root is the repository. `scripts/vercel-build.sh` is the build. On a production deployment it prints `Deploy Convex (production)` and deploys Convex when `CONVEX_DEPLOY_KEY` is set, then builds the web app. Preview deployments only build the SPA. No production keys belong in the repo.
 
-A merge to `main` is supposed to create that production deployment. GitHub Actions on `main` (CI, Apple, desktop, audit) do not deploy the site or Convex. `createDeployments` is enabled on the Vercel project, and the Vercel GitHub app is installed on `labdm`, but pushes have not created a deployment since `65fa3e5` on 2026-11-24. A green check is not a deploy.
+GitHub Actions do not deploy the site or Convex. A green check is not a deploy. A push to `main` starts the Vercel production deployment. GitHub's deployment list stays empty until the Vercel GitHub app can write commit statuses. Details and the settings to change by hand are in [docs/ci.md](docs/ci.md).
 
 After you merge to `main`, confirm a production deployment of that SHA is `READY` and aliased to https://manager.labdm.dev. If none exists, create one from that git SHA (Vercel API or CLI, `target: production`). Then confirm the live site is serving it. Then publish the release described above. Leave LAB-145 open.
