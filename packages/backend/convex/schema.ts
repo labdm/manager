@@ -193,6 +193,25 @@ export default defineSchema({
     periodStart: v.optional(v.number()),
     open: v.optional(v.boolean()),
     escalatedAt: v.optional(v.number()),
+    /** none = quest. interval uses intervalEvery + intervalUnit (days or weeks). */
+    routineKind: v.optional(
+      v.union(
+        v.literal("none"),
+        v.literal("daily"),
+        v.literal("weekly"),
+        v.literal("monthly"),
+        v.literal("interval"),
+      ),
+    ),
+    intervalEvery: v.optional(v.number()),
+    intervalUnit: v.optional(v.union(v.literal("days"), v.literal("weeks"))),
+    routineAnchor: v.optional(v.number()),
+    routineTimezone: v.optional(v.string()),
+    waiting: v.optional(v.boolean()),
+    waitingReason: v.optional(v.string()),
+    /** Minutes from local midnight. Recurring tasks remind once per period at this time. */
+    remindMinutes: v.optional(v.number()),
+    remindedAt: v.optional(v.number()),
   })
     .index("by_owner", ["ownerId"])
     .index("by_group", ["groupId"])
@@ -354,6 +373,26 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_group", ["groupId"]),
+
+  taskCompletions: defineTable({
+    ownerId: v.id("users"),
+    taskId: v.id("tasks"),
+    periodId: v.string(),
+    completedAt: v.number(),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_task_period", ["taskId", "periodId"]),
+
+  pushSubscriptions: defineTable({
+    ownerId: v.id("users"),
+    endpoint: v.string(),
+    p256dh: v.string(),
+    auth: v.string(),
+    expirationTime: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_endpoint", ["endpoint"]),
 
   questions: defineTable({
     ownerId: v.id("users"),

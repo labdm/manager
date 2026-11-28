@@ -42,6 +42,24 @@ export const toggleTaskRef = makeFunctionReference<
   unknown
 >("tasks:toggle");
 
+export const setWaitingRef = makeFunctionReference<
+  "mutation",
+  { id: string; waiting: boolean; reason?: string },
+  unknown
+>("tasks:setWaiting");
+
+export const savePushSubscriptionRef = makeFunctionReference<
+  "mutation",
+  { endpoint: string; p256dh: string; auth: string; expirationTime?: number },
+  unknown
+>("push:subscribe");
+
+export const sendTestPushRef = makeFunctionReference<
+  "mutation",
+  Record<string, never>,
+  unknown
+>("push:sendTest");
+
 export const removeTaskRef = makeFunctionReference<
   "mutation",
   { id: string },

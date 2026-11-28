@@ -19,6 +19,7 @@ import { questViews, type QuestView } from "./questService";
 import { ensureHome, ownerViews, viewSummary } from "./viewService";
 import { listAlertHistory } from "./phase2Service";
 import { reconcileOwner } from "./recurrenceService";
+import { taskSection } from "./routinePeriod";
 
 export type SliceTab = "tasks" | "daily" | "weekly" | "monthly" | "events";
 
@@ -234,6 +235,17 @@ export async function boardSlice(
   if (selectedGroup) {
     tasks = tasks.filter((task) => task.groupId === selectedGroup);
   }
+  const recurrenceDocs = await readableDocs(db, ownerId, "recurrences");
+  const cadenceOf = new Map(
+    recurrenceDocs
+      .filter((row) => row.deletedAt === undefined)
+      .map((row) => [String(row._id), row.cadence]),
+  );
+  const sectionOf = (task: TaskView) =>
+    taskSection(
+      task,
+      task.recurrenceId ? cadenceOf.get(String(task.recurrenceId)) : undefined,
+    );
   const today = civilDayStart(now, input.timezone);
 
   const namedEvents = (await readableDocs(db, ownerId, "events"))
@@ -272,11 +284,13 @@ export async function boardSlice(
       )
     );
   };
+  const onRhythm = (task: TaskView, tab: "daily" | "weekly" | "monthly") =>
+    inPeriod(task, TAB_KINDS[tab]) || sectionOf(task) === tab;
   const unseen: Record<SliceTab, number> = {
     tasks: 0,
-    daily: unseenCount(baseTasks.filter((task) => inPeriod(task, "day"))),
-    weekly: unseenCount(baseTasks.filter((task) => inPeriod(task, "week"))),
-    monthly: unseenCount(baseTasks.filter((task) => inPeriod(task, "month"))),
+    daily: unseenCount(baseTasks.filter((task) => onRhythm(task, "daily"))),
+    weekly: unseenCount(baseTasks.filter((task) => onRhythm(task, "weekly"))),
+    monthly: unseenCount(baseTasks.filter((task) => onRhythm(task, "monthly"))),
     events: 0,
   };
 
@@ -343,12 +357,15 @@ export async function boardSlice(
               row.subjectId === String(task.id),
           ),
       );
+    } else {
+      // Home is the Quests board: non-repeating tasks. Routines live on their own tabs.
+      tasks = tasks.filter((task) => sectionOf(task) === "quests");
     }
     unseen.tasks = unseenCount(tasks);
-  } else {
-    const kind = TAB_KINDS[input.tab];
-    tasks = tasks.filter((task) => inPeriod(task, kind));
-    unseen[input.tab] = unseenCount(tasks);
+  } else if (input.tab === "daily" || input.tab === "weekly" || input.tab === "monthly") {
+    const tab = input.tab;
+    tasks = tasks.filter((task) => onRhythm(task, tab));
+    unseen[tab] = unseenCount(tasks);
   }
 
   const excluded = new Set(

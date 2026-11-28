@@ -2,8 +2,10 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { boardSlice, type SliceTab } from "./lib/boardService";
 import { assertMcpRoleProof } from "./lib/mcpRoleSignature";
 import { reconcileOwner } from "./lib/recurrenceService";
+import { DEFAULT_TIMEZONE } from "./lib/routinePeriod";
 import * as taskService from "./lib/taskService";
 import { findUserByTokenIdentifier, upsertUserByTokenIdentifier } from "./users";
 
@@ -50,13 +52,51 @@ export async function requireMcpUser(
   });
 }
 
+const routineArgs = {
+  routineKind: v.optional(
+    v.union(
+      v.literal("none"),
+      v.literal("daily"),
+      v.literal("weekly"),
+      v.literal("monthly"),
+      v.literal("interval"),
+    ),
+  ),
+  intervalEvery: v.optional(v.number()),
+  intervalUnit: v.optional(v.union(v.literal("days"), v.literal("weeks"))),
+  timezone: v.optional(v.string()),
+  waiting: v.optional(v.boolean()),
+  waitingReason: v.optional(v.string()),
+  remindMinutes: v.optional(v.number()),
+};
+
+const sectionArg = v.optional(
+  v.union(
+    v.literal("quests"),
+    v.literal("daily"),
+    v.literal("weekly"),
+    v.literal("monthly"),
+    v.literal("events"),
+  ),
+);
+
 /** Mutation so a lazy reconcile can happen before the list is returned. */
 export const list = mutation({
-  args: proofArgs,
+  args: {
+    ...proofArgs,
+    section: sectionArg,
+    timezone: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     const user = await requireMcpUser(ctx, args);
     await reconcileOwner(ctx.db, user._id);
-    return await taskService.listTasks(ctx.db, user._id);
+    if (!args.section) return await taskService.listTasks(ctx.db, user._id);
+    const tab: SliceTab = args.section === "quests" ? "tasks" : args.section;
+    const slice = await boardSlice(ctx.db, user._id, {
+      tab,
+      timezone: args.timezone?.trim() || DEFAULT_TIMEZONE,
+    });
+    return slice.tasks;
   },
 });
 
@@ -75,6 +115,7 @@ export const create = mutation({
     priorityRank: v.optional(v.number()),
     overduePolicy: v.optional(v.string()),
     presentation: v.optional(v.string()),
+    ...routineArgs,
   },
   handler: async (ctx, args) => {
     const user = await requireMcpUser(ctx, args);
@@ -91,6 +132,13 @@ export const create = mutation({
       priorityRank: args.priorityRank,
       overduePolicy: args.overduePolicy,
       presentation: args.presentation,
+      routineKind: args.routineKind,
+      intervalEvery: args.intervalEvery,
+      intervalUnit: args.intervalUnit,
+      timezone: args.timezone,
+      waiting: args.waiting,
+      waitingReason: args.waitingReason,
+      remindMinutes: args.remindMinutes,
       origin: "agent",
     });
   },
@@ -113,6 +161,7 @@ export const update = mutation({
     overduePolicy: v.optional(v.string()),
     presentation: v.optional(v.string()),
     done: v.optional(v.boolean()),
+    ...routineArgs,
   },
   handler: async (ctx, args) => {
     const user = await requireMcpUser(ctx, args);
@@ -130,6 +179,13 @@ export const update = mutation({
       overduePolicy: args.overduePolicy,
       presentation: args.presentation,
       done: args.done,
+      routineKind: args.routineKind,
+      intervalEvery: args.intervalEvery,
+      intervalUnit: args.intervalUnit,
+      timezone: args.timezone,
+      waiting: args.waiting,
+      waitingReason: args.waitingReason,
+      remindMinutes: args.remindMinutes,
     });
   },
 });
@@ -153,6 +209,25 @@ export const reopen = mutation({
   handler: async (ctx, args) => {
     const user = await requireMcpUser(ctx, args);
     return await taskService.setTaskDone(ctx.db, user._id, args.id, false);
+  },
+});
+
+export const setWaiting = mutation({
+  args: {
+    ...proofArgs,
+    id: v.id("tasks"),
+    waiting: v.boolean(),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireMcpUser(ctx, args);
+    return await taskService.setTaskWaiting(
+      ctx.db,
+      user._id,
+      args.id,
+      args.waiting,
+      args.reason,
+    );
   },
 });
 

@@ -18,6 +18,13 @@ export interface BoardTask extends TaskItem {
   questMark?: boolean;
   progression?: { current: number; target: number; unit?: string } | null;
   resourceDelta?: number | null;
+  routineKind?: string | null;
+  waiting?: boolean;
+  waitingReason?: string | null;
+  streak?: number | null;
+  resetHint?: string | null;
+  remindAt?: number | null;
+  remindMinutes?: number | null;
 }
 
 export interface ProgressionItem {

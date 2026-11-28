@@ -16,7 +16,7 @@
       "destination": "/api/oauth-protected-resource"
     },
     {
-      "source": "/((?!api/|oauth-callback\\.html).*)",
+      "source": "/((?!api/|oauth-callback\\.html|sw\\.js|manifest\\.webmanifest|icons/).*)",
       "destination": "/index.html"
     }
   ]

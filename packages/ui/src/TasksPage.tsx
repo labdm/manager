@@ -1,14 +1,36 @@
-import { Show, SignInButton, UserButton, useAuth } from "@clerk/react";
+import { Show, SignInButton, useAuth, useClerk, useUser } from "@clerk/react";
 import { Shell } from "./Shell";
+import type { BuildInfo } from "./MenuPages";
 
 export function TasksPage({
   showDownloadsLink = true,
+  buildInfo,
+  vapidPublicKey,
 }: {
   showDownloadsLink?: boolean;
+  buildInfo?: BuildInfo;
+  vapidPublicKey?: string;
 }) {
   const { isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
+  const { signOut } = useClerk();
 
-  if (isSignedIn) return <Shell account={<UserButton />} />;
+  if (isSignedIn) {
+    return (
+      <Shell
+        profile={{
+          name: user?.fullName || user?.username || null,
+          email: user?.primaryEmailAddress?.emailAddress ?? null,
+          imageUrl: user?.imageUrl ?? null,
+        }}
+        onSignOut={() => {
+          void signOut();
+        }}
+        buildInfo={buildInfo}
+        vapidPublicKey={vapidPublicKey}
+      />
+    );
+  }
 
   return (
     <main className="flex min-h-dvh flex-col gap-4 bg-background p-6 text-foreground">

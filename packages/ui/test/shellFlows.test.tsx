@@ -63,28 +63,7 @@ const CREATE_LABEL: Record<(typeof DESTINATIONS)[number], string> = {
   Resources: "Create resource",
 };
 
-const MENU = [
-  "Achievements",
-  "Contacts",
-  "Events",
-  "Routings",
-  "Profile",
-  "Settings",
-  "Docs",
-  "Contact us",
-  "Desktop app",
-  "Changelog",
-] as const;
-
-const PLACEHOLDERS = new Set<string>([
-  "Contacts",
-  "Events",
-  "Profile",
-  "Docs",
-  "Contact us",
-  "Desktop app",
-  "Changelog",
-]);
+const MENU = ["Achievements", "Manage", "Settings", "About", "Changelog"] as const;
 
 const board: BoardSlice = {
   tasks: [
@@ -230,15 +209,16 @@ describe("shell navigation", () => {
       await openMenu(user, label);
       const page = screen.getByRole("region", { name: label });
       expect(within(page).getByRole("heading", { name: label })).toBeTruthy();
-      if (PLACEHOLDERS.has(label)) {
-        expect(within(page).getByText(`This is the ${label} page. Nothing else is loaded here yet.`)).toBeTruthy();
-      }
       if (label === "Achievements") {
         expect(within(page).getByText("Completed tasks").parentElement?.textContent).toContain("4");
         expect(within(page).getByText("Quests active").parentElement?.textContent).toContain("1");
       }
-      if (label === "Routings") {
+      if (label === "Manage") {
+        await user.click(within(page).getByRole("tab", { name: "Routines" }));
         expect(within(page).getByText("Morning")).toBeTruthy();
+      }
+      if (label === "About") {
+        expect(within(page).getByText("Manager")).toBeTruthy();
       }
     }
 
@@ -257,13 +237,13 @@ describe("shell navigation", () => {
     expect(screen.getByText("Select an item.")).toBeTruthy();
 
     const chips = [
-      ["All", "tasks"],
+      ["Quests", "tasks"],
       ["Daily", "daily"],
       ["Weekly", "weekly"],
       ["Monthly", "monthly"],
       ["Events", "events"],
     ] as const;
-    expect(screen.getByRole("tab", { name: /^All/ }).textContent).toContain("3");
+    expect(screen.getByRole("tab", { name: /^Quests/ }).textContent).toContain("3");
     for (const [label, tab] of chips) {
       await user.click(screen.getByRole("tab", { name: new RegExp(`^${label}`) }));
       expect(screen.getByText("Select an item.")).toBeTruthy();
@@ -331,6 +311,10 @@ describe("shell item actions", () => {
     render(<Shell />);
     await screen.findByText("Fix the window");
 
+    await user.click(screen.getAllByRole("button", { name: "Menu" })[0]);
+    const drawer = await screen.findByRole("dialog", { name: "Menu" });
+    await user.click(within(drawer).getByRole("button", { name: "Manage" }));
+    await user.click(screen.getByRole("tab", { name: "Tracks" }));
     await user.click(screen.getByRole("button", { name: "Create quest" }));
     const form = screen.getByLabelText("New quest");
     await user.type(within(form).getByLabelText("Title"), "Paint the hall");
@@ -353,6 +337,10 @@ describe("shell item actions", () => {
     render(<Shell />);
     await screen.findByText("Finish the book");
 
+    await user.click(screen.getAllByRole("button", { name: "Menu" })[0]);
+    const manage = await screen.findByRole("dialog", { name: "Menu" });
+    await user.click(within(manage).getByRole("button", { name: "Manage" }));
+    await user.click(screen.getByRole("tab", { name: "Tracks" }));
     await user.click(screen.getByRole("button", { name: "Create progression" }));
     const form = screen.getByLabelText("New progression");
     await user.type(within(form).getByLabelText("Title"), "Read");
@@ -476,8 +464,9 @@ describe("shell item actions", () => {
     await user.click(screen.getByRole("button", { name: "None" }));
     await waitFor(() => expect(mutation(setActivityRef)).toHaveBeenCalledWith({ value: "none" }));
 
-    await openMenu(user, "Routings");
-    const page = screen.getByRole("region", { name: "Routings" });
+    await openMenu(user, "Manage");
+    const page = screen.getByRole("region", { name: "Manage" });
+    await user.click(within(page).getByRole("tab", { name: "Routines" }));
     expect(within(page).getByText("Morning")).toBeTruthy();
     await user.type(within(page).getByLabelText("Name"), "Evening");
     await user.type(within(page).getByLabelText("Task title"), "Lock the door");
