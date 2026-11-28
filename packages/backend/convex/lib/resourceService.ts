@@ -6,6 +6,7 @@ import {
   readableGroupIds,
   resolveGroupId,
 } from "./groupService";
+import { DEFAULT_TIMEZONE, periodId, readRoutine } from "./routinePeriod";
 import { fireStateRoutings, stateRevision } from "./routingService";
 import { normalizeTitle } from "./taskFields";
 
@@ -296,10 +297,16 @@ export async function applyTaskResourceEffects(
   const effects = await liveEffectsForTask(db, ownerId, taskId);
   for (const effect of effects) {
     if (periodId) {
-      if (done && effect.appliedPeriod !== periodId) {
+      if (done) {
+        if (effect.applied && effect.appliedPeriod === periodId) continue;
+        if (effect.applied && effect.appliedPeriod === undefined) {
+          // Stock already moved (attach-while-done, or a quest that became a routine).
+          await db.patch(effect._id, { appliedPeriod: periodId });
+          continue;
+        }
         await changeQuantity(db, ownerId, effect.resourceId, effect.delta, now);
         await db.patch(effect._id, { applied: true, appliedPeriod: periodId });
-      } else if (!done && effect.appliedPeriod === periodId) {
+      } else if (effect.applied && (effect.appliedPeriod === periodId || effect.appliedPeriod === undefined)) {
         await changeQuantity(db, ownerId, effect.resourceId, -effect.delta, now);
         await db.patch(effect._id, { applied: false, appliedPeriod: undefined });
       }
@@ -326,7 +333,7 @@ export async function reverseAppliedTaskEffects(
   for (const effect of effects) {
     if (!effect.applied) continue;
     await changeQuantity(db, ownerId, effect.resourceId, -effect.delta, now);
-    await db.patch(effect._id, { applied: false });
+    await db.patch(effect._id, { applied: false, appliedPeriod: undefined });
   }
 }
 
@@ -357,10 +364,21 @@ export async function setTaskResourceEffect(
     await changeQuantity(db, ownerId, existing.resourceId, -existing.delta, now);
   }
 
+  const routine = readRoutine(task);
   const applied = task.done === true;
+  const appliedPeriod =
+    applied && routine.kind !== "none"
+      ? (periodId(routine, now, task.routineTimezone || DEFAULT_TIMEZONE) ?? undefined)
+      : undefined;
   const effect: ResourceEffect = { resourceId, delta };
   if (existing) {
-    await db.patch(existing._id, { resourceId, delta, applied, deletedAt: undefined });
+    await db.patch(existing._id, {
+      resourceId,
+      delta,
+      applied,
+      appliedPeriod,
+      deletedAt: undefined,
+    });
   } else {
     await db.insert("taskResourceEffects", {
       ownerId,
@@ -368,6 +386,7 @@ export async function setTaskResourceEffect(
       resourceId,
       delta,
       applied,
+      appliedPeriod,
       deletedAt: undefined,
     });
   }

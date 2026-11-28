@@ -97,9 +97,7 @@ export const update = mutation({
     const user = await requireUser(ctx);
     const { id, ...patch } = args;
     const updated = await taskService.updateTask(ctx.db, user._id, id, patch);
-    if (args.remindAt !== undefined || args.remindMinutes !== undefined) {
-      await armReminder(ctx, updated);
-    }
+    await armReminder(ctx, updated);
     return updated;
   },
 });

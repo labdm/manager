@@ -191,9 +191,7 @@ export const update = mutation({
       waitingReason: args.waitingReason,
       remindMinutes: args.remindMinutes,
     });
-    if (args.remindAt !== undefined || args.remindMinutes !== undefined || args.routineKind !== undefined) {
-      await armReminder(ctx, updated);
-    }
+    await armReminder(ctx, updated);
     return updated;
   },
 });
